@@ -70,10 +70,11 @@ function buildHtmlTable(grid_obj, button_text_obj){
   // Begin form and set up accessibility description.
   // Ask the main question, then begin the table structure (this semantic HTML helps screen readers).
   let grid_html = `
-      <form ${grid_obj.args} class="container question" data-grid="true" ${gridPrompt} aria-describedby="formDescription" role="form">
-        <div id="formDescription" class="sr-only" aria-live="polite">Please interact with the table below to answer the questions.</div>
-        <div>${grid_text_displayif(shared_text)}</div>
-          <table class="quest-grid table-layout table">`;
+    <form ${grid_obj.args} class="container question" data-grid="true" ${gridPrompt} aria-describedby="formDescription" role="form">
+      <div id="formDescription" class="sr-only" aria-live="assertive">Please use your arrow keys to interact with the table below.</div>
+      <div>${grid_text_displayif(shared_text)}</div>
+      <span id="srFocusHelper" tabindex="-1" style="position: absolute; width: 1px; height: 1px; overflow: hidden;"></span>
+        <table class="quest-grid table-layout table">`;
   
   // Build the table header row with the question text and response headers. Start with a placeholder for the row header.
   grid_html += '<thead class="hr" role="rowgroup"><tr><th class="nr hr"></th>';
@@ -111,22 +112,23 @@ function buildHtmlTable(grid_obj, button_text_obj){
   });
   
   // TODO: The buttons can be attached to the parent div or the question. They don't need to be repeated in the question DOM (Caveat: renderer in question list format).
-  grid_html += `</tbody></table>
+  grid_html+=`</tbody></table>
+    <div id="ariaLiveSelectionAnnouncer" class="sr-only" aria-live="polite"></div>
     <div class="container">
-      <div class="row">
-        <div class="col-md-3 col-sm-12">
-          <button type="submit" class="previous w-100" aria-label="Back to the previous section" data-click-type="previous">${button_text_obj.back}</button>
+      <div class="row d-flex flex-column flex-md-row">
+        <div class="col-md-3 col-sm-12 order-1 order-md-3">
+          <button type="submit" class="next w-100" id="nextButton" aria-label="Go to the next section" data-click-type="next">${button_text_obj.next}</button>
         </div>
-        <div class="col-md-6 col-sm-12">
-          <button type="submit" class="reset w-100" aria-label="Reset answer for this question" data-click-type="reset">${button_text_obj.reset}</button>
+        <div class="col-md-6 col-sm-12 order-2">
+          <button type="submit" class="reset w-100" id="resetButton" aria-label="Reset answer for this question" data-click-type="reset">${button_text_obj.reset}</button>
         </div>
-        <div class="col-md-3 col-sm-12">
-          <button type="submit" class="next w-100" aria-label="Go to the next section" data-click-type="next">${button_text_obj.next}</button>
+        <div class="col-md-3 col-sm-12 order-3 order-md-1">
+          <button type="submit" class="previous w-100" id="backButton" aria-label="Back to the previous section" data-click-type="previous">${button_text_obj.back}</button>
         </div>
       </div>
     </div>
   </form>`;
-
+  
   return grid_html;
 }
 

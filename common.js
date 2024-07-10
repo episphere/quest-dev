@@ -19,7 +19,7 @@ export const responseRequestedModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="softModalTitle" tabindex="-1">${translate('responseRequestedLabel')}</h5>
-                      <button type="button" class="close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="close" data-dismiss="modal" data-bs-dismiss="modal" aria-hidden="true" aria-label="Close">
                           <span aria-hidden="true">&times;</span>
                       </button>
                   </div>
@@ -86,23 +86,23 @@ export const responseErrorModal = () => {
 }
   
 export const submitModal = () => {
-    
+
     return `
       <div class="modal" id="submitModal" tabindex="-1" role="dialog" aria-labelledby="submitModalLabel" aria-modal="true" aria-describedby="submitModalBodyText">
           <div class="modal-dialog" role="document">
               <div class="modal-content">
                   <div class="modal-header">
-                      <h5 class="modal-title" id="submitModalLabel">${translate('submitLabel')}</h5>
-                      <button type="button" class="close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                      <h5 class="modal-title" id="submitModalLabel" tabindex="-1">${translate('submitLabel')}</h5>
+                      <button type="button" class="close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" aria-hidden="true">
                           <span aria-hidden="true">&times;</span>
                       </button>
                   </div>
-                  <div class="modal-body">
+                  <div id="submitModalBody" class="modal-body" aria-describedby="submitModalBodyText">
                       <p id="submitModalBodyText">${translate('submitBody')}</p>
                   </div>
                   <div class="modal-footer">
                       <button type="button" id="submitModalButton" class="btn btn-success" data-dismiss="modal" data-bs-dismiss="modal">${translate('submitButton')}</button>
-                      <button type="button" id="cancelModal" class="btn btn-danger" data-dismiss="modal" data-bs-dismiss="modal">${translate('cancelButton')}</button>
+                      <button type="button" id="cancelModalButton" class="btn btn-danger" data-dismiss="modal" data-bs-dismiss="modal">${translate('cancelButton')}</button>
                   </div>
               </div>
           </div>

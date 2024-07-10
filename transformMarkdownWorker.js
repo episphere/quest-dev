@@ -511,7 +511,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       //onkeypress forces whole numbers
       return `<input type='number' aria-label='${value}' step='any' onkeypress='return (event.charCode == 8 || event.charCode == 0 || event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57' name='${questID}' ${options}>
               <div id="${elementId}-desc" class="sr-only">${descriptionText}</div><br>`;
-  }
+    }
 
     // replace |__| or [text box:xxx] with an input box...
     questText = questText.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
@@ -556,9 +556,9 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       } else {
         elId = z1;
       }
-      let options = "";
 
-      return `<textarea id='${elId}' ${options} style="resize:auto;"></textarea>`;
+      return `<label for="${elId}" class="sr-only"></label>
+        <textarea id='${elId}' name='${elId}' style="resize:auto;" aria-label='Enter your response'></textarea>`;
     }
 
     // replace #YNP with Yes No input: `(1) Yes, (0) No, (99) Prefer not to answer`
@@ -705,19 +705,21 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     
     let rv = `
       <form class='question' id='${questID}' ${questOpts} ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
+        <div id="ariaLiveQuestionAnnouncer" class="sr-only" aria-live="assertive"></div>
         <fieldset>
           ${questText}
         </fieldset>
+        <div id="ariaLiveSelectionAnnouncer" class="sr-only" aria-live="polite"></div>
         <div class="py-0">
-          <div class="row">
-            <div class="col-md-3 col-sm-12 order-3 order-md-1">
-              ${prevButton}
+          <div class="row d-flex flex-column flex-md-row">
+            <div class="col-md-3 col-sm-12 order-1 order-md-3">
+              ${nextButton}
             </div>
             <div class="col-md-6 col-sm-12 order-2">
               ${resetButton}
             </div>
-            <div class="col-md-3 col-sm-12 order-1 order-md-3">
-              ${nextButton}
+            <div class="col-md-3 col-sm-12 order-3 order-md-1">
+              ${prevButton}
             </div>
           </div>
         </div>
@@ -725,7 +727,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       </form>`;
     
     return rv;
-  
   });
 
 

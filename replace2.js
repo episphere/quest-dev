@@ -1,7 +1,6 @@
-import { questionQueue, nextClick, previousClicked, moduleParams, rbAndCbClick, displayQuestion, submitQuestionnaire, math } from "./questionnaire.js";
+import { questionQueue, moduleParams, rbAndCbClick, displayQuestion, submitQuestionnaire, math } from "./questionnaire.js";
 import { restoreResults } from "./localforageDAO.js";
 import { addEventListeners } from "./eventHandlers.js";
-import { clearValidationError } from "./validate.js";
 import { responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
 import { transformMarkdownToHTML } from "./transformMarkdownWorker.js";
 
@@ -22,6 +21,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
   moduleParams.soccer = obj.soccer;
   moduleParams.delayedParameterArray = obj.delayedParameterArray;
   moduleParams.i18n = obj.lang === 'es' ? es : en;
+  moduleParams.isWindowsEnvironment = isWindowsEnvironment();
 
   rootElement = divId;
 
@@ -103,6 +103,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
         console.error('Error in transformMarkdownWorker. Fallback to inline processing:', error);
 
         [contents, questName] = transformMarkdownToHTML(contents, moduleParams.i18n);
+        moduleParams.questName = questName;
 
         transformMarkdownWorker.terminate();
         resolve();
@@ -243,95 +244,6 @@ transform.render = async (obj, divId, previousResults = {}) => {
     x.style.display = "none";
   });
 
-
-
-
-  // TODO: ORIGINAL EVENT LISTENERS: remove after testing delegated listeners.
-  // questions.forEach((question) => {
-  //   question.onsubmit = stopSubmit;
-  // });
-
-  // [...divElement.querySelectorAll("input")].forEach((inputElement) => {
-  //   inputElement.addEventListener("keydown", (event) => {
-  //     if (event.keyCode == 13) {
-  //       event.preventDefault();
-  //     }
-  //   });
-  // });
-
-  // // Firefox does not alway GRAB focus when the arrows are clicked.
-  // // If a changeEvent fires, grab focus.
-  // let numberInput = divElement.querySelectorAll("input[type='number']").forEach( (inputElement)=> {
-  //   inputElement.addEventListener("change",(event)=>{
-  //     if (event.target!=document.activeElement) event.target.focus()      
-  //   });
-  // })
-
-  // let textInputs = [
-  //   ...divElement.querySelectorAll(
-  //     "input[type='text'],input[type='number'],input[type='email'],input[type='tel'],input[type='date'],input[type='month'],input[type='time'],textarea,select"
-  //   ),
-  // ];
-
-  // textInputs.forEach((inputElement) => {
-  //   inputElement.onblur = textBoxInput;
-  //   inputElement.setAttribute("style", "size: 20 !important");
-  // });
-
-  // // for each element with an xor, handle the xor on keydown
-  // Array.from(document.querySelectorAll("[xor]")).forEach(xorElement => {
-  //   xorElement.addEventListener("keydown", () => handleXOR(xorElement));
-  // })
-
-  // let SSNInputs = [...divElement.querySelectorAll(".SSN")];
-  // SSNInputs.forEach((inputElement) => {
-  //   inputElement.addEventListener("keyup", parseSSN);
-
-  // });
-
-  // let phoneInputs = [...divElement.querySelectorAll("input[type='tel']")];
-  // phoneInputs.forEach((inputElement) =>
-  //   inputElement.addEventListener("keyup", parsePhoneNumber)
-  // );
-
-  // let rbCb = [
-  //   ...divElement.querySelectorAll(
-  //     "input[type='radio'],input[type='checkbox'] "
-  //   ),
-  // ];
-  // rbCb.forEach((rcElement) => {
-  //   rcElement.onchange = rbAndCbClick;
-  // });
-
-  // // handle text in combobox label...
-  // [...divElement.querySelectorAll("label input,label textarea")].forEach(inputElement => {
-  //     let radioCB = document.getElementById(inputElement.closest('label').htmlFor);
-
-  //     if (radioCB) { 
-  //       let callback = (event)=>{
-  //           let nchar = event.target.value.length
-  //           //radioCB.checked = nchar>0;
-  //           // select if typed in box, DONT UNSELECT
-  //           if (nchar > 0) radioCB.checked = true
-  //           radioAndCheckboxUpdate(radioCB)
-  //           inputElement.dataset.lastValue=inputElement.value
-  //       }
-  //       inputElement.addEventListener("keyup",callback);
-  //       inputElement.addEventListener("input",callback);
-  //       radioCB.addEventListener("click",(event=>{
-  //           console.log("click")
-  //           if (!radioCB.checked){
-  //               inputElement.dataset.lastValue=inputElement.value
-  //               inputElement.value=''
-  //           }else if ('lastValue' in inputElement.dataset){
-  //               inputElement.value=inputElement.dataset.lastValue
-  //           }
-  //           textboxinput(inputElement)
-  //       }));
-  //     }
-  // });
-
-
   document.getElementById("submitModalButton").onclick = () => {
     let lastBackButton = document.getElementById('lastBackButton');
     if (lastBackButton) {
@@ -381,49 +293,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
   return true;
 };
 
-// TODO: consider moving this to questionnaire.js or eventHandlers.js
-// Handle the next, reset, and back buttons
-export function stopSubmit(event) {
-  console.log('stopSubmit');
-  event.preventDefault();
-  
-  const clickType = event.submitter.getAttribute('data-click-type');
-  const buttonClicked = event.target.querySelector(`.${clickType}`);
-
-  switch (clickType) {
-    case 'previous':
-      resetChildren(event.target.elements);
-      previousClicked(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store, rootElement);
-      break;
-
-    case 'reset':
-      resetChildren(event.target.elements);
-      break;
-
-    case 'submitSurvey':
-      new bootstrap.Modal(document.getElementById('submitModal')).show();
-      break;
-
-    case 'next':
-      nextClick(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store, rootElement);
-      break;
-
-    default:
-      console.error(`ERROR: Unknown button clicked: ${clickType}`);
-  }
-}
-
-function resetChildren(nodes) {
-  if (nodes == null) {
-    return;
-  }
-
-  for (let node of nodes) {
-    if (node.type === "radio" || node.type === "checkbox") {
-      node.checked = false;
-    } else if (node.type === "text" || node.type === "time" || node.type === "date" || node.type === "month" || node.type === "number") {
-      node.value = "";
-      clearValidationError(node)
-    }
-  }
+function isWindowsEnvironment() {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return userAgent.indexOf("win") > -1;
 }
