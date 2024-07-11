@@ -705,11 +705,9 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     
     let rv = `
       <form class='question' id='${questID}' ${questOpts} ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
-        <div id="ariaLiveQuestionAnnouncer" class="sr-only" aria-live="assertive"></div>
         <fieldset>
           ${questText}
         </fieldset>
-        <div id="ariaLiveSelectionAnnouncer" class="sr-only" aria-live="polite"></div>
         <div class="py-0">
           <div class="row d-flex flex-column flex-md-row">
             <div class="col-md-3 col-sm-12 order-1 order-md-3">

@@ -1,7 +1,7 @@
 import { questionQueue, moduleParams, rbAndCbClick, displayQuestion, submitQuestionnaire, math } from "./questionnaire.js";
 import { restoreResults } from "./localforageDAO.js";
 import { addEventListeners } from "./eventHandlers.js";
-import { responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
+import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
 import { transformMarkdownToHTML } from "./transformMarkdownWorker.js";
 
 import en from "./i18n/en.js";
@@ -13,9 +13,9 @@ export let transform = function () {
 transform.rbAndCbClick = rbAndCbClick
 
 let questName = "Questionnaire";
-let rootElement;
 
-transform.render = async (obj, divId, previousResults = {}) => {  
+transform.render = async (obj, divId, previousResults = {}) => {
+  console.log('In QUEST-DEV preloading-sequence branch');
   moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
   moduleParams.previousResults = previousResults;
   moduleParams.soccer = obj.soccer;
@@ -23,7 +23,6 @@ transform.render = async (obj, divId, previousResults = {}) => {
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
 
-  rootElement = divId;
 
   // allow the client to reset the tree...
   
@@ -115,7 +114,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
   await transformContentsWorkerPromise;
 
   // add the HTML/HEAD/BODY tags...
-  document.getElementById(divId).innerHTML = contents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
+  document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + contents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
 
   // Prefetch items that aren't compatible with the worker: Date operations and user variables that access the math package.
   function getValuesForWorker() {

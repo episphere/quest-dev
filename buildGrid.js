@@ -70,8 +70,7 @@ function buildHtmlTable(grid_obj, button_text_obj){
   // Begin form and set up accessibility description.
   // Ask the main question, then begin the table structure (this semantic HTML helps screen readers).
   let grid_html = `
-    <form ${grid_obj.args} class="container question" data-grid="true" ${gridPrompt} aria-describedby="formDescription" role="form">
-      <div id="formDescription" class="sr-only" aria-live="assertive">Please use your arrow keys to interact with the table below.</div>
+    <form ${grid_obj.args} class="container question" data-grid="true" ${gridPrompt} role="form">
       <div>${grid_text_displayif(shared_text)}</div>
       <span id="srFocusHelper" tabindex="-1" style="position: absolute; width: 1px; height: 1px; overflow: hidden;"></span>
         <table class="quest-grid table-layout table">`;

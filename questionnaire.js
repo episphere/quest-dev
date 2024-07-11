@@ -700,7 +700,7 @@ export function handleXOR(inputElement) {
   return valueObj[inputElement.id];
 }
 
-export function nextClick(norp, retrieve, store, rootElement) {
+export function nextClick(norp, retrieve, store) {
   // Because next button does not have ID, modal will pass-in ID of question
   // norp needs to be next button element
   if (typeof norp == "string") {
@@ -712,7 +712,7 @@ export function nextClick(norp, retrieve, store, rootElement) {
     validateInput(elm)
   });
 
-  showModal(norp, retrieve, store, rootElement);
+  showModal(norp, retrieve, store);
 }
 
 function setNumberOfQuestionsInModal(num, norp, retrieve, store, soft) {
@@ -754,7 +754,7 @@ function setNumberOfQuestionsInModal(num, norp, retrieve, store, soft) {
 }
 
 // show modal function
-function showModal(norp, retrieve, store, rootElement) {
+function showModal(norp, retrieve, store) {
   if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
@@ -1164,7 +1164,7 @@ export function manageAccessibleQuestionInit(fieldsetEle, isModalClose = false) 
 
   if (fieldsetEle && !questionFocusSet) {
     // Announce the question text
-    const { text: questionText, focusNode } = buildQuestionText(fieldsetEle);
+    let { text: questionText, focusNode } = buildQuestionText(fieldsetEle);
 
     // Make sure focusable element is in the right location for screen reader focus management.
     let focusableEle = fieldsetEle.querySelector('span[tabindex="0"]');
@@ -1185,27 +1185,16 @@ export function manageAccessibleQuestionInit(fieldsetEle, isModalClose = false) 
       fieldsetEle.insertBefore(focusableEle, focusNode);
     }
 
-    const ariaLiveAnnouncer = document.getElementById('ariaLiveQuestionAnnouncer');
+    // For VoiceOver, update the focusable element with the question text.
+    focusableEle.textContent = '';
+
+    const isTable = !!fieldsetEle.querySelector('table')
+    if (isTable) questionText += ' Please use your arrow keys to interact with the table below.'
 
     setTimeout(() => {
-      // Update the aria-live region with the current question text for screen readers. Then focus on the invisible focusable element.
-      focusableEle.setAttribute('aria-label', questionText);
+      focusableEle.textContent = questionText;
       focusableEle.focus();
-
-      // Announce in JAWS with the aria-live region. VoiceOver (MAC) doesn't need this.
-      if (ariaLiveAnnouncer) {
-        ariaLiveAnnouncer.textContent = '';
-        setTimeout(() => {
-          ariaLiveAnnouncer.textContent = questionText;
-        }, 50);
-      }
-
-      // For VoiceOver, update the focusable element with the question text.
-      focusableEle.textContent = '';
-      setTimeout(() => {
-        focusableEle.textContent = questionText;
-      }, 100);
-    }, 200);
+    }, 100);
 
     questionFocusSet = true;
   }
@@ -1254,7 +1243,7 @@ function isMonthInputSupported() {
   return input.type === 'month';
 }
 
-export async function previousClicked(norp, retrieve, store, rootElement) {
+export async function previousClicked(norp, store) {
   // get the previousElement...
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) == "_CONTINUE") {

@@ -11,6 +11,15 @@ export const translate = (key, replacements = []) => {
     return translation;
 }
 
+export const ariaLiveAnnouncementRegions = () => {
+    return `
+        <div id="srAnnouncerContainer" class="sr-only">
+            <div id="ariaLiveQuestionAnnouncer" aria-live="polite"></div>
+            <div id="ariaLiveSelectionAnnouncer" aria-live="polite"></div>
+        </div>
+    `;
+}
+
 export const responseRequestedModal = () => {
 
     return `

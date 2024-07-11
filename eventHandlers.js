@@ -1,5 +1,4 @@
 import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestionInit, moduleParams } from "./questionnaire.js";
-import { stopSubmit } from "./replace2.js";
 import { clearValidationError } from "./validate.js";
 import { nextClick, previousClicked } from "./questionnaire.js";
 
@@ -31,7 +30,6 @@ function handleClickEvent(event) {
   
   if (target.matches('input[type="radio"], input[type="checkbox"]')) {
     rbAndCbClick(event);
-    console.log('RADIO OR CHECKBOX CLICKED', target);
     
     // Handle radio button and checkbox clicks for label inputs
     const label = target.closest('label');
@@ -78,6 +76,8 @@ function handleChangeEvent(event) {
     rbAndCbClick(event);
   }
 
+  // VoiceOver (MAC) handles table focus well, but JAWS (Windows) does not.
+  // We check if the environment is Windows and the target is a radio or checkbox to improve accessible UX for JAWS users.
   if (moduleParams.renderObj?.activate && moduleParams.isWindowsEnvironment && target.matches('input[type="radio"], input[type="checkbox"]')) {
     const isTable = target.closest('table') !== null;
     if (isTable) {
@@ -128,7 +128,6 @@ function handleBlurFocusoutEvent(event) {
   const target = event.target;
   
   if (target.matches('input[type="text"], input[type="number"], input[type="email"], input[type="tel"], input[type="date"], input[type="month"], input[type="time"], textarea, select')) {
-    console.log('BLUR EVENT - matches condition', target);
     textboxinput(target);
     target.setAttribute("style", "size: 20 !important");
   }
@@ -206,11 +205,9 @@ function handleOtherTextInputKeyPress(event) {
 // Only active when moduleParams.renderObj.activate is true (inactive in the renderer because focus() causes issues).
 function handleUpDownArrowKeys(event) {
   if (event.key === 'ArrowDown') {
-    console.log('ARROW DOWN')
     event.preventDefault();
     focusNextElement(event.target);
   } else if (event.key === 'ArrowUp') {
-    console.log('ARROW UP')
     event.preventDefault();
     focusPreviousResponse(event.target);
   }
@@ -219,7 +216,6 @@ function handleUpDownArrowKeys(event) {
 // Get the next focusable element.
 // Important for JAWS compatibility with text input fields in radio/checkbox groups.
 function focusNextElement(currentElement) {
-  console.log('FOCUS NEXT ELEMENT', currentElement);
   const focusableElements = 'a, button, input:not([type="hidden"]), label, select, textarea, [tabindex]:not([tabindex="-1"])';
   const allFocusable = Array.from(document.querySelectorAll(focusableElements));
 
@@ -247,16 +243,13 @@ function focusPreviousResponse(currentElement) {
   const currentResponse = currentElement.closest('.response');
   if (currentResponse) {
     let previousResponse = currentResponse.previousElementSibling;
-    console.log('PREVIOUS RESPONSE', previousResponse);
     while (previousResponse && !previousResponse.classList.contains('response')) {
       previousResponse = previousResponse.previousElementSibling;
     }
     if (previousResponse) {
       const focusableElements = previousResponse.querySelectorAll('a, button, input:not([type="hidden"]), label, select, textarea, [tabindex]:not([tabindex="-1"])');
-      console.log('FOCUSABLE ELEMENTS', focusableElements);
       if (focusableElements.length > 0) {
         setTimeout(() => {
-          console.log('FOCUSING FIRST FOCUSABLE ELEMENT', focusableElements[0]);
           focusableElements[0].focus();
         }, 0);
       }
@@ -267,14 +260,11 @@ function focusPreviousResponse(currentElement) {
 
 // Function to handle radio button clicks and changes in lists.
 function handleRadioCheckboxListEvents(event) {
-  console.log('RadioCheckboxLISTEvent', event.type);
-  //rbAndCbClick(event);
   const parentResponseDiv = event.target.closest('.response');
   const eleToFocus = parentResponseDiv.querySelector('input') || parentResponseDiv;
   updateAriaLiveSelectionAnnouncer(parentResponseDiv);
   setTimeout(() => {
     eleToFocus.focus();
-    console.log('Active List element:', eleToFocus === document.activeElement);
   }, 100);
 }
 
@@ -283,26 +273,23 @@ function handleRadioCheckboxListEvents(event) {
 // This manages the screen reader's table focus with a hidden element inside a table cell.
 // The element moves to the cell when a radio button is clicked.
 function handleRadioCheckboxTableEvents(event) {
-  console.log('RadioCheckboxTABLEEvent', event, event.type);
-  //rbAndCbClick(event);
   const radioOrCheckbox = event.target;
   const responseCell = radioOrCheckbox.closest('.response');
 
   if (responseCell) {
-    updateAriaLiveSelectionAnnouncer(responseCell);
     const currentRow = responseCell.closest('tr');
 
     switch (radioOrCheckbox.type) {
       // If it's a radio click, focus the hidden element on the next question (the first column of the next row).
       case 'radio':
-        
+
         const nextRow = currentRow.nextElementSibling;
         // If next row exists, focus the question (the first cell in the next row).
         // Otherwise, focus the next question button so the user can continue.
         nextRow
           ? focusNextTableRowQuestion(nextRow)
           : focusNextQuestionButton();
-       
+      
         break;
 
       // If it's a checkbox click, focus the hidden element on the selection so the user can continue making selections.
@@ -310,14 +297,13 @@ function handleRadioCheckboxTableEvents(event) {
       // If end of row, focus the next question button so the user can continue.
       // If end of last row, focus the next question button so the user can continue.
       case 'checkbox':
+        updateAriaLiveSelectionAnnouncer(responseCell);
         const nextCell = responseCell.nextElementSibling;
         const isLastCellInRow = !nextCell;
         const isLastRow = !currentRow.nextElementSibling;
 
         if (isLastRow && isLastCellInRow) {
           focusNextQuestionButton();
-        } else if (isLastCellInRow) {
-          focusNextTableRowQuestion();
         } else {
           focusSelectedCheckbox(responseCell);
         }
@@ -331,24 +317,28 @@ function handleRadioCheckboxTableEvents(event) {
 
 // Update the aria-live region with the current selection announcement (for screen readers)
 function updateAriaLiveSelectionAnnouncer(responseDiv) {
-  const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
-  const label = responseDiv.querySelector('label');
-  const input = responseDiv.querySelector('input[type="checkbox"], input[type="radio"]');
+    const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
+    const label = responseDiv.querySelector('label');
+    const input = responseDiv.querySelector('input[type="checkbox"], input[type="radio"]');
 
-  if (!liveRegion || !label || !input) return;
+    if (!liveRegion || !label || !input) {
+      return;
+    }
 
-  const actionText = input.checked ? 'Selected.' : 'Unselected.';
-  const announcementText = `${label.textContent} ${actionText}`;
-  
-  liveRegion.textContent = '';
+    const actionText = input.checked ? 'Selected.' : 'Unselected.';
+    const isTable = responseDiv.closest('table') !== null;
+    const announcementText = isTable
+      ? `${actionText}`
+      : `${label.textContent} ${actionText}`;
+    
+    liveRegion.textContent = '';
 
-  setTimeout(() => {
-    liveRegion.textContent = announcementText;
-    console.log('Selection aria-live region updated with text:', announcementText);
-  }, 50);
+    setTimeout(() => {
+      liveRegion.textContent = announcementText;
+      setTimeout(resolve, 500);
+    }, 100);
 }
 
-// Focus the next question (First column in the next table row) after a selection is made.
 function focusNextTableRowQuestion(nextRow) {
   setTimeout(() => {
     const focusHelper = getFocusHelper();
@@ -362,8 +352,6 @@ function focusNextTableRowQuestion(nextRow) {
 
     nextQuestionCell.appendChild(focusHelper);
     focusHelper.focus();
-    console.log('Focus moved to next question cell', focusHelper === document.activeElement);
-    return;
   }, 100);  
 }
 
@@ -387,9 +375,7 @@ function focusNextQuestionButton() {
     }
 
     nextQuestionButton.appendChild(focusHelper);
-    console.log('Next question button:', nextQuestionButton);
     focusHelper.focus();
-    console.log('Focus moved to next question button', focusHelper === document.activeElement);
   }, 100);
 }
 
@@ -400,7 +386,6 @@ function focusSelectedCheckbox(responseCell) {
 
     responseCell.appendChild(focusHelper);
     focusHelper.focus();
-    console.log('Focus moved back to checkbox', focusHelper === document.activeElement);
   }, 100);
 }
 
@@ -414,9 +399,19 @@ function getFocusHelper() {
   return focusHelper;
 }
 
+function clearSelectionAnnouncement() {
+  const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
+  if (liveRegion) {
+    liveRegion.textContent = '';
+  }
+}
+
 // Handle the next, reset, and back buttons
 function stopSubmit(event) {
   event.preventDefault();
+
+  // Clear the selection announcement
+  clearSelectionAnnouncement();
   
   const clickType = event.submitter.getAttribute('data-click-type');
   const buttonClicked = event.target.querySelector(`.${clickType}`);
@@ -424,7 +419,7 @@ function stopSubmit(event) {
   switch (clickType) {
     case 'previous':
       resetChildren(event.target.elements);
-      previousClicked(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store, rootElement);
+      previousClicked(buttonClicked, moduleParams.renderObj.store);
       break;
 
     case 'reset':
@@ -436,7 +431,7 @@ function stopSubmit(event) {
       break;
 
     case 'next':
-      nextClick(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store, rootElement);
+      nextClick(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store);
       break;
 
     default:
