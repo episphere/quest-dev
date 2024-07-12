@@ -78,12 +78,23 @@ function handleChangeEvent(event) {
 
   // VoiceOver (MAC) handles table focus well, but JAWS (Windows) does not.
   // We check if the environment is Windows and the target is a radio or checkbox to improve accessible UX for JAWS users.
-  if (moduleParams.renderObj?.activate && moduleParams.isWindowsEnvironment && target.matches('input[type="radio"], input[type="checkbox"]')) {
+  if (moduleParams.renderObj?.activate && target.matches('input[type="radio"], input[type="checkbox"]')) {
+    
     const isTable = target.closest('table') !== null;
-    if (isTable) {
-      handleRadioCheckboxTableEvents(event);
+
+    if (moduleParams.isWindowsEnvironment) {
+      
+      if (isTable) {
+        handleRadioCheckboxTableEvents(event);
+      } else {
+        handleRadioCheckboxListEvents(event);
+      }
     } else {
-      handleRadioCheckboxListEvents(event);
+      if (isTable) {
+        updateAriaLiveSelectionAnnouncerTable(target.closest('.response'));
+      } else {
+        updateAriaLiveSelectionAnnouncer(target.closest('.response')); 
+      }
     }
   }
 }
@@ -315,7 +326,7 @@ function handleRadioCheckboxTableEvents(event) {
   }
 }
 
-// Update the aria-live region with the current selection announcement (for screen readers)
+// Update the aria-live region with the current selection announcement in a list (for screen readers).
 function updateAriaLiveSelectionAnnouncer(responseDiv) {
     const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
     const label = responseDiv.querySelector('label');
@@ -335,8 +346,28 @@ function updateAriaLiveSelectionAnnouncer(responseDiv) {
 
     setTimeout(() => {
       liveRegion.textContent = announcementText;
-      setTimeout(resolve, 500);
-    }, 100);
+    }, 250);
+}
+
+// Update the aria-live region with the current selection announcement in a table (for screen readers).
+// Note: cell-specific targeting is required for dependable selection announcements.
+function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
+  const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
+  const cell = responseDiv.closest('td'); // Get the closest table cell (td)
+  const label = cell?.querySelector('label'); // Find the label within the cell
+  const input = cell?.querySelector('input[type="checkbox"], input[type="radio"]'); 
+
+  if (!liveRegion || !cell || !label || !input) {
+    return;
+  }
+
+  const actionText = input.checked ? 'Selected.' : 'Unselected.';
+  const announcementText = `${label.textContent} ${actionText}`;
+
+  liveRegion.textContent = '';
+  setTimeout(() => {
+    liveRegion.textContent = announcementText;
+  }, 250);
 }
 
 function focusNextTableRowQuestion(nextRow) {
