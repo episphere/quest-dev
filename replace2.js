@@ -1,8 +1,9 @@
-import { questionQueue, moduleParams, rbAndCbClick, displayQuestion, submitQuestionnaire, math } from "./questionnaire.js";
+import { questionQueue, moduleParams, rbAndCbClick, displayQuestion, submitQuestionnaire } from "./questionnaire.js";
 import { restoreResults } from "./localforageDAO.js";
 import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
-import { transformMarkdownToHTML } from "./transformMarkdownWorker.js";
+import { initSurvey } from "./initSurvey.js";
+
 
 import en from "./i18n/en.js";
 import es from "./i18n/es.js";
@@ -10,137 +11,29 @@ import es from "./i18n/es.js";
 export let transform = function () {
   // init
 };
+
 transform.rbAndCbClick = rbAndCbClick
 
-let questName = "Questionnaire";
-
 transform.render = async (obj, divId, previousResults = {}) => {
-  console.log('In QUEST-DEV preloading-sequence branch');
+
+  // Set the moduleParams object with data needed for different parts of the app.
   moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
   moduleParams.previousResults = previousResults;
   moduleParams.soccer = obj.soccer;
   moduleParams.delayedParameterArray = obj.delayedParameterArray;
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
-
-
-  // allow the client to reset the tree...
   
   // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
   let contents = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
   if (moduleParams.renderObj?.url) moduleParams.config = contents;
 
-  // Date operations and operations accessing 'window' are not compatible with the worker. Prefetch them.
-  const precalculated_values = getValuesForWorker();
-
-  // Determine the path to thw worker and CSS files
-  // TODO: NOTE: this local path is Joe's temporary setup with Quest-dev loaded in ConnectApp at connectApp/js/quest-dev for local development.
-  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const basePath = isLocalDev ? './js/quest-dev/' : './';
-
-  // Create and dispatch the worker to transform 'contents' from markdown to HTML.
-  console.time('transformWorker posted message response');
-  const transformMarkdownWorker = new Worker(`${basePath}transformMarkdownWorker.js`, { type: 'module' });
-  transformMarkdownWorker.postMessage([contents, precalculated_values, moduleParams.i18n]);
-
-  // Fetch the retrieve function and css files.
-  const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
-    obj.retrieve && !obj.surveyDataPrefetch ? obj.retrieve() : Promise.resolve(),
-    obj.url && obj.activate ? fetch(`${basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-    obj.url && obj.activate ? fetch(`${basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
-  ]).catch((error) => {
-    console.error('Error fetching retrieve function and css:', error);
-  });
-
-  // retrievedData is either the prefetched user data or the result of the retrieve function. This is used to populate the questionnaire (fillForm).
-  const retrievedData = obj.surveyDataPrefetch || retrieveFunctionResponse.data;
-
-  // Add the stylesheets to the document.
-  if (obj.url && obj.activate) {
-    [cssActiveLogic, cssStyle1].forEach((css) => {
-      const cssTextBlob = new Blob([css], { type: 'text/css' });
-      const stylesheetLinkElement = document.createElement('link');
-      stylesheetLinkElement.rel = 'stylesheet';
-      stylesheetLinkElement.href = URL.createObjectURL(cssTextBlob);
-      document.head.appendChild(stylesheetLinkElement);
-    });
-  }
-
-  // Post the message to the worker and update questName.
-  // questName is the module ID. If none is provided, it defaults to 'Questionnaire'.
-  // The worker will return the transformed contents and questName. The 'onerror' block falls back to inline processing.
-  // The timeout is set to 10 seconds for handling an unresponsive worker.
-  const transformContentsWorkerPromise = new Promise((resolve) => {
-    let isPromiseResolved = false;
-    const timeout = setTimeout(() => {
-      if (!isPromiseResolved) {
-        const error = new Error('Worker timed out');
-        transformMarkdownWorker.onerror(error);
-      }
-    }, 10000); // 10 seconds
-
-    transformMarkdownWorker.onmessage = (messageResponse) => {
-      if (!isPromiseResolved) {
-        clearTimeout(timeout);
-        isPromiseResolved = true;
-
-        console.timeEnd('transformWorker posted message response');
-        [contents, questName] = messageResponse.data;
-        moduleParams.questName = questName;
-
-        transformMarkdownWorker.terminate();
-        resolve();
-      }
-    }
-
-    transformMarkdownWorker.onerror = (error) => {
-      if (!isPromiseResolved) {
-        clearTimeout(timeout)
-        isPromiseResolved = true;
-
-        console.timeEnd('transformWorker posted message response');
-        console.error('Error in transformMarkdownWorker. Fallback to inline processing:', error);
-
-        [contents, questName] = transformMarkdownToHTML(contents, moduleParams.i18n);
-        moduleParams.questName = questName;
-
-        transformMarkdownWorker.terminate();
-        resolve();
-      }
-    }
-  });
-
-  // Await the worker's response with the transformed content. Now we have all data to continue rendering the questionnaire.
-  await transformContentsWorkerPromise;
+  // Initialize the survey and transform the markdown contents to HTML.
+  const [transformedContents, questName, retrievedData] = await initSurvey(contents);
+  moduleParams.questName = questName;
 
   // add the HTML/HEAD/BODY tags...
-  document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + contents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
-
-  // Prefetch items that aren't compatible with the worker: Date operations and user variables that access the math package.
-  function getValuesForWorker() {
-    // Define the Date function dateToQuestFormat
-    const dateToQuestFormat = (date) => {
-      return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-    }
-
-    const current_date = new Date();
-
-    const precalculated_values = { 
-      current_date: current_date,
-      current_day: current_date.getDate(),
-      current_month_str: moduleParams.i18n.months[current_date.getMonth()],
-      current_month: current_date.getMonth() + 1,
-      current_year: current_date.getFullYear(),
-      quest_format_date: dateToQuestFormat(current_date),
-    };
-
-    // Find all user variables in the questText and add them to precalculated_values.
-    [...contents.matchAll(/\{\$u:(\w+)}/g)].forEach(([match, varName]) => {
-      precalculated_values[varName] = math._value(varName);
-    });
-
-    return precalculated_values;
-  }
+  document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + transformedContents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
 
   // Get the active question from the tree and set it as active.
   function setActive(id) {
@@ -259,8 +152,6 @@ transform.render = async (obj, divId, previousResults = {}) => {
   
   if (moduleParams.soccer instanceof Function)
     moduleParams.soccer(); // "externalListeners" (PWA)
-  moduleParams.questName = questName;
-
 
   // add an event listener to validate confirm...
   // if the user was lazy and used confirm instead of data-confirm, fix it now
@@ -279,19 +170,21 @@ transform.render = async (obj, divId, previousResults = {}) => {
   })
 
   // enable all popovers...
-  
   const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]')
   const popoverList = [...popoverTriggerList].map(popoverTriggerEl => {
     console.log("... ",popoverTriggerEl)
     new bootstrap.Popover(popoverTriggerEl)
   })
 
-  // Add the event listeners to the parent div
+  // All Global DOM processing is now complete (individual processing happens in displayQuestion()).
+  // Add the event listeners to the parent div.
   addEventListeners(divElement);
 
   return true;
 };
 
+// Helper for accessibility features. Certain JAWS (Windows) and VoiceOver (Mac) features are handled differently by each platform.
+// This detection helps optimize the user experience on each platform.
 function isWindowsEnvironment() {
   const userAgent = navigator.userAgent.toLowerCase();
   return userAgent.indexOf("win") > -1;
