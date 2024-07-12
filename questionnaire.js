@@ -1436,38 +1436,6 @@ export function getSelectedResponses(questionElement) {
   return [...radiosAndCheckboxes, ...inputFields, ...hiddenInputs];
 }
 
-// TODO: this looks unused
-// create a blank object for collecting
-// the questionnaire results...
-// const res = {};
-// // on submit of the question(a <form> tag)
-// // call this function...
-// function getResults(element) {
-//   // clear old results or create a blank object in the results to
-//   // hold these results...
-//   res[element.id] = {};
-//   // when we add to the tmpRes object, only the correct
-//   // object in the results are touched...
-//   let tmpRes = res[element.id];
-
-//   let allResponses = [...element.querySelectorAll(".response")];
-//   // get all the checkboxes
-//   cb = allResponses
-//     .filter((x) => x.type == "checkbox")
-//     .map((x) => (tmpRes[x.value] = x.checked));
-
-//   // get all the text and radio elements...
-//   rd = allResponses
-//     .filter(
-//       (x) =>
-//         (x.type == "radio" && x.checked) ||
-//         ["text", "date", "email", "number", "tel"].includes(x.type)
-//     )
-//     .map((x) => (tmpRes[x.name] = x.value));
-// }
-
-// x is the questionnaire text
-
 export function evaluateCondition(txt) {
 
   txt = decodeURIComponent(txt)

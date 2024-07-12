@@ -308,7 +308,7 @@ function handleRadioCheckboxTableEvents(event) {
       // If end of row, focus the next question button so the user can continue.
       // If end of last row, focus the next question button so the user can continue.
       case 'checkbox':
-        updateAriaLiveSelectionAnnouncer(responseCell);
+        updateAriaLiveSelectionAnnouncerTable(responseCell);
         const nextCell = responseCell.nextElementSibling;
         const isLastCellInRow = !nextCell;
         const isLastRow = !currentRow.nextElementSibling;
