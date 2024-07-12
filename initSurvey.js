@@ -27,9 +27,9 @@ export async function initSurvey(contents) {
 
 /**
  * Initialize the survey for an embedded application.
- * @param {string} contents - The markdown contents of the survey prior to transformation.
- * @param {*} precalculated_values - The precalculated values for the survey (values that aren't compatible with service worker calculation).
- * @param {*} questName - The name of the survey. Defaults to 'Questionnaire'.
+ * @param {String} contents - The markdown contents of the survey prior to transformation.
+ * @param {Object} precalculated_values - The precalculated values for the survey (values that aren't compatible with service worker calculation).
+ * @param {String} questName - The name of the survey. Defaults to 'Questionnaire'.
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
 async function initEmbeddedSurvey(contents, precalculated_values, questName) {
