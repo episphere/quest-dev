@@ -65,7 +65,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
     
       // If the data is not prefetched and a retrieve function is not provided, use localforage.  
     } else {
-      let results = await localforage.getItem(questName);
+      let results = await localforage.getItem(moduleParams.questName);
 
       if (results == null) results = {};
       restoreResults(results);
@@ -107,7 +107,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
   if (obj.treeJSON) {
     questionQueue.loadFromJSON(obj.treeJSON)
   } else {
-    await localforage.getItem(questName + ".treeJSON").then((tree) => {
+    await localforage.getItem(moduleParams.questName + ".treeJSON").then((tree) => {
       // if this is the first time the user attempt
       // the questionnaire, the tree will not be in
       // the localForage...
@@ -121,6 +121,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
     });
   }
 
+  // remove the first 'previous' button and the final 'next' button.
   if (questions.length > 0) {
     let buttonToRemove = questions[0].querySelector(".previous");
     if (buttonToRemove) {
@@ -145,7 +146,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
     if (submitButton) {
       submitButton.remove();
     }
-    submitQuestionnaire(moduleParams.renderObj.store, questName);
+    submitQuestionnaire(moduleParams.renderObj.store, moduleParams.questName);
   };
 
   resetTree();

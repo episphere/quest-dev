@@ -1,3 +1,5 @@
+import { getButtonDiv } from './questButtons.js';
+
 //NOTE: This function is not used in the current implementation
 export function firstFun(event) {
   event.preventDefault();
@@ -109,24 +111,8 @@ function buildHtmlTable(grid_obj, button_text_obj){
     // Close the row for the question
     grid_html += `</tr>`;
   });
-  
-  // TODO: The buttons can be attached to the parent div or the question. They don't need to be repeated in the question DOM (Caveat: renderer in question list format).
-  grid_html+=`</tbody></table>
-    <div id="ariaLiveSelectionAnnouncer" class="sr-only" aria-live="polite"></div>
-    <div class="container">
-      <div class="row d-flex flex-column flex-md-row">
-        <div class="col-md-3 col-sm-12 order-1 order-md-3">
-          <button type="submit" class="next w-100" id="nextButton" aria-label="Go to the next section" data-click-type="next">${button_text_obj.next}</button>
-        </div>
-        <div class="col-md-6 col-sm-12 order-2">
-          <button type="submit" class="reset w-100" id="resetButton" aria-label="Reset answer for this question" data-click-type="reset">${button_text_obj.reset}</button>
-        </div>
-        <div class="col-md-3 col-sm-12 order-3 order-md-1">
-          <button type="submit" class="previous w-100" id="backButton" aria-label="Back to the previous section" data-click-type="previous">${button_text_obj.back}</button>
-        </div>
-      </div>
-    </div>
-  </form>`;
+
+  grid_html+=`</tbody></table>${getButtonDiv(button_text_obj, true)}</form>`;
   
   return grid_html;
 }

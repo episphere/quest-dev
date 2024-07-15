@@ -462,7 +462,7 @@ function stopSubmit(event) {
       break;
 
     case 'next':
-      nextClick(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store);
+      nextClick(buttonClicked, moduleParams.renderObj.store);
       break;
 
     default:

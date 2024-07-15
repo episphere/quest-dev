@@ -700,7 +700,7 @@ export function handleXOR(inputElement) {
   return valueObj[inputElement.id];
 }
 
-export function nextClick(norp, retrieve, store) {
+export function nextClick(norp, store) {
   // Because next button does not have ID, modal will pass-in ID of question
   // norp needs to be next button element
   if (typeof norp == "string") {
@@ -712,10 +712,10 @@ export function nextClick(norp, retrieve, store) {
     validateInput(elm)
   });
 
-  showModal(norp, retrieve, store);
+  showModal(norp, store);
 }
 
-function setNumberOfQuestionsInModal(num, norp, retrieve, store, soft) {
+function setNumberOfQuestionsInModal(num, norp, store, soft) {
   const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
   
   const modalID = soft ? 'softModal' : 'hardModal';
@@ -754,7 +754,7 @@ function setNumberOfQuestionsInModal(num, norp, retrieve, store, soft) {
 }
 
 // show modal function
-function showModal(norp, retrieve, store) {
+function showModal(norp, store) {
   if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
@@ -796,7 +796,7 @@ function showModal(norp, retrieve, store) {
     }
 
     if (numBlankResponses > 0) {
-      setNumberOfQuestionsInModal(numBlankResponses, norp, retrieve, store, norp.form.getAttribute("softedit") == "true");
+      setNumberOfQuestionsInModal(numBlankResponses, norp, store, norp.form.getAttribute("softedit") == "true");
       return null;
     }
   }
@@ -973,6 +973,7 @@ export async function submitQuestionnaire(store, questName) {
 
   }
 }
+
 function exitLoop(nextElement) {
   if (!nextElement) {
     console.error("nextElement is null or undefined");

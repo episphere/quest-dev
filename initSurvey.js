@@ -1,6 +1,8 @@
 import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
 import { math, moduleParams } from './questionnaire.js';
 
+let questName = 'Questionnaire';
+
 /**
  * Initialize the survey. Route the survey to the appropriate initialization function based on the renderObj configuration.
  * moduleParams.renderObj.activate determines if the survey is embedded in an application or found in the included rendering tool.
@@ -9,30 +11,19 @@ import { math, moduleParams } from './questionnaire.js';
  */
 export async function initSurvey(contents) {
 
-    const precalculated_values = getPreCalculatedValues(contents);
-
-    // TODO: NOTE: this local path is Joe's temporary setup with Quest-dev loaded in ConnectApp at connectApp/js/quest-dev for local development.
-    // Determine the path to the worker and CSS files
-    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    moduleParams.basePath = isLocalDev ? './js/quest-dev/' : './';
-
-    let questName = "Questionnaire";
-
-    if (moduleParams.renderObj?.activate) {
-        return await initEmbeddedSurvey(contents, precalculated_values, questName);
-    } else {
-        return await initRendererSurvey(contents, precalculated_values, questName);
-    }
+    const precalculated_values = getPreCalculatedValues(contents);    
+    return moduleParams.renderObj?.activate
+        ? await initEmbeddedSurvey(contents, precalculated_values)
+        : await initRendererSurvey(contents, precalculated_values);
 }
 
 /**
  * Initialize the survey for an embedded application.
  * @param {String} contents - The markdown contents of the survey prior to transformation.
  * @param {Object} precalculated_values - The precalculated values for the survey (values that aren't compatible with service worker calculation).
- * @param {String} questName - The name of the survey. Defaults to 'Questionnaire'.
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
-async function initEmbeddedSurvey(contents, precalculated_values, questName) {
+async function initEmbeddedSurvey(contents, precalculated_values) {
     // Create and dispatch the worker to transform 'contents' from markdown to HTML.
     const transformMarkdownWorker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
     transformMarkdownWorker.postMessage([contents, precalculated_values, moduleParams.i18n]);
@@ -91,13 +82,12 @@ async function initEmbeddedSurvey(contents, precalculated_values, questName) {
  * The renderer doesn't use the service worker, so processing is handled inline.
  * @param {String} contents - The markdown contents of the survey prior to transformation.
  * @param {Object} precalculated_values - The precalculated values for the survey.
- * @param {String} questName - The name of the survey. Defaults to 'Questionnaire'.
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
-async function initRendererSurvey(contents, precalculated_values, questName) {
-    const retrievedData = await fetchAndProcessResources();
+async function initRendererSurvey(contents, precalculated_values) {
     [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n);
 
+    const retrievedData = null; // No retrieve function for the renderer and styling is referenced elsewhere (nothing to do here).
     return [contents, questName, retrievedData];
 }
 
@@ -107,6 +97,13 @@ async function initRendererSurvey(contents, precalculated_values, questName) {
  * @returns {Object} - The retrieved data from the retrieve function or null.
  */
 async function fetchAndProcessResources() {
+    // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
+    // Set the base path for the module. This is used to fetch the stylesheets in init -> .
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('github');
+    moduleParams.basePath = !isLocalDev && moduleParams.renderObj?.questVersion
+        ? 'https://episphere.github.io/quest-dev/'
+        : `https://episphere.github.io/quest-dev/`;
+    
     try {
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
             moduleParams.renderObj?.retrieve && !moduleParams.renderObj?.surveyDataPrefetch ? moduleParams.renderObj.retrieve() : Promise.resolve(),

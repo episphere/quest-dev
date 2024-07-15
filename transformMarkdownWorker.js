@@ -1,4 +1,5 @@
 import { parseGrid } from "./buildGrid.js";
+import { getButtonDiv } from "./questButtons.js";
 
 self.onmessage = function (event) {
     let [contents, precalculated_values, i18n] = event.data;
@@ -22,6 +23,14 @@ let reduceObj = (obj) => {
 // This routine takes the markdown contents and converts it to HTML
 // It's called from (1) the worker thread, (2) the worker's 'onerror' to process inline if the worker fails.
 export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
+  // build the buttons
+  const button_text_obj = {
+    back: i18n.backButton,
+    reset: i18n.resetAnswerButton,
+    next: i18n.nextButton,
+    submit: i18n.submitSurveyButton
+  }
+
   // Define the Date function dateToQuestFormat
   const dateToQuestFormat = (date) => {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -29,11 +38,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   
   // first... build grids...
   const grid_replace_regex = /\|grid(\!|\?)*\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|/g;
-  const button_text_obj = {
-    back: i18n.backButton,
-    next: i18n.nextButton,
-    reset: i18n.resetAnswerButton,
-  };
   contents = contents.replace(grid_replace_regex, (...args) => parseGrid(...args, button_text_obj));
 
   // then we must unroll the loops...
@@ -66,16 +70,14 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     .replace(/\/\*.*\*\//g, "")
     .replace(/\/\/.*/g, "");
 
-  let questModuleID; // this is the name of the questionnaire. Either the module ID or 'Questionnaire'. Find in the questionnaire as {"name":"moduleID"}
+  let questName = 'Questionnaire'; // this is the name of the questionnaire. Either the module ID or 'Questionnaire'. Find in the questionnaire as {"name":"moduleID"}
   const questModuleNameRegExp = new RegExp(/{"name":"(\w*)"}/);
   if (questModuleNameRegExp.test(contents)) {
     contents = contents.replace(/{"name":"(\w*)"}/, fQuestModuleNameID);
     function fQuestModuleNameID(group, moduleID) {
-      questModuleID = moduleID;
+      questName = moduleID;
       return "";
     }
-  } else {
-    questModuleID = "Questionnaire";
   }
 
   // first let's deal with breaking up questions..
@@ -88,12 +90,12 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   // note: we want this possessive (NOT greedy) so add a ?
   //       otherwise it would match the first and last square bracket
 
-  let questionSeparatorRegExp = new RegExp(
+
+  const questionSeparatorRegExp = new RegExp(
     "\\[([A-Z_][A-Z0-9_#]*[\\?\\!]?)(?:\\|([^,\\|\\]]+)\\|?)?(,.*?)?\\](.*?)(?=$|\\[[_A-Z]|<form)",
     "g"
   );
 
-  // TODO: General -> <br> tag replacement -> these read "Empty Group" in Chrome with screen reader, which is not ideal.
   // because firefox cannot handle the "s" tag, encode all newlines
   // as a unit seperator ASCII code 1f (decimal: 31)
   contents = contents.replace(/(?:\r\n|\r|\n)/g, "\u001f");
@@ -124,8 +126,8 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     questArgs = questArgs ? questArgs : "";
 
     // make sure that this is a "displayif"
-    var displayifMatch = questArgs.match(/displayif\s*=\s*.*/);
-    let endMatch = questArgs.match(/end\s*=\s*(.*)?/);
+    const displayifMatch = questArgs.match(/displayif\s*=\s*.*/);
+    const endMatch = questArgs.match(/end\s*=\s*(.*)?/);
     // if so, remove the comma and go.  if not, set questArgs to blank...
     if (displayifMatch) {
       questArgs = displayifMatch[0];
@@ -148,24 +150,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
         target = "data-target='#softModal'";
       }
     }
-
-    // TODO: The buttons can be attached to the parent div or the question. They don't need to be repeated in the question DOM (Caveat: renderer in question list format).
-    let prevButton =
-      (endMatch && endMatch[1]) === "noback"
-        ? ""
-        : (questID === 'END')
-          ? `<button type='submit' class='previous w-100' id='lastBackButton' aria-label='Back to the previous section' data-click-type='previous'>${i18n.backButton}</button>`
-          : `<button type='submit' class='previous w-100' aria-label='Back to the previous question' data-click-type='previous'>${i18n.backButton}</button>`;
-
-    //debugger;
-    let resetButton = (questID === 'END')
-      ? `<button type='submit' class='reset' id='submitButton' aria-label='Submit your survey' data-click-type='submitSurvey'>${i18n.submitSurveyButton}</button>`
-      : `<button type='submit' class='reset w-100' aria-label='Reset this answer' data-click-type='reset'>${i18n.resetAnswerButton}</button>`;
-
-    let nextButton = endMatch
-      ? ""
-      : `<button type='submit' class='next w-100' ${target} aria-label='Next question' data-click-type='next'>${i18n.nextButton}</button>`;
-
 
     // Worker doesn't have window context/access, so needed to be pre-calculated instead of accessing math._value.
     // replace user profile variables...
@@ -370,8 +354,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     );
 
     //regex to test if there are input as a part of radio or checkboxes
-    //    /(\[|\()(\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?(\)|\])\s*(.*?\|_.*?\|)\s*(?=(?:\[\d)|\n|<br>|$)/g
-    var radioCheckboxAndInput = false;
+    let radioCheckboxAndInput = false;
     if (questText.match(/(\[|\()(\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?(\)|\])\s*(.*?\|_.*?\|)/g)) {
       radioCheckboxAndInput = true;
       questOpts = questOpts + " radioCheckboxAndInput";
@@ -697,30 +680,16 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     );
     questText = questText.replace(/<\/div><br>/g, "</div>");
 
-    // If reset is needed only for radio buttons then uncomment out the next lines
-
-    if (!questText.includes('input') && (questID !== 'END')) {
-      resetButton = '';
-    }
+    // handle the back/next/reset buttons
+    const hasInputfield = questText.includes('input');
+    const questButtonsDiv = getButtonDiv(button_text_obj, hasInputfield, questID, endMatch, target);
     
     let rv = `
       <form class='question' id='${questID}' ${questOpts} ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
         <fieldset>
           ${questText}
         </fieldset>
-        <div class="py-0">
-          <div class="row d-flex flex-column flex-md-row">
-            <div class="col-md-3 col-sm-12 order-1 order-md-3">
-              ${nextButton}
-            </div>
-            <div class="col-md-6 col-sm-12 order-2">
-              ${resetButton}
-            </div>
-            <div class="col-md-3 col-sm-12 order-3 order-md-1">
-              ${prevButton}
-            </div>
-          </div>
-        </div>
+        ${questButtonsDiv}
         <div class="spacePadding"></div>
       </form>`;
     
@@ -737,7 +706,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   //removing random &#x1f; unit separator chars
   contents = contents.replace(//g, "");
 
-  return [contents, questModuleID];
+  return [contents, questName];
 }
 
 function ordinal(a, lang) {
@@ -800,8 +769,8 @@ function ordinal(a, lang) {
   
       // goto from 1-> max for human consumption... need <=
       let loopText = "";
-      for (var loopIndx = 1; loopIndx <= x.cnt; loopIndx++) {
-        var currentText = x.txt;
+      for (let loopIndx = 1; loopIndx <= x.cnt; loopIndx++) {
+        let currentText = x.txt;
         // replace all instances of the question ids with id_#
         ids.map(
           (id) =>
@@ -835,7 +804,7 @@ function ordinal(a, lang) {
       return loopText;
     });
   
-    for (var loopIndx = 0; loopIndx < cleanedText.length; loopIndx++) {
+    for (let loopIndx = 0; loopIndx < cleanedText.length; loopIndx++) {
       txt = txt.replace(res[loopIndx].orig, cleanedText[loopIndx]);
     }
     txt = txt.replace(/\xa9/g, "\n");
