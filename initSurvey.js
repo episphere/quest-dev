@@ -132,6 +132,16 @@ async function initRendererSurvey(contents, precalculated_values) {
  * @returns {Object} - The retrieved data from the retrieve function or null.
  */
 async function fetchAndProcessResources() {
+    // Helper function to unwrap the data from the retrieve function response. This format is necessary for fillForm().
+    function unwrapData(data) {
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const keys = Object.keys(data);
+            if (keys.length === 1) {
+                return data[keys[0]];
+            }
+        }
+        return data;
+    }
     
     try {
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
@@ -142,7 +152,7 @@ async function fetchAndProcessResources() {
 
         // retrievedData is the prefetched user data, the result of the retrieve function, or null (for the renderer or when no retrieve function is provided).
         // This is used to populate the questionnaire (fillForm).
-        const retrievedData = moduleParams.renderObj?.surveyDataPrefetch || retrieveFunctionResponse?.data;
+        const retrievedData = moduleParams.renderObj?.surveyDataPrefetch || unwrapData(retrieveFunctionResponse?.data);
 
         // Add the stylesheets to the document.
         if (moduleParams.renderObj?.url && moduleParams.renderObj?.activate) {
