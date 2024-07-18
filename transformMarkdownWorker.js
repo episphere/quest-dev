@@ -1,10 +1,14 @@
 import { parseGrid } from "./buildGrid.js";
 import { getButtonDiv } from "./questButtons.js";
 
-self.onmessage = function (event) {
-    let [contents, precalculated_values, i18n] = event.data;
-    contents = transformMarkdownToHTML(contents, precalculated_values, i18n);
-    self.postMessage(contents);
+self.onmessage = (event) => {
+  if (event.data.command === 'initialize') {
+    self.postMessage('ready');
+  } else if (event.data.command === 'transform') {
+    const [contents, precalculated_values, i18n, isEmbeddedSurvey] = event.data.data;
+    const transformResult = transformMarkdownToHTML(contents, precalculated_values, i18n, isEmbeddedSurvey);
+    self.postMessage({ command: 'transformDone', result: transformResult });
+  }
 }
 
 let paramSplit = (str) =>

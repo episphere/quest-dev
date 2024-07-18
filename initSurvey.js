@@ -23,17 +23,54 @@ export async function initSurvey(contents) {
  * @param {Object} precalculated_values - The precalculated values for the survey (values that aren't compatible with service worker calculation).
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
-async function initEmbeddedSurvey(contents, precalculated_values) {
-    // Create and dispatch the worker to transform 'contents' from markdown to HTML.
+async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurvey) {
+    // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
+    // Set the base path for the module. This is used to fetch the stylesheets in init -> .
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('github');
+    moduleParams.basePath = !isLocalDev && moduleParams.renderObj?.questVersion
+        ? 'https://episphere.github.io/quest-dev/'
+        : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
+    
+    // Fetch the resources for the survey. Await completion later in the routine.
+    const retrievedDataPromise = fetchAndProcessResources();
+
+    // Initialize the worker and wait for ready status.
     const transformMarkdownWorker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
-    transformMarkdownWorker.postMessage([contents, precalculated_values, moduleParams.i18n]);
+    transformMarkdownWorker.postMessage({ command: 'initialize' });
+    
+    const workerReadyPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error('Worker initialization timed out'));
+        }, 2000); // Set timeout for worker initialization
 
-    const retrievedData = await fetchAndProcessResources();
+        transformMarkdownWorker.onmessage = (event) => {
+            if (event.data === 'ready') {
+                clearTimeout(timeout);
+                resolve();
+            }
+        };
 
-    // Post the message to the worker and update questName.
-    // questName is the module ID. If none is provided, it defaults to 'Questionnaire'.
-    // The worker will return the transformed contents and questName. The 'onerror' block falls back to inline processing.
-    // The timeout is set to 10 seconds for handling an unresponsive worker.
+        transformMarkdownWorker.onerror = (error) => {
+            clearTimeout(timeout);
+            reject(new Error(`Worker initialization failed: ${error.message}`));
+        };
+    });
+
+    // Wait for the worker to initialize. If the worker fails to initialize, fallback to inline processing.
+    try {
+        await workerReadyPromise;
+    } catch (error) {
+        console.error('Error initializing transformMarkdownWorker. Fallback to inline processing:', error);
+        transformMarkdownWorker.terminate();
+
+        [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
+        const retrievedData = await retrievedDataPromise;
+        return [contents, questName, retrievedData];
+    }
+
+    // Post the transform command to the worker.
+    transformMarkdownWorker.postMessage({ command: 'transform', data: [contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey] });
+
     const transformContentsWorkerPromise = new Promise((resolve) => {
         let isPromiseResolved = false;
         const timeout = setTimeout(() => {
@@ -43,38 +80,36 @@ async function initEmbeddedSurvey(contents, precalculated_values) {
             }
         }, 10000); // 10 seconds
 
-        // Success case: the worker returns the transformed contents and questName.
         transformMarkdownWorker.onmessage = (messageResponse) => {
-            if (!isPromiseResolved) {
+            if (!isPromiseResolved && messageResponse.data.command === 'transformDone') {
                 clearTimeout(timeout);
                 isPromiseResolved = true;
 
-                [contents, questName] = messageResponse.data;
+                [contents, questName] = messageResponse.data.result;
 
                 transformMarkdownWorker.terminate();
                 resolve();
             }
-        }
+        };
 
-        // Error case: the worker throws an error. Fallback to inline processing.
         transformMarkdownWorker.onerror = (error) => {
             console.error('Error in transformMarkdownWorker. Fallback to inline processing:', error);
 
             if (!isPromiseResolved) {
-                clearTimeout(timeout)
+                clearTimeout(timeout);
                 isPromiseResolved = true;
 
-                [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n);
+                [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
 
                 transformMarkdownWorker.terminate();
                 resolve();
             }
-        }
+        };
     });
 
-    // Await the worker's response with the transformed content.
-    // Now we have all data to continue rendering the questionnaire.
-    await transformContentsWorkerPromise;
+    // Wait for the retrievedData fetch and worker completion.
+    const [retrievedData] = await Promise.all([retrievedDataPromise, transformContentsWorkerPromise]);
+
     return [contents, questName, retrievedData];
 }
 
@@ -97,12 +132,6 @@ async function initRendererSurvey(contents, precalculated_values) {
  * @returns {Object} - The retrieved data from the retrieve function or null.
  */
 async function fetchAndProcessResources() {
-    // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
-    // Set the base path for the module. This is used to fetch the stylesheets in init -> .
-    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('github');
-    moduleParams.basePath = !isLocalDev && moduleParams.renderObj?.questVersion
-        ? 'https://episphere.github.io/quest-dev/'
-        : `https://episphere.github.io/quest-dev/`;
     
     try {
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
