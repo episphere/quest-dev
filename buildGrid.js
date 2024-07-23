@@ -143,8 +143,7 @@ export function parseGrid(text, ...args) {
     let args_regex = /displayif=[\'\"]?((?:[^\'\"].+[^\'\"](?:[^\'\"])))[\"\']?$/mg
     grid_obj.args = grid_obj.args.replace(args_regex,(match,group1)=>{
       return `displayif=${encodeURIComponent(group1)}`
-    })
-    //console.log(grid_obj.args) 
+    });
 
     //let question_regex = /\[([A-Z][A-Z0-9_]*)\](.*?);\s*(?=[\[\]])/g;     
     let question_regex = /\[([A-Z][A-Z0-9_]*)(,displayif=[^\]]+)?\](.*?)[;\]]/g;

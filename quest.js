@@ -76,9 +76,7 @@ async function startUp() {
   // handle the Search params with the URLSearchParam API instead of a string...
   let params = new URLSearchParams(location.search)
   if (params.has("config")) {
-    moduleParams.config = config;
     ta.value = await fetchModule(confirm.markdown)
-    //ta.value = await (await fetch(config.markdown)).text();
   }
   if (params.has("url")) {
     let url = params.get("url")

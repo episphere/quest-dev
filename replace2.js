@@ -26,7 +26,6 @@ transform.render = async (obj, divId, previousResults = {}) => {
   
   // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
   let contents = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
-  if (moduleParams.renderObj?.url) moduleParams.config = contents;
 
   // Initialize the survey and transform the markdown contents to HTML.
   const [transformedContents, questName, retrievedData] = await initSurvey(contents);
