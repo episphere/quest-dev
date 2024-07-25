@@ -361,11 +361,18 @@ export function isFirstQuestion() {
   return questionQueue.isEmpty() || questionQueue.isFirst();
 }
 
-function numberOfInputs(element) {
-  let resps = Array.from(
-    element.querySelectorAll("input, textarea, select")
-  ).reduce((acc, current) => {
-    //if (["submit", "button"].includes(current.type)) return acc;
+/**
+ * Determine the storage format for the response data.
+ * Grid questions and questions with multiple response inputs are stored as objects. Ensure each key is stored with the response.
+ * Single response (radio) input questions are stored as primitives.
+ * Multi-selection (checkbox) input questions are stored as arrays.
+ * @param {HTMLElement} form - the form element being evaluated.
+ * @returns {boolean} - true if the key must be stored with the response (Object), false otherwise (primitive).
+ */
+function isObjectStore(form) {
+  if (form.dataset?.grid === 'true') return true;
+
+  const responseInputs = Array.from(form.querySelectorAll("input, textarea, select")).reduce((acc, current) => {
     if (current.type == "submit" || current.type == "hidden") return acc;
     if (["radio", "checkbox"].includes(current.type)) {
       acc[current.name] = true;
@@ -374,24 +381,27 @@ function numberOfInputs(element) {
     }
     return acc;
   }, {});
-  return Object.keys(resps).length;
+
+  return Object.keys(responseInputs).length !== 1;
 }
 
 function setFormValue(form, value, id) {
+
   if (value === "") {
     value = undefined
   }
-  if (numberOfInputs(form) == 1) {
+
+  if (!isObjectStore(form)) {
     form.value = value;
   } else {
     if (!form.value) {
       form.value = {};
     }
+
     form.value[id] = value;
     if (value == undefined) {
       delete form.value[id]
     }
-
   }
 }
 
@@ -585,6 +595,7 @@ export function radioAndCheckboxClearTextInput(inputElement) {
 export function radioAndCheckboxUpdate(inputElement) {
   if (!inputElement) return;
   clearSelection(inputElement);
+  console.log('radioAndCheckboxUpdate', inputElement)
 
   let selectedValue = {};
   if (inputElement.type == "checkbox") {
@@ -600,6 +611,8 @@ export function radioAndCheckboxUpdate(inputElement) {
     // we have a radio button..  just get the selected value...
     selectedValue = inputElement.value;
   }
+
+  console.log('selectedValue', selectedValue);
 
   setFormValue(inputElement.form, selectedValue, inputElement.name);
 }
@@ -866,6 +879,7 @@ async function nextPage(norp, retrieve, store, rootElement) {
     x.value = "true"
     setFormValue(questionElement, x.value, x.id)
   });
+  console.log("questionElement: ", questionElement);
 
   if (checkValid(questionElement) == false) {
     return null;
@@ -881,8 +895,10 @@ async function nextPage(norp, retrieve, store, rootElement) {
   checkForSkips(questionElement);
 
   let nextQuestionId = getNextQuestionId(questionElement);
+  console.log('nextQuestionId: ', nextQuestionId);
   // get the actual HTML element.
   let nextElement = document.getElementById(nextQuestionId.value);
+  console.log("nextElement: ", nextElement);
   nextElement = exitLoop(nextElement);
 
   // before we add the next question to the queue...
@@ -891,6 +907,7 @@ async function nextPage(norp, retrieve, store, rootElement) {
     // not sure what to do if the next element is is not a question ...
     if (nextElement.classList.contains("question")) {
       let display = evaluateCondition(nextElement.getAttribute("displayif"));
+      console.log("displayif: ", display);
       if (display) break;
       if (nextElement.id.substring(0, 9) != "_CONTINUE") questionQueue.pop();
 
@@ -901,6 +918,7 @@ async function nextPage(norp, retrieve, store, rootElement) {
       nextQuestionId = getNextQuestionId(nextElement);
 
       nextElement = document.getElementById(nextQuestionId.value);
+      console.log("nextElement (while loop): ", nextElement);
       nextElement = exitLoop(nextElement);
     } else {
       console.log(
@@ -917,7 +935,7 @@ async function nextPage(norp, retrieve, store, rootElement) {
     try {
       // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
       if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
-
+      console.log('questionElement.id: ', questionElement.id, 'questionElement.value: ', questionElement.value);
       let formData = {};
       formData[`${questName}.${questionElement.id}`] = questionElement.value;
       console.log(formData)
@@ -1040,6 +1058,7 @@ export function displayQuestion(nextElement) {
   // check all responses for next question
   [...nextElement.querySelectorAll('[displayif]')].map((elm) => {
     let f = evaluateCondition(elm.getAttribute("displayif"));
+    console.log('DISPLAYIF', elm, f);
     elm.style.display = f ? null : "none";
   });
 
@@ -1068,15 +1087,19 @@ export function displayQuestion(nextElement) {
   // ISSUE: 403
   // update {$e:}/{$u} and and {$} elements in grids when the user displays the question ...
   Array.from(nextElement.querySelectorAll("[data-gridreplace]")).forEach((e) => {
+    console.log('GRIDREPLACE', e)
     if (e.dataset.gridreplacetype == "_val") {
       e.innerText = math._value(decodeURIComponent(e.dataset.gridreplace))
     } else {
       e.innerText = math.evaluate(decodeURIComponent(e.dataset.gridreplace))
     }
   });
+
+  //console.log('NEXT ELEMENT', nextElement);
   
   // Check if grid elements need to be shown. Elm is a <tr>. If f !== true, remove the row (elm) from the DOM.
   Array.from(nextElement.querySelectorAll("[data-gridrow][data-displayif]")).forEach((elm) => {
+    console.log('GRIDROW-ELM', elm)
     const f = evaluateCondition(decodeURIComponent(elm.dataset.displayif));
     console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
 
@@ -1389,6 +1412,7 @@ function checkValid(questionElement) {
   if (questionElement.classList.contains("invalid")) {
     return false;
   } else {
+    console.log("checking for validity:", questionElement.checkValidity());
     return questionElement.checkValidity();
   }
 }
