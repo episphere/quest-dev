@@ -1,5 +1,6 @@
 import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
 import { math, moduleParams } from './questionnaire.js';
+import { getStateManager, initializeStateManager } from './stateManager.js';
 
 let questName = 'Questionnaire';
 
@@ -10,6 +11,8 @@ let questName = 'Questionnaire';
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
 export async function initSurvey(contents) {
+    // Initialize the state manager. This will drive all data flow and UI updating in the app.
+    initializeStateManager(moduleParams.renderObj.store);
 
     const precalculated_values = getPreCalculatedValues(contents);    
     return moduleParams.renderObj?.activate

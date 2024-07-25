@@ -1,8 +1,12 @@
+// TODO: rename this file and consider architecture (DAO is not a good name for this file)
+
 import { textboxinput, radioAndCheckboxUpdate } from "./questionnaire.js";
+import { getStateManager } from "./stateManager.js";
 
+// TODO: I think this only needs to run when the question loads.
+// It does not need to run for the entire survey.
+// We still need the Object.keys loop for multi-question pages.
 export function restoreResults(results) {
-  // get the results from localforage...
-
 
   // retrieved the results... now lets fill the form..
   Object.keys(results).forEach((qid) => {
@@ -26,7 +30,7 @@ export function restoreResults(results) {
     }
     console.log('-------checking qids------------')
     console.log(qid)
-    let formElement = document.querySelector("#" + qid);
+    let formElement = document.querySelector("#" + CSS.escape(qid));
     // not sure have a non-question would be here
     // but ignore it...
     if (!formElement) {
@@ -160,14 +164,15 @@ export function restoreResults(results) {
   });
 }
 
+// Renderer only: Remove a question from the state manager on 'back' button click.
+// TODO: verify this after transition to state manager.
 export async function removeQuestion(questName, qid) {
-  //check here for going back issue?
+  const appState = getStateManager();
+  const currentState = appState.getState();
 
-  let results = await localforage.getItem(questName);
-
-  if (results && results[qid]) {
-    delete results[qid];
-  }
-
-  localforage.setItem(questName, results);
+  console.log('removing question', qid);
+  console.log('currentState', currentState);
+  appState.removeItem(qid);
+  const newState = appState.getState();
+  console.log('state after removal', newState);
 }

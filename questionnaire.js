@@ -3,6 +3,7 @@ import { knownFunctions } from "./knownFunctions.js";
 import { removeQuestion } from "./localforageDAO.js";
 import { validateInput, validationError } from "./validate.js"
 import { translate } from "./common.js";
+import { getStateManager } from "./stateManager.js";
 
 export const moduleParams = {};
 import  * as mathjs  from 'https://cdn.skypack.dev/mathjs@11.2.0';
@@ -803,23 +804,20 @@ function showModal(norp, store) {
   nextPage(norp, store);
 }
 
-let tempObj = {};
-
 async function updateTree() {
   if (moduleParams?.renderObj?.updateTree) {
     moduleParams.renderObj.updateTree(moduleParams.questName, questionQueue)
   }
-  updateTreeInLocalForage()
+  updateTreeInStateManager()
 }
 
-async function updateTreeInLocalForage() {
-  // We dont have questName yet, don't bother saving the tree yet...
-  if (!('questName' in moduleParams)) {
-    return
-  }
-
-  let questName = moduleParams.questName;
-  await localforage.setItem(questName + ".treeJSON", questionQueue.toVanillaObject());
+// Update the tree in StateManager. This is called when the next button is clicked.
+// TODO: is treeJSON being handled correctly in stateManager across surveys?
+function updateTreeInStateManager() {
+  if (!moduleParams.questName) return;
+  
+  const appState = getStateManager();
+  appState.setItem(moduleParams.questName + ".treeJSON", questionQueue.toVanillaObject());
 }
 
 function getNextQuestionId(currentFormElement) {
@@ -874,8 +872,6 @@ async function nextPage(norp, store) {
     questionQueue.add(questionElement.id);
     questionQueue.next();
   }
-  let questName = moduleParams.questName;
-  tempObj[questionElement.id] = questionElement.value;
 
   // check if we need to add questions to the question queue
   checkForSkips(questionElement);
@@ -903,21 +899,22 @@ async function nextPage(norp, store) {
       nextElement = document.getElementById(nextQuestionId.value);
       nextElement = exitLoop(nextElement);
     } else {
-      console.log(
-        " ============= next element is not a question...  not sure what went wrong..."
-      );
+      console.error(" ============= next element is not a question...  not sure what went wrong...");
       console.trace();
     }
   }
 
+  // TODO: work in progress from here. implementing state manager.
+  const appState = getStateManager();
+  appState.syncToStore();
   //Check if questionElement exists first so its not pushing undefineds
   if (store) {
     try {
       // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
       if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
 
-      let formData = {};
-      formData[`${questName}.${questionElement.id}`] = questionElement.value;
+      const formData = { [`${moduleParams.questName}.${questionElement.id}`]: questionElement.value };
+
       await store(formData)
     } catch (e) {
       console.error("Store failed", e);
@@ -926,7 +923,7 @@ async function nextPage(norp, store) {
     }
   } else {
     let tmp = await localforage
-      .getItem(questName)
+      .getItem(moduleParams.questName)
       .then((allResponses) => {
         // if their is not an object in LF create one that we will add later...
         if (!allResponses) {
@@ -943,12 +940,48 @@ async function nextPage(norp, store) {
         // allResposes really should be defined at this point. If it wasn't
         // previously in LF, the previous block should have created it...
         localforage.setItem(questName, allResponses, () => {
-          console.log(
-            "... Response stored in LF: " + questName,
-            JSON.stringify(allResponses)
-          );
+          console.log("... Response stored in State Manager: " + questName, JSON.stringify(allResponses));
         });
       });
+
+
+
+  // //Check if questionElement exists first so its not pushing undefineds
+  // if (store) {
+  //   try {
+  //     // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
+  //     if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
+
+  //     let formData = {};
+  //     formData[`${questName}.${questionElement.id}`] = questionElement.value;
+  //     await store(formData)
+  //   } catch (e) {
+  //     console.error("Store failed", e);
+  //   } finally {
+  //     hideLoadingIndicator();
+  //   }
+  // } else {
+  //   let tmp = await localforage
+  //     .getItem(questName)
+  //     .then((allResponses) => {
+  //       // if their is not an object in LF create one that we will add later...
+  //       if (!allResponses) {
+  //         allResponses = {};
+  //       }
+  //       // set the value for the questionId...
+  //       allResponses[questionElement.id] = questionElement.value;
+  //       if (questionElement.value === undefined) {
+  //         delete allResponses[questionElement.id]
+  //       }
+  //       return allResponses;
+  //     })
+  //     .then((allResponses) => {
+  //       // allResposes really should be defined at this point. If it wasn't
+  //       // previously in LF, the previous block should have created it...
+  //       localforage.setItem(questName, allResponses, () => {
+  //         console.log("... Response stored in State Manager: " + questName, JSON.stringify(allResponses));
+  //       });
+  //     });
   }
 
   //hide the current question
@@ -968,9 +1001,8 @@ export async function submitQuestionnaire(store, questName) {
         location.reload();
       });
     } catch (e) {
-      console.log("Store failed", e);
+      console.error("Store failed", e);
     }
-
   }
 }
 
@@ -1011,6 +1043,11 @@ function exitLoop(nextElement) {
 let questionFocusSet;
 
 export function displayQuestion(nextElement) {
+  // Fail gently in the renderer tool.
+  if (!nextElement && !moduleParams.renderObj.activate) {
+    return;
+  }
+
   questionFocusSet = false;
 
   [...nextElement.querySelectorAll("span[forid]")].map((x) => {
@@ -1317,7 +1354,10 @@ export async function previousClicked(norp, store) {
     let formData = {};
     formData[`${moduleParams.questName}.${norp.form.id}`] = undefined;
     store(formData);
-  } else removeQuestion(moduleParams.questName, norp.form.id);
+  } else {
+    console.log('REMOVE QUESTION FROM STATE MANAGER', moduleParams.questName, norp.form.id)
+    removeQuestion(moduleParams.questName, norp.form.id);
+  }
 
   updateTree();
 

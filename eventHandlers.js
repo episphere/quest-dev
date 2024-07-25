@@ -1,6 +1,6 @@
 import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestionInit, moduleParams } from "./questionnaire.js";
 import { clearValidationError } from "./validate.js";
-import { nextClick, previousClicked } from "./questionnaire.js";
+import { nextClick, previousClicked, submitQuestionnaire } from "./questionnaire.js";
 
 // Debounced version of handleOtherTextInputKeyPress
 const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
@@ -23,6 +23,8 @@ export function addEventListeners(divElement) {
 
   modal?.addEventListener('click', closeModalAndFocusQuestion);
   closeButton?.addEventListener('click', closeModalAndFocusQuestion);
+
+  addSubmitSurveyListener();
 }
 
 function handleClickEvent(event) {
@@ -495,5 +497,19 @@ function debounce(func, wait) {
       };
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
+  };
+}
+
+function addSubmitSurveyListener() {
+  document.getElementById("submitModalButton").onclick = () => {
+    const lastBackButton = document.getElementById('lastBackButton');
+    if (lastBackButton) {
+      lastBackButton.remove();
+    }
+    const submitButton = document.getElementById('submitButton');
+    if (submitButton) {
+      submitButton.remove();
+    }
+    submitQuestionnaire(moduleParams.renderObj.store, moduleParams.questName);
   };
 }
