@@ -363,7 +363,7 @@ export function isFirstQuestion() {
 
 /**
  * Determine the storage format for the response data.
- * Grid questions and questions with multiple response inputs are stored as objects. Ensure each key is stored with the response.
+ * Grid questions are stored as objects. Ensure each key is stored with the response.
  * Single response (radio) input questions are stored as primitives.
  * Multi-selection (checkbox) input questions are stored as arrays.
  * @param {HTMLElement} form - the form element being evaluated.
@@ -386,10 +386,11 @@ function isObjectStore(form) {
 }
 
 function setFormValue(form, value, id) {
-
-  if (value === "") {
-    value = undefined
+  if (value === "" || Array.isArray(value) && value.length === 0) {
+    value = undefined;
   }
+
+  if (!id || id.trim() === "") return;
 
   if (!isObjectStore(form)) {
     form.value = value;
@@ -927,8 +928,10 @@ async function nextPage(norp, retrieve, store, rootElement) {
     try {
       // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
       if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
+
       let formData = {};
       formData[`${questName}.${questionElement.id}`] = questionElement.value;
+      console.log(formData)
       await store(formData)
     } catch (e) {
       console.error("Store failed", e);
@@ -1089,7 +1092,11 @@ export function displayQuestion(nextElement) {
     console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
 
     if (f !== true) {
-      elm.remove();
+      elm.dataset.hidden = "true";
+      elm.style.display = "none";
+    } else {
+      delete elm.dataset.hidden;
+      elm.style.display = "";
     }
   });
 
