@@ -361,11 +361,18 @@ export function isFirstQuestion() {
   return questionQueue.isEmpty() || questionQueue.isFirst();
 }
 
-function numberOfInputs(element) {
-  let resps = Array.from(
-    element.querySelectorAll("input, textarea, select")
-  ).reduce((acc, current) => {
-    //if (["submit", "button"].includes(current.type)) return acc;
+/**
+ * Determine the storage format for the response data.
+ * Grid questions are stored as objects. Ensure each key is stored with the response.
+ * Single response (radio) input questions are stored as primitives.
+ * Multi-selection (checkbox) input questions are stored as arrays.
+ * @param {HTMLElement} form - the form element being evaluated.
+ * @returns {boolean} - true if the key must be stored with the response (Object), false otherwise (primitive).
+ */
+function isObjectStore(form) {
+  if (form.dataset?.grid === 'true') return true;
+
+  const responseInputs = Array.from(form.querySelectorAll("input, textarea, select")).reduce((acc, current) => {
     if (current.type == "submit" || current.type == "hidden") return acc;
     if (["radio", "checkbox"].includes(current.type)) {
       acc[current.name] = true;
@@ -374,24 +381,28 @@ function numberOfInputs(element) {
     }
     return acc;
   }, {});
-  return Object.keys(resps).length;
+
+  return Object.keys(responseInputs).length !== 1;
 }
 
 function setFormValue(form, value, id) {
-  if (value === "") {
-    value = undefined
+  if (value === "" || Array.isArray(value) && value.length === 0) {
+    value = undefined;
   }
-  if (numberOfInputs(form) == 1) {
+
+  if (!id || id.trim() === "") return;
+
+  if (!isObjectStore(form)) {
     form.value = value;
   } else {
     if (!form.value) {
       form.value = {};
     }
+
     form.value[id] = value;
     if (value == undefined) {
       delete form.value[id]
     }
-
   }
 }
 
@@ -1032,14 +1043,11 @@ export function displayQuestion(nextElement) {
   );
 
   // check all responses for next question
-  [...nextElement.children]
-    .filter((x) => {
-      return x.hasAttribute("displayif");
-    })
-    .map((elm) => {
-      let f = evaluateCondition(elm.getAttribute("displayif"));
-      elm.style.display = f ? null : "none";
-    });
+  [...nextElement.querySelectorAll('[displayif]')].map((elm) => {
+    let f = evaluateCondition(elm.getAttribute("displayif"));
+    elm.style.display = f ? null : "none";
+  });
+
   // check for displayif spans...
   Array.from(nextElement.querySelectorAll("span[displayif],div[displayif]"))
     .map(elm => {
@@ -1078,7 +1086,11 @@ export function displayQuestion(nextElement) {
     console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
 
     if (f !== true) {
-      elm.remove();
+      elm.dataset.hidden = "true";
+      elm.style.display = "none";
+    } else {
+      delete elm.dataset.hidden;
+      elm.style.display = "";
     }
   });
 
@@ -1456,7 +1468,7 @@ export function evaluateCondition(txt) {
       if (typeof x === "string") {
         let element = document.getElementById(x);
         if (element != null) {
-          if (element.hasAttribute('grid') && (element.type === "radio" || element.type === "checkbox")) {
+          if (element.dataset.grid && (element.type === "radio" || element.type === "checkbox")) {
             //for displayif conditions with grid elements
             x = element.checked ? 1 : 0;
           }
