@@ -737,13 +737,13 @@ transform.render = async (obj, divId, previousResults = {}) => {
         </fieldset>
         <div class="py-0">
           <div class="row">
-            <div class="col-md-3 col-sm-12 order-3 order-md-1">
+            <div class="col-lg-3 col-12 order-3 order-lg-1">
               ${prevButton}
             </div>
-            <div class="col-md-6 col-sm-12 order-2">
+            <div class="col-lg-6 col-12 order-2">
               ${resetButton}
             </div>
-            <div class="col-md-3 col-sm-12 order-1 order-md-3">
+            <div class="col-lg-3 col-12 order-1 order-lg-3">
               ${nextButton}
             </div>
           </div>
@@ -1127,11 +1127,13 @@ function stopSubmit(event) {
   switch (clickType) {
     case 'previous':
       resetChildren(event.target.elements);
+      event.target.value = undefined;
       previousClicked(buttonClicked, moduleParams.renderObj.retrieve, moduleParams.renderObj.store, rootElement);
       break;
 
     case 'reset':
       resetChildren(event.target.elements);
+      event.target.value = undefined;
       break;
 
     case 'submitSurvey':
