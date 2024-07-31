@@ -1,6 +1,6 @@
 import { textboxinput, radioAndCheckboxUpdate } from "./questionnaire.js";
 
-export async function restoreResults(results) {
+export function restoreResults(results) {
   // get the results from localforage...
 
 

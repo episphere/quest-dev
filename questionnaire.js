@@ -406,14 +406,6 @@ function setFormValue(form, value, id) {
   }
 }
 
-// here are function that handle the
-// user selection and attach the
-// selected value to the form (question)
-export function textBoxInput(event) {
-  let inputElement = event.target;
-  textboxinput(inputElement);
-}
-
 export function parseSSN(event) {
   if (event.type == "keyup") {
     let element = event.target;
@@ -516,21 +508,23 @@ export function textboxinput(inputElement, validate = true) {
   const modalElement = document.getElementById('softModalResponse');
   if (!modalElement.classList.contains('show')) {
   
-  const modal = new bootstrap.Modal(modalElement);
+    const modal = new bootstrap.Modal(modalElement);
 
-  if (inputElement.getAttribute("modalif") && inputElement.value != "") {
-    evalBool = math.evaluate(
-      decodeURIComponent(inputElement.getAttribute("modalif").replace(/value/, inputElement.value))
-    );
-  }
-  if (inputElement.getAttribute("softedit") == "true" && evalBool == true) {
-    if (inputElement.getAttribute("modalvalue")) {
-      document.getElementById("modalResponseBody").innerText = decodeURIComponent(inputElement.getAttribute("modalvalue"));
+    if (inputElement.getAttribute("modalif") && inputElement.value != "") {
+      evalBool = math.evaluate(
+        decodeURIComponent(inputElement.getAttribute("modalif").replace(/value/, inputElement.value))
+      );
+    }
 
-      modal.show();
+    if (inputElement.getAttribute("softedit") == "true" && evalBool == true) {
+      if (inputElement.getAttribute("modalvalue")) {
+        document.getElementById("modalResponseBody").innerText = decodeURIComponent(inputElement.getAttribute("modalvalue"));
+
+        modal.show();
+      }
     }
   }
-}
+
   if (inputElement.className == "SSN") {
     // handles SSN auto-format
     parseSSN(inputElement);
@@ -717,7 +711,7 @@ export function handleXOR(inputElement) {
   return valueObj[inputElement.id];
 }
 
-export function nextClick(norp, retrieve, store, rootElement) {
+export function nextClick(norp, store) {
   // Because next button does not have ID, modal will pass-in ID of question
   // norp needs to be next button element
   if (typeof norp == "string") {
@@ -729,24 +723,30 @@ export function nextClick(norp, retrieve, store, rootElement) {
     validateInput(elm)
   });
 
-  showModal(norp, retrieve, store, rootElement);
+  showModal(norp, store);
 }
 
-function setNumberOfQuestionsInModal(num, norp, retrieve, store, soft) {
+function setNumberOfQuestionsInModal(num, norp, store, soft) {
   const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
   
   const modalID = soft ? 'softModal' : 'hardModal';
   const modal = new bootstrap.Modal(document.getElementById(modalID));
   const softModalText = translate("softPrompt");
   const hardModalText = translate("hardPrompt", [num > 1 ? "s" : ""]);
-  document.getElementById(soft ? "modalBodyText" : "hardModalBodyText").innerText = `${prompt} ${soft ? softModalText : hardModalText}`;
+
+  const modalBodyTextId = soft ? "modalBodyText" : "hardModalBodyText";
+  const modalBodyTextEle = document.getElementById(modalBodyTextId);
+  
+  modalBodyTextEle.innerText = `${prompt} ${soft ? softModalText : hardModalText}`;
+  modalBodyTextEle.setAttribute('tabindex', '0');
+  modalBodyTextEle.setAttribute('role', 'alert');
 
   if (soft) {
     const continueButton = document.getElementById("modalContinueButton");
     continueButton.removeEventListener("click", continueButton.clickHandler);
     //await the store operation on 'continue without answering' click for correct screen reader focus
     continueButton.clickHandler = async () => {
-      await nextPage(norp, retrieve, store);
+      await nextPage(norp, store);
     };
     continueButton.addEventListener("click", continueButton.clickHandler);
   }
@@ -765,7 +765,7 @@ function setNumberOfQuestionsInModal(num, norp, retrieve, store, soft) {
 }
 
 // show modal function
-function showModal(norp, retrieve, store, rootElement) {
+function showModal(norp, store) {
   if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
@@ -807,11 +807,11 @@ function showModal(norp, retrieve, store, rootElement) {
     }
 
     if (numBlankResponses > 0) {
-      setNumberOfQuestionsInModal(numBlankResponses, norp, retrieve, store, norp.form.getAttribute("softedit") == "true");
+      setNumberOfQuestionsInModal(numBlankResponses, norp, store, norp.form.getAttribute("softedit") == "true");
       return null;
     }
   }
-  nextPage(norp, retrieve, store, rootElement);
+  nextPage(norp, store);
 }
 
 let tempObj = {};
@@ -866,7 +866,7 @@ function hideLoadingIndicator() {
 }
 
 // norp == next or previous button (which ever is clicked...)
-async function nextPage(norp, retrieve, store, rootElement) {
+async function nextPage(norp, store) {
   // The root is defined as null, so if the question is not the same as the
   // current value in the questionQueue. Add it.  Only the root should be effected.
   // NOTE: if the root has no children, add the current question to the queue
@@ -922,8 +922,6 @@ async function nextPage(norp, retrieve, store, rootElement) {
   }
 
   //Check if questionElement exists first so its not pushing undefineds
-  //TODO if store is not defined, call lfstore -> redefine store to be store or lfstore
-
   if (store) {
     try {
       // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
@@ -931,7 +929,6 @@ async function nextPage(norp, retrieve, store, rootElement) {
 
       let formData = {};
       formData[`${questName}.${questionElement.id}`] = questionElement.value;
-      console.log(formData)
       await store(formData)
     } catch (e) {
       console.error("Store failed", e);
@@ -973,7 +970,6 @@ async function nextPage(norp, retrieve, store, rootElement) {
 }
 
 export async function submitQuestionnaire(store, questName) {
-  console.log("submit questionnaire clicked!");
   if (store) {
     let formData = {};
     formData[`${questName}.COMPLETED`] = true;
@@ -988,6 +984,7 @@ export async function submitQuestionnaire(store, questName) {
 
   }
 }
+
 function exitLoop(nextElement) {
   if (!nextElement) {
     console.error("nextElement is null or undefined");
@@ -1021,10 +1018,7 @@ function exitLoop(nextElement) {
   return nextElement;
 }
 
-let debounceHandler;
-let questionText = null;
-let modal;
-let closeButton;
+// Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
 
 export function displayQuestion(nextElement) {
@@ -1155,168 +1149,160 @@ export function displayQuestion(nextElement) {
   //move to the next question...
   nextElement.classList.add("active");
 
+  // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
+  // The tabindex leads to a negative user experience in VoiceOver (macOS).
+  if (moduleParams.isWindowsEnvironment) {
+    nextElement.querySelectorAll("div.response").forEach((responseElement) => {
+      responseElement.setAttribute("tabindex", "0");
+    });
+  }
+
   // FINALLY...  update the tree in localForage...
   // First let's try NOT waiting for the function to return.
   updateTree();
 
   questionQueue.ptree();
 
-  // manage the question-specific listeners in a live environment (skip in the renderer)
-  if (moduleParams.renderObj?.activate) refreshListeners(nextElement);
+  // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
+  if (moduleParams.renderObj?.activate) manageAccessibleQuestionInit(nextElement.querySelector('fieldset') || nextElement);
+
   return nextElement;
 }
 
-function refreshListeners(nextElement) {
-  removeListeners();
-  debounceHandler = null;
-  questionText = null;
-  addListeners(nextElement);
-  // The question text is at the opening fieldset tag. Let DOM settle, If focusable, set focus.
-  setTimeout(() => focusQuestionText(nextElement.querySelector('fieldset')), 0);
-}
+// Initialize the question text and focus management for screen readers.
+// This drives the screen reader's question announcement and focus when a question is loaded.
+export function manageAccessibleQuestionInit(fieldsetEle, isModalClose = false) {
+  //reset the questionFocusSet flag on modal close so the question is read by the screen reader.
+  if (isModalClose) questionFocusSet = false;
 
-function removeListeners() {
-  const textInputs = document.querySelectorAll('input[type="text"]');
-  
-  // Remove input listeners from all text inputs
-  if (debounceHandler) {
-    textInputs.forEach(textInput => {
-        textInput.removeEventListener('input', debounceHandler);
-    });
-  }
-
-  // Remove event listeners from modal and close button (for screen readers)
-  modal = document.getElementById('softModal');
-  closeButton = document.getElementById('closeModal');
-
-  modal?.removeEventListener('click', closeModalAndFocusQuestion);
-  closeButton?.removeEventListener('click', closeModalAndFocusQuestion);
-}
-
-function addListeners(nextElement) {
-  const textInputs = nextElement.querySelectorAll('input[type="text"]');
-
-  if (!debounceHandler) {
-    debounceHandler = debounce(handleOtherTextInputKeyPress, 200); // 200ms
-  }
-  
-  // Find the associated checkbox/radio element. Note: Some are checkboxes and some are radios though they look the same.
-  textInputs.forEach(textInput => {
-      textInput.addEventListener('input', debounceHandler);
-      const responseContainer = textInput.closest('.response');
-
-      if (responseContainer) {
-          const checkboxOrRadio = responseContainer.querySelector('input[type="checkbox"], input[type="radio"]');
-          if (checkboxOrRadio) {
-              checkboxOrRadio.addEventListener('click', () => {
-                  textInput.focus(); // Focus the text input on checkbox/radio click
-              });
-          }
-      }
-  });
-
-  // Attach event listeners to modal and close buttons (for screen readers)
-  modal = document.getElementById('softModal');
-  closeButton = document.getElementById('closeModal');
-
-  modal?.addEventListener('click', closeModalAndFocusQuestion);
-  closeButton?.addEventListener('click', closeModalAndFocusQuestion);
-}
-
-// for screen readers (accessibility)
-function focusQuestionText(fieldsetEle) {
   if (fieldsetEle && !questionFocusSet) {
-    // Clean up existing sr-only spans (found issue where text was duplicated on back button click)
-    const existingTempSpans = fieldsetEle.querySelectorAll('.sr-only');
-    existingTempSpans.forEach(span => span.remove());
-    // Find the initial text in the fieldset
-    let textContent = findInitialText(fieldsetEle);
-    
-    if (textContent) {
-      // Remove all instances of 'null' (generated from displayIf cases)
-      textContent = textContent.replace(/null/g, '');
-      // Create a temporary span element, add sr-only class, and set the text content
-      const tempSpan = document.createElement('span');
-      tempSpan.setAttribute('tabindex', '-1');
-      tempSpan.classList.add('sr-only');
-      tempSpan.textContent = textContent + ' ';
-      tempSpan.setAttribute('aria-live', 'assertive');
-      
-      // Insert it into fieldset, then focus
-      fieldsetEle.insertBefore(tempSpan, fieldsetEle.firstChild);
-      tempSpan.focus();
-      
-      // Hide the temporary span after it's been read by the screen reader
-      setTimeout(() => {
-        tempSpan.setAttribute('aria-hidden', 'true');
-      }, 500);
+    // Announce the question text
+    let { text: questionText, focusNode } = buildQuestionText(fieldsetEle);
+
+    // Make sure focusable element is in the right location for screen reader focus management.
+    let focusableEle = fieldsetEle.querySelector('span[tabindex="0"]');
+    if (!focusableEle) {
+      focusableEle = document.createElement('span');
+      focusableEle.setAttribute('tabindex', '0');
+      focusableEle.style.cssText = `
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      `;
+      fieldsetEle.insertBefore(focusableEle, focusNode);
     }
-    
+
+    // For VoiceOver, update the focusable element with the question text.
+    focusableEle.textContent = '';
+
+    const isTable = !!fieldsetEle.querySelector('table')
+    if (isTable) questionText += ' Please use your arrow keys to interact with the table below.'
+
+    setTimeout(() => {
+      focusableEle.textContent = questionText;
+      focusableEle.focus();
+    }, 100);
+
     questionFocusSet = true;
   }
 }
 
-function findInitialText(element) {
-  let textContent = '';
-  
-  for (const node of element.childNodes) {
-    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '') {
-      textContent += node.textContent.trim() + ' ';
-    } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'BR') {
-      textContent += findInitialText(node);
-    } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
+// Build the question text for screen readers.
+// Calculate the breakpoint between question and responses for accessible focus management.
+// Focus on the invisible focusable element to manage screen reader focus.
+// This sets the starting accessible control point just after the question text and before the responses list or table. 
+function buildQuestionText(fieldsetEle) {
+  let mainQuestionText = '';
+  let focusNode = null;
+
+  // The conditions for building textContent (survey questions) for the screen reader.
+  const textNodeConditional = (node) => node.nodeType === Node.TEXT_NODE || (node.nodeType === Node.ELEMENT_NODE && !['INPUT', 'BR', 'LABEL', 'TABLE'].includes(node.tagName) && !node.classList.contains('response'));
+  const childNodes = Array.from(fieldsetEle.childNodes);
+
+  for (const node of childNodes) {
+    if (textNodeConditional(node)) {
+      mainQuestionText += node.textContent.trim() + ' ';
+    } else if (node.tagName === 'BR') {
+      continue; // Skip breaks (some questions have multiple paragraphs).
+    } else {
+      focusNode = node; // The focus node splits questions and responses. The invisible focusable element is placed here.
       break;
     }
   }
-  
-  return textContent.trim() || null;
+
+  // If a breakpoint isn't found (common in intros where there are no responses), set it to the last child node.
+  // For that case, we don't need to search for additional questions.
+  if (!focusNode) {
+    focusNode = childNodes[childNodes.length - 1];
+  } else {
+    handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNode);
+  }
+
+  // Return the focus node for screen reader focus management.
+  return { text: mainQuestionText.trim(), focusNode };
 }
 
-// Close the modal and focus on the question text (for screen readers).
-function closeModalAndFocusQuestion(event) {
-  const isWindowClick = event.target === modal;
-  const isButtonClick = ['close', 'modalCloseButton', 'modalContinueButton'].includes(event.target.id);
+// Find additional questions (e.g. QoL multi-question surveys).
+// Start after the focus node since the initial question is handled above for all cases.
+// Swap those nodes (text, <b>, <u>, <i>, and embedded <br>) into divs and add a tabindex to make them focusable for screen reader accessibility.
+function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNode) {
+  let currentQuestion = '';
+  let nodesToRemove = [];
 
-  if (isWindowClick || isButtonClick) {
-    modal.style.display = 'none';
+  let startIndex = childNodes.indexOf(focusNode) + 1;
+  for (let i = startIndex; i < childNodes.length; i++) {
+    const node = childNodes[i];
 
-    // Find the fieldset within the current active question
-    const currentFieldset = document.querySelector(".active fieldset");
+    // Stop at the first input/Table/Label node. Multi-question surveys don't have these nodes.
+    // Note: This may require future adjustment depending on future survey structure.
+    if (['INPUT', 'TABLE', 'LABEL'].includes(node.tagName)) {
+      break;
+    }
 
-    if (currentFieldset) {
-      questionFocusSet = false;
-      focusQuestionText(currentFieldset);
+    // If the node is a text node and not empty, add it to the current question.
+    if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim() !== ''){
+      currentQuestion += node.textContent.trim() + ' ';
+      nodesToRemove.push(node);
+    // If currentQuestion is popluated and the node is a <br>, that marks the end of a question. Note: exclude text nodes with '\n' only.
+    // Wrap the current question in a div and add a tabindex. Remove the next <br> node if it exists to preserve spacing.
+    } else if (['U', 'B', 'I'].includes(node.tagName)) {
+      const tag = node.tagName.toLowerCase();
+      currentQuestion += `<${tag}>${node.textContent.trim()}</${tag}> `;
+      nodesToRemove.push(node);
+
+    // If currentQuestion is popluated and the node is a <br>, retain the br for accurate spacing.
+    } else if (node.tagName === 'BR') {
+      if (currentQuestion && currentQuestion.trim() !== '') {
+        currentQuestion += '<br>';
+        nodesToRemove.push(node);
+      }
+    }
+    // If currentQuestion is popluated and the node is a <div>, these parameters mark the end of the quesiton.
+    else if (currentQuestion && currentQuestion.trim() !== '' && node.classList?.contains('response')) {
+        const div = document.createElement('div');
+        div.innerHTML = currentQuestion.trim();
+        div.setAttribute('tabindex', '0');
+        div.setAttribute('role', 'alert');
+
+        // Insert the new div before the first node to remove
+        fieldsetEle.insertBefore(div, nodesToRemove[0]);
+
+        // Remove the tracked nodes in reverse order
+        for (let j = nodesToRemove.length - 1; j >= 0; j--) {
+          fieldsetEle.removeChild(nodesToRemove[j]);
+        }
+
+        // Reset the current question and nodes to remove to begin searching for the next question.
+        nodesToRemove = [];
+        currentQuestion = '';
     }
   }
-}
-
-// Simulate a click on the checkbox (turn the tile blue) when the text input is used to enter "Other" text values.
-// Get the parent response container, then get the checkbox element that wraps the input field.
-function handleOtherTextInputKeyPress(event) {
-  const responseTarget = event.target.closest('.response');
-  const checkboxOrRadioEle = responseTarget?.querySelector('input[type="checkbox"], input[type="radio"]');
-
-  if (checkboxOrRadioEle) {
-    const inputValue = event.target.value?.trim();
-    const isChecked = checkboxOrRadioEle.checked;
-    if (inputValue && !isChecked) {
-      checkboxOrRadioEle.checked = true;
-    } else if (!inputValue && isChecked) {
-      checkboxOrRadioEle.checked = false;
-    }
-  }
-}
-
-function debounce(func, wait) {
-  let timeout;
-  return function execute(...args) {
-      const later = () => {
-          clearTimeout(timeout);
-          func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-  };
 }
 
 // Check whether the browser supports "month" input type.
@@ -1328,7 +1314,7 @@ function isMonthInputSupported() {
   return input.type === 'month';
 }
 
-export async function previousClicked(norp, retrieve, store, rootElement) {
+export async function previousClicked(norp, store) {
   // get the previousElement...
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) == "_CONTINUE") {
@@ -1462,37 +1448,6 @@ export function getSelectedResponses(questionElement) {
 
   return [...radiosAndCheckboxes, ...inputFields, ...hiddenInputs];
 }
-
-// create a blank object for collecting
-// the questionnaire results...
-const res = {};
-// on submit of the question(a <form> tag)
-// call this function...
-function getResults(element) {
-  // clear old results or create a blank object in the results to
-  // hold these results...
-  res[element.id] = {};
-  // when we add to the tmpRes object, only the correct
-  // object in the results are touched...
-  let tmpRes = res[element.id];
-
-  let allResponses = [...element.querySelectorAll(".response")];
-  // get all the checkboxes
-  cb = allResponses
-    .filter((x) => x.type == "checkbox")
-    .map((x) => (tmpRes[x.value] = x.checked));
-
-  // get all the text and radio elements...
-  rd = allResponses
-    .filter(
-      (x) =>
-        (x.type == "radio" && x.checked) ||
-        ["text", "date", "email", "number", "tel"].includes(x.type)
-    )
-    .map((x) => (tmpRes[x.name] = x.value));
-}
-
-// x is the questionnaire text
 
 export function evaluateCondition(txt) {
 

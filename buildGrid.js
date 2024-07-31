@@ -1,6 +1,4 @@
-import { translate } from "./common.js";
-
-export const grid_replace_regex = /\|grid(\!|\?)*\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|/g;
+import { getButtonDiv } from './questButtons.js';
 
 //NOTE: This function is not used in the current implementation
 export function firstFun(event) {
@@ -55,7 +53,7 @@ function grid_text_displayif(original_text){
 }
 
 // Builds the HTML Table for a grid question (radio-selectable multi-option fields).
-function buildHtmlTable(grid_obj){
+function buildHtmlTable(grid_obj, button_text_obj){
   // is there a hard/soft edit?
   let gridPrompt = "hardedit='false' softedit='false'";
   if (grid_obj.prompt) {
@@ -74,10 +72,10 @@ function buildHtmlTable(grid_obj){
   // Begin form and set up accessibility description.
   // Ask the main question, then begin the table structure (this semantic HTML helps screen readers).
   let grid_html = `
-      <form ${grid_obj.args} class="container question" data-grid="true" ${gridPrompt} aria-describedby="formDescription" role="form">
-        <div id="formDescription" class="sr-only" aria-live="polite">Please interact with the table below to answer the questions.</div>
-        <div>${grid_text_displayif(shared_text)}</div>
-          <table class="quest-grid table-layout table">`;
+    <form ${grid_obj.args} class="container question" data-grid="true" ${gridPrompt} role="form">
+      <div>${grid_text_displayif(shared_text)}</div>
+      <span id="srFocusHelper" tabindex="-1" style="position: absolute; width: 1px; height: 1px; overflow: hidden;"></span>
+        <table class="quest-grid table-layout table">`;
   
   // Build the table header row with the question text and response headers. Start with a placeholder for the row header.
   grid_html += '<thead class="hr" role="rowgroup"><tr><th class="nr hr"></th>';
@@ -113,30 +111,17 @@ function buildHtmlTable(grid_obj){
     // Close the row for the question
     grid_html += `</tr>`;
   });
-  
-  grid_html += `</tbody></table>
-    <div class="container">
-      <div class="row">
-        <div class="col-md-3 col-sm-12">
-          <button type="submit" class="previous w-100" aria-label="Back to the previous section" data-click-type="previous">${translate("backButton")}</button>
-        </div>
-        <div class="col-md-6 col-sm-12">
-          <button type="submit" class="reset w-100" aria-label="Reset answer for this question" data-click-type="reset">${translate("resetAnswerButton")}</button>
-        </div>
-        <div class="col-md-3 col-sm-12">
-          <button type="submit" class="next w-100" aria-label="Go to the next section" data-click-type="next">${translate("nextButton")}</button>
-        </div>
-      </div>
-    </div>
-  </form>`;
 
+  grid_html+=`</tbody></table>${getButtonDiv(button_text_obj, true)}</form>`;
+  
   return grid_html;
 }
 
 // note the text should contain the entirity of ONE grid!
 // the regex for a grid is /\|grid\|([^|]*?)\|([^|]*?)\|([^|]*?)\|
 // you  can use the /g and then pass it to the function one at a time...
-export function parseGrid(text) {
+export function parseGrid(text, ...args) {
+  const button_text_obj = args.pop();
   let grid_obj = {};
   //  look for key elements of the text
   // |grid|id=xxx|shared_text|questions|response|
@@ -158,8 +143,7 @@ export function parseGrid(text) {
     let args_regex = /displayif=[\'\"]?((?:[^\'\"].+[^\'\"](?:[^\'\"])))[\"\']?$/mg
     grid_obj.args = grid_obj.args.replace(args_regex,(match,group1)=>{
       return `displayif=${encodeURIComponent(group1)}`
-    })
-    console.log(grid_obj.args) 
+    });
 
     //let question_regex = /\[([A-Z][A-Z0-9_]*)\](.*?);\s*(?=[\[\]])/g;     
     let question_regex = /\[([A-Z][A-Z0-9_]*)(,displayif=[^\]]+)?\](.*?)[;\]]/g;
@@ -194,5 +178,5 @@ export function parseGrid(text) {
       }
     }
   }
-  return buildHtmlTable(grid_obj);
+  return buildHtmlTable(grid_obj, button_text_obj);
 }
