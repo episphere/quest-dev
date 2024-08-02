@@ -29,8 +29,8 @@ transform.render = async (obj, divId, previousResults = {}) => {
 
   // Get the state manager and load the initial state. This prepares the state manager for use throughout the survey.
   const appState = getStateManager();
-  appState.loadInitialState(retrievedData);
-  const initialUserData = appState.getState();
+  appState.loadInitialSurveyState(retrievedData);
+  const initialUserData = appState.getSurveyState();
 
   // add the HTML/HEAD/BODY tags...
   document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + transformedContents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
@@ -55,6 +55,10 @@ transform.render = async (obj, divId, previousResults = {}) => {
     console.error('Active question not found for:', activeQuestionID);
     return false;
   }
+
+  // Clear changed Items are cleared after the initial state is loaded.
+  // This is to ensure that only the user's changes are tracked.
+  appState.clearActiveQuestionState();
 
   // Display the active question.
   displayQuestion(activeQuestionElement);

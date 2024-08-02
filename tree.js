@@ -48,7 +48,7 @@ export class Tree {
 
     if (!tmp.done) {
       this.currentNode = tmp.value;
-      this.ptree();
+      this.printTree();
     }
 
     return tmp;
@@ -64,7 +64,7 @@ export class Tree {
       this.currentNode.clearChildren();
       //this.currentNode.children.forEach((child) => child.clearChildren());
       console.log(" ================ PREV ================ ");
-      this.ptree();
+      this.printTree();
     }
     return tmp;
   }
@@ -143,7 +143,7 @@ export class Tree {
   }
 
 
-  ptree() {
+  printTree() {
     console.log(" ============ TREE ===========");
     let node = this.rootNode.next();
     while (!node.done) {

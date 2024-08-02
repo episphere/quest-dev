@@ -27,6 +27,8 @@ export function validateInput(inputElement) {
         }
 
         handlers[inputElementType](inputElement)
+    } else if (inputElementType == "radio") {
+        // no validation for radio buttons
     } else {
         console.log(`no handle for type: ${inputElementType}`)
         console.log(inputElement)

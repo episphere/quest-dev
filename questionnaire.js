@@ -1,6 +1,5 @@
 import { Tree } from "./tree.js";
 import { knownFunctions } from "./knownFunctions.js";
-import { removeQuestion } from "./localforageDAO.js";
 import { validateInput, validationError } from "./validate.js"
 import { translate } from "./common.js";
 import { getStateManager } from "./stateManager.js";
@@ -362,37 +361,67 @@ export function isFirstQuestion() {
   return questionQueue.isEmpty() || questionQueue.isFirst();
 }
 
-function numberOfInputs(element) {
-  let resps = Array.from(
-    element.querySelectorAll("input, textarea, select")
-  ).reduce((acc, current) => {
-    //if (["submit", "button"].includes(current.type)) return acc;
-    if (current.type == "submit" || current.type == "hidden") return acc;
-    if (["radio", "checkbox"].includes(current.type)) {
-      acc[current.name] = true;
-    } else {
-      acc[current.id] = true;
+/**
+ * Determine the storage format for the response data.
+ * Grid questions are stored as objects. Ensure each key is stored with the response.
+ * Single response (radio) input questions are stored as primitives.
+ * Multi-selection (checkbox) input questions are stored as arrays.
+ * @param {HTMLElement} form - the form element being evaluated.
+ * @returns {number} - the number of response keys.
+ */
+
+//TODO: test for grid questions
+function getNumResponseInputs(form) {
+  const responseInputs = new Set();
+
+  form.querySelectorAll("input, textarea, select").forEach((current) => {
+    if (current.type !== "submit" || current.type !== "hidden") {
+      if (["radio", "checkbox"].includes(current.type)) {
+        responseInputs.add(current.name);
+      } else {
+        responseInputs.add(current.id);
+      }
     }
-    return acc;
-  }, {});
-  return Object.keys(resps).length;
+  });
+
+  const appState = getStateManager();
+  appState.setNumResponseKeys(form.id, responseInputs.size);
+  appState.clearOtherResponseKeys(form.id);
+  return responseInputs.size;
 }
 
-function setFormValue(form, value, id) {
-  if (value === "") {
-    value = undefined
-  }
-  if (numberOfInputs(form) == 1) {
-    form.value = value;
-  } else {
-    if (!form.value) {
-      form.value = {};
-    }
-    form.value[id] = value;
-    if (value == undefined) {
-      delete form.value[id]
-    }
+/**
+ * Update the state manager with the response value(s).
+ * @param {HTMLElement} form - the form element being evaluated (the active survey quesiton).
+ * @param {string} value - the response value.
+ * @param {string} id - the response id.
+ * @returns {void} - sets the response value in the state manager.
+ */
 
+function setResponsesInState(form, value, id) {
+  const appState = getStateManager();
+  const numResponses = appState?.getNumResponseKeys(form.id) || getNumResponseInputs(form);
+
+  // Validate and sanitize inputs.
+  if (!id || id.trim() === "") return;
+
+  // Normalize value to undefined if it is an empty string or an empty array.
+  // This is necessary to ensure that the value is removed from the store.
+  if (value === "" || (Array.isArray(value) && value.length === 0)) {
+    value = undefined;
+  }
+
+  switch (numResponses) {
+    case 0:
+      break;
+
+    default:
+      if (value === undefined || value === null) {
+        appState.removeResponseItem(form.id, id, numResponses);
+      } else {
+        appState.setResponse(form.id, id, numResponses, value);
+      }
+      break;
   }
 }
 
@@ -537,7 +566,7 @@ export function textboxinput(inputElement, validate = true) {
   let value = handleXOR(inputElement);
   let id = inputElement.id
   value = value ? value : inputElement.value;
-  setFormValue(inputElement.form, value, id);
+  setResponsesInState(inputElement.form, value, id);
 }
 
 // onInput/Change handler for radio/checkboxex
@@ -548,34 +577,43 @@ export function rbAndCbClick(event) {
   if (inputElement) {
     validateInput(inputElement)
     radioAndCheckboxUpdate(inputElement);
-    radioAndCheckboxClearTextInput(inputElement);
+    //radioAndCheckboxClearTextInput(inputElement);
   }
 }
 
-//for when radio/checkboxes have input fields, only enable input fields when they are selected
-export function radioAndCheckboxClearTextInput(inputElement) {
-  // this fails when the element name is not the same as the question id...
-  //let parent = document.getElementById(inputElement.name);
-  let parent = inputElement.form
+// TODO: is this even needed??
+// //for when radio/checkboxes have input fields, only enable input fields when they are selected
+// export function radioAndCheckboxClearTextInput(inputElement) {
+//   // this fails when the element name is not the same as the question id...
+//   //let parent = document.getElementById(inputElement.name);
+//   let parent = inputElement.form
 
-  // get all responses that have an input text box (can be number, date ..., not radio/checkbox)
-  let responses = [...parent.querySelectorAll(".response")]
-    .filter(resp => resp.querySelectorAll("input:not([type=radio]):not([type=checkbox])").length)
-    .filter(resp => resp.querySelectorAll("input[type=radio],input[type=checkbox]").length)
+//   // get all responses that have an input text box (can be number, date ..., not radio/checkbox)
+//   let responses = [...parent.querySelectorAll(".response")]
+//     .filter(resp => resp.querySelectorAll("input:not([type=radio]):not([type=checkbox])").length)
+//     .filter(resp => resp.querySelectorAll("input[type=radio],input[type=checkbox]").length)
 
-  // if the checkbox is selected, make sure the input box is enable
-  // if the checkbox is not selected, make disable it and clear the value...
-  // Note: things that can go wrong.. if a response has more than one text box.
-  responses.forEach(resp => {
-    let text_box = resp.querySelector("input:not([type=radio]):not([type=checkbox])")
-    let checkbox = resp.querySelector("input[type=radio],input[type=checkbox]")
-    //text_box.disabled = !checkbox.checked
-    if (!checkbox.checked) {
-      text_box.value = ""
-      delete inputElement.form.value[text_box.id]
-    }
-  })
-}
+//   console.log('PARENT:', parent);
+//   console.log('RESPONSES:', responses);
+//   // if the checkbox is selected, make sure the input box is enable
+//   // if the checkbox is not selected, make disable it and clear the value...
+//   // Note: things that can go wrong.. if a response has more than one text box.
+//   responses.forEach(resp => {
+//     let text_box = resp.querySelector("input:not([type=radio]):not([type=checkbox])")
+//     let checkbox = resp.querySelector("input[type=radio],input[type=checkbox]")
+//     //text_box.disabled = !checkbox.checked
+//     if (!checkbox.checked) {
+//       text_box.value = ""
+//       const formID = parent.id;
+//       const inputID = text_box.id;
+//       console.log('FORM ID:', formID);
+//       console.log('INPUT ID:', inputID);
+//       if (formID && inputID) {
+//         delete inputElement.form.value[text_box.id]
+//       }
+//     }
+//   })
+// }
 
 export function radioAndCheckboxUpdate(inputElement) {
   if (!inputElement) return;
@@ -596,7 +634,7 @@ export function radioAndCheckboxUpdate(inputElement) {
     selectedValue = inputElement.value;
   }
 
-  setFormValue(inputElement.form, selectedValue, inputElement.name);
+  setResponsesInState(inputElement.form, selectedValue, inputElement.name);
 }
 
 function clearSelection(inputElement) {
@@ -621,7 +659,7 @@ function clearSelection(inputElement) {
           break;
         default:
           element.value = element == inputElement ? inputElement.value : "";
-          setFormValue(element.form, element.value, element.id);
+          setResponsesInState(element.form, element.value, element.id);
           if (element.nextElementSibling && element.nextElementSibling.children.length !== 0) element.nextElementSibling.children[0].innerText = "";
           element.form.classList.remove("invalid");
           if (inputElement.form.value) {
@@ -701,7 +739,7 @@ export function handleXOR(inputElement) {
   return valueObj[inputElement.id];
 }
 
-export function nextClick(norp, store) {
+export async function nextClick(norp) {
   // Because next button does not have ID, modal will pass-in ID of question
   // norp needs to be next button element
   if (typeof norp == "string") {
@@ -713,10 +751,10 @@ export function nextClick(norp, store) {
     validateInput(elm)
   });
 
-  showModal(norp, store);
+  await analyzeFormResponses(norp);
 }
 
-function setNumberOfQuestionsInModal(num, norp, store, soft) {
+function showUnansweredQuestionsModal(num, norp, soft) {
   const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
   
   const modalID = soft ? 'softModal' : 'hardModal';
@@ -736,7 +774,7 @@ function setNumberOfQuestionsInModal(num, norp, store, soft) {
     continueButton.removeEventListener("click", continueButton.clickHandler);
     //await the store operation on 'continue without answering' click for correct screen reader focus
     continueButton.clickHandler = async () => {
-      await nextPage(norp, store);
+      await nextPage(norp);
     };
     continueButton.addEventListener("click", continueButton.clickHandler);
   }
@@ -754,8 +792,7 @@ function setNumberOfQuestionsInModal(num, norp, store, soft) {
   });
 }
 
-// show modal function
-function showModal(norp, store) {
+async function analyzeFormResponses(norp) {
   if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
@@ -797,27 +834,11 @@ function showModal(norp, store) {
     }
 
     if (numBlankResponses > 0) {
-      setNumberOfQuestionsInModal(numBlankResponses, norp, store, norp.form.getAttribute("softedit") == "true");
+      showUnansweredQuestionsModal(numBlankResponses, norp, norp.form.getAttribute("softedit") == "true");
       return null;
     }
   }
-  nextPage(norp, store);
-}
-
-async function updateTree() {
-  if (moduleParams?.renderObj?.updateTree) {
-    moduleParams.renderObj.updateTree(moduleParams.questName, questionQueue)
-  }
-  updateTreeInStateManager()
-}
-
-// Update the tree in StateManager. This is called when the next button is clicked.
-// TODO: is treeJSON being handled correctly in stateManager across surveys?
-function updateTreeInStateManager() {
-  if (!moduleParams.questName) return;
-  
-  const appState = getStateManager();
-  appState.setItem(moduleParams.questName + ".treeJSON", questionQueue.toVanillaObject());
+  await nextPage(norp);
 }
 
 function getNextQuestionId(currentFormElement) {
@@ -838,14 +859,15 @@ function getNextQuestionId(currentFormElement) {
   return nextQuestionNode.value;
 }
 
-function showLoadingIndicator() {
+// TODO: move these to a separate file
+export function showLoadingIndicator() {
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loadingIndicator';
     loadingIndicator.innerHTML = '<div class="spinner"></div>';
     document.body.appendChild(loadingIndicator);
 }
 
-function hideLoadingIndicator() {
+export function hideLoadingIndicator() {
   const loadingIndicator = document.getElementById('loadingIndicator');
   if (loadingIndicator) {
     document.body.removeChild(loadingIndicator);
@@ -853,7 +875,7 @@ function hideLoadingIndicator() {
 }
 
 // norp == next or previous button (which ever is clicked...)
-async function nextPage(norp, store) {
+async function nextPage(norp) {
   // The root is defined as null, so if the question is not the same as the
   // current value in the questionQueue. Add it.  Only the root should be effected.
   // NOTE: if the root has no children, add the current question to the queue
@@ -862,7 +884,7 @@ async function nextPage(norp, store) {
   let questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
     x.value = "true"
-    setFormValue(questionElement, x.value, x.id)
+    setResponsesInState(questionElement, x.value, x.id)
   });
 
   if (checkValid(questionElement) == false) {
@@ -904,106 +926,14 @@ async function nextPage(norp, store) {
     }
   }
 
-  // TODO: work in progress from here. implementing state manager.
   const appState = getStateManager();
-  appState.syncToStore();
-  //Check if questionElement exists first so its not pushing undefineds
-  if (store) {
-    try {
-      // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
-      if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
-
-      const formData = { [`${moduleParams.questName}.${questionElement.id}`]: questionElement.value };
-
-      await store(formData)
-    } catch (e) {
-      console.error("Store failed", e);
-    } finally {
-      hideLoadingIndicator();
-    }
-  } else {
-    let tmp = await localforage
-      .getItem(moduleParams.questName)
-      .then((allResponses) => {
-        // if their is not an object in LF create one that we will add later...
-        if (!allResponses) {
-          allResponses = {};
-        }
-        // set the value for the questionId...
-        allResponses[questionElement.id] = questionElement.value;
-        if (questionElement.value === undefined) {
-          delete allResponses[questionElement.id]
-        }
-        return allResponses;
-      })
-      .then((allResponses) => {
-        // allResposes really should be defined at this point. If it wasn't
-        // previously in LF, the previous block should have created it...
-        localforage.setItem(questName, allResponses, () => {
-          console.log("... Response stored in State Manager: " + questName, JSON.stringify(allResponses));
-        });
-      });
-
-
-
-  // //Check if questionElement exists first so its not pushing undefineds
-  // if (store) {
-  //   try {
-  //     // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
-  //     if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
-
-  //     let formData = {};
-  //     formData[`${questName}.${questionElement.id}`] = questionElement.value;
-  //     await store(formData)
-  //   } catch (e) {
-  //     console.error("Store failed", e);
-  //   } finally {
-  //     hideLoadingIndicator();
-  //   }
-  // } else {
-  //   let tmp = await localforage
-  //     .getItem(questName)
-  //     .then((allResponses) => {
-  //       // if their is not an object in LF create one that we will add later...
-  //       if (!allResponses) {
-  //         allResponses = {};
-  //       }
-  //       // set the value for the questionId...
-  //       allResponses[questionElement.id] = questionElement.value;
-  //       if (questionElement.value === undefined) {
-  //         delete allResponses[questionElement.id]
-  //       }
-  //       return allResponses;
-  //     })
-  //     .then((allResponses) => {
-  //       // allResposes really should be defined at this point. If it wasn't
-  //       // previously in LF, the previous block should have created it...
-  //       localforage.setItem(questName, allResponses, () => {
-  //         console.log("... Response stored in State Manager: " + questName, JSON.stringify(allResponses));
-  //       });
-  //     });
-  }
+  await appState.syncToStore();
 
   //hide the current question
   questionElement.classList.remove("active");
 
   displayQuestion(nextElement);
   window.scrollTo(0, 0);
-}
-
-export async function submitQuestionnaire(store, questName) {
-  if (store) {
-    let formData = {};
-    formData[`${questName}.COMPLETED`] = true;
-    formData[`${questName}.COMPLETED_TS`] = new Date();
-    try {
-      store(formData).then(() => {
-        location.reload();
-      });
-    } catch (e) {
-      console.error("Store failed", e);
-    }
-  }
 }
 
 function exitLoop(nextElement) {
@@ -1047,7 +977,7 @@ export function displayQuestion(nextElement) {
   if (!nextElement && !moduleParams.renderObj.activate) {
     return;
   }
-
+  
   questionFocusSet = false;
 
   [...nextElement.querySelectorAll("span[forid]")].map((x) => {
@@ -1069,14 +999,11 @@ export function displayQuestion(nextElement) {
   );
 
   // check all responses for next question
-  [...nextElement.children]
-    .filter((x) => {
-      return x.hasAttribute("displayif");
-    })
-    .map((elm) => {
-      let f = evaluateCondition(elm.getAttribute("displayif"));
-      elm.style.display = f ? null : "none";
-    });
+  [...nextElement.querySelectorAll('[displayif]')].map((elm) => {
+    let f = evaluateCondition(elm.getAttribute("displayif"));
+    elm.style.display = f ? null : "none";
+  });
+
   // check for displayif spans...
   Array.from(nextElement.querySelectorAll("span[displayif],div[displayif]"))
     .map(elm => {
@@ -1115,7 +1042,11 @@ export function displayQuestion(nextElement) {
     console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
 
     if (f !== true) {
-      elm.remove();
+      elm.dataset.hidden = "true";
+      elm.style.display = "none";
+    } else {
+      delete elm.dataset.hidden;
+      elm.style.display = "";
     }
   });
 
@@ -1181,12 +1112,6 @@ export function displayQuestion(nextElement) {
       responseElement.setAttribute("tabindex", "0");
     });
   }
-
-  // FINALLY...  update the tree in localForage...
-  // First let's try NOT waiting for the function to return.
-  updateTree();
-
-  questionQueue.ptree();
 
   // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
   if (moduleParams.renderObj?.activate) manageAccessibleQuestionInit(nextElement.querySelector('fieldset') || nextElement);
@@ -1339,27 +1264,19 @@ function isMonthInputSupported() {
   return input.type === 'month';
 }
 
-export async function previousClicked(norp, store) {
+export async function previousClicked(norp) {
   // get the previousElement...
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) == "_CONTINUE") {
     pv = questionQueue.previous();
   }
+
+  const appState = getStateManager();
+  await appState.syncToStore();
+
   let prevElement = document.getElementById(pv.value.value);
   norp.form.classList.remove("active");
   displayQuestion(prevElement)
-
-  if (store) {
-    console.log("setting... ", moduleParams.questName, "=== UNDEFINED")
-    let formData = {};
-    formData[`${moduleParams.questName}.${norp.form.id}`] = undefined;
-    store(formData);
-  } else {
-    console.log('REMOVE QUESTION FROM STATE MANAGER', moduleParams.questName, norp.form.id)
-    removeQuestion(moduleParams.questName, norp.form.id);
-  }
-
-  updateTree();
 
   return prevElement;
 }
@@ -1496,7 +1413,7 @@ export function evaluateCondition(txt) {
       if (typeof x === "string") {
         let element = document.getElementById(x);
         if (element != null) {
-          if (element.hasAttribute('grid') && (element.type === "radio" || element.type === "checkbox")) {
+          if (element.dataset.grid && (element.type === "radio" || element.type === "checkbox")) {
             //for displayif conditions with grid elements
             x = element.checked ? 1 : 0;
           }

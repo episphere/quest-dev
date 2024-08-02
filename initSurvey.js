@@ -1,6 +1,6 @@
 import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
 import { math, moduleParams } from './questionnaire.js';
-import { getStateManager, initializeStateManager } from './stateManager.js';
+import { initializeStateManager } from './stateManager.js';
 
 let questName = 'Questionnaire';
 

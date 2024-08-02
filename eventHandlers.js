@@ -1,20 +1,21 @@
 import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestionInit, moduleParams } from "./questionnaire.js";
 import { clearValidationError } from "./validate.js";
-import { nextClick, previousClicked, submitQuestionnaire } from "./questionnaire.js";
+import { nextClick, previousClicked } from "./questionnaire.js";
+import { getStateManager } from "./stateManager.js";
 
 // Debounced version of handleOtherTextInputKeyPress
 const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
 
-// Add event listeners to the div element (delegate events to the parent div)
+// Add event listeners to the div element (questContainer) -> delegate events to the parent div.
 // Note: 'focusout' is used instead of 'blur' because 'blur' does not bubble to the parent div.
-export function addEventListeners(divElement) {
-  divElement.addEventListener('click', handleClickEvent);
-  divElement.addEventListener('change', handleChangeEvent);
-  divElement.addEventListener('keydown', handleKeydownEvent);
-  divElement.addEventListener('keyup', handleKeyupEvent);
-  divElement.addEventListener('input', handleInputEvent);
-  divElement.addEventListener('focusout', handleBlurFocusoutEvent);
-  divElement.addEventListener('submit', handleSubmitEvent);
+export function addEventListeners(questContainer) {
+  questContainer.addEventListener('click', handleClickEvent);
+  questContainer.addEventListener('change', handleChangeEvent);
+  questContainer.addEventListener('keydown', handleKeydownEvent);
+  questContainer.addEventListener('keyup', handleKeyupEvent);
+  questContainer.addEventListener('input', handleInputEvent);
+  questContainer.addEventListener('focusout', handleBlurFocusoutEvent);
+  questContainer.addEventListener('submit', handleSubmitEvent);
 
   // Attach event listeners to modal and close buttons (for screen readers)
   // Modals are at the document level, not embedded in the question.
@@ -440,23 +441,23 @@ function clearSelectionAnnouncement() {
 }
 
 // Handle the next, reset, and back buttons
-function stopSubmit(event) {
+async function stopSubmit(event) {
   event.preventDefault();
 
   // Clear the selection announcement
   clearSelectionAnnouncement();
-  
+
   const clickType = event.submitter.getAttribute('data-click-type');
   const buttonClicked = event.target.querySelector(`.${clickType}`);
 
   switch (clickType) {
     case 'previous':
-      resetChildren(event.target.elements);
-      previousClicked(buttonClicked, moduleParams.renderObj.store);
+      resetChildren(event.target);
+      await previousClicked(buttonClicked);
       break;
 
     case 'reset':
-      resetChildren(event.target.elements);
+      resetChildren(event.target);
       break;
 
     case 'submitSurvey':
@@ -464,7 +465,7 @@ function stopSubmit(event) {
       break;
 
     case 'next':
-      nextClick(buttonClicked, moduleParams.renderObj.store);
+      await nextClick(buttonClicked);
       break;
 
     default:
@@ -472,10 +473,19 @@ function stopSubmit(event) {
   }
 }
 
-function resetChildren(nodes) {
-  if (nodes == null) {
-    return;
-  }
+/**
+ * Clear the target form element and remove any responses from the activeQuestionState.
+ * @param {HTMLElement} target - The form element to reset.
+ * @returns {void}
+ */
+function resetChildren(target) {
+  target.value = undefined; // TODO: stop relying on the form value (Moving away from DOM manipulation).
+
+  const appState = getStateManager();
+  appState.removeResponse(target.id);
+
+  const nodes = target.elements;
+  if (nodes == null) return;
 
   for (let node of nodes) {
     if (node.type === "radio" || node.type === "checkbox") {
@@ -501,7 +511,7 @@ function debounce(func, wait) {
 }
 
 function addSubmitSurveyListener() {
-  document.getElementById("submitModalButton").onclick = () => {
+  document.getElementById("submitModalButton").onclick = async () => {
     const lastBackButton = document.getElementById('lastBackButton');
     if (lastBackButton) {
       lastBackButton.remove();
@@ -510,6 +520,10 @@ function addSubmitSurveyListener() {
     if (submitButton) {
       submitButton.remove();
     }
-    submitQuestionnaire(moduleParams.renderObj.store, moduleParams.questName);
+
+    // Submit the survey and reload the page.
+    const appState = getStateManager();
+    await appState.submitSurvey();
+    location.reload();
   };
 }
