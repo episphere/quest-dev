@@ -221,7 +221,7 @@ export function getStateManager() {
 // TODO: is treeJSON being handled correctly in stateManager across surveys?
 // TODO: add error handling?
 function updateTreeJSON() {
-    return treeJSON = moduleParams.questName && questionQueue
+    return moduleParams.questName && questionQueue
         ? questionQueue.toJSON()
         : null;
 }
