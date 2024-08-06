@@ -1,37 +1,5 @@
 import { getButtonDiv } from './questButtons.js';
 
-//NOTE: This function is not used in the current implementation
-export function firstFun(event) {
-  event.preventDefault();
-}
-
-//NOTE: This function is not used in the current implementation
-export function toggle_grid(event) {
-  event.preventDefault();
-  let element = event.target;
-  let id_regex = /(^.*?)(_sm)?(_\d+$)/;
-  let tmp = element.id.match(id_regex);
-  // tmp MUST match!!!
-  if (!tmp) {
-    console.error("ERROR in [grid] toggle_grid!!!  Bad element id!\n", element);
-    return;
-  }
-  let otherid = tmp[2] ? tmp[1] + tmp[3] : tmp[1] + "_sm" + tmp[3];
-  let otherElement = document.getElementById(otherid);
-  otherElement.checked = element.checked;
-
-  element.form.value[otherElement.name] = element.form.value[element.name];
-
-  const isElementSmall = element.dataset.isSmallGridCell === "1";
-  const isOtherElementSmall = otherElement.dataset.isSmallGridCell === "1";
-  if (isElementSmall) {
-    delete element.form.value[element.name];
-  }
-  if (isOtherElementSmall) {
-    delete element.form.value[otherElement.name];
-  }
-}
-
 function grid_replace_piped_variables(txt){
   txt = txt.replace(/\{\$([ue]:)?([^}]+)}/g, (all, type, varid) => {
     return `<span data-gridreplacetype=${type == "e:" ? "eval" : "_val"} data-gridreplace=${encodeURIComponent(varid)}></span>`

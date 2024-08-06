@@ -29,6 +29,7 @@ async function startUp() {
 
 
   let searchParams = new URLSearchParams(location.search)
+  /*
   if (location.hash.split('&').includes('run') || searchParams.has('run')) {
       document.getElementById('logic').checked=true;
       document.getElementById("styling").checked = styling
@@ -42,7 +43,7 @@ async function startUp() {
     document.getElementById("styling").checked = styling
   }
   setStylingAndLogic()
-
+*/
   let cachedPreviousResults = await questLF.getItem("previousResults") ?? "";
   // prevRes is a ugh.. global variable
   // if there is key that is not in [run,style,url]
@@ -128,7 +129,6 @@ async function startUp() {
     })
   })
   document.querySelector("#hide-markup").addEventListener("change",(event)=>{
-    console.log(event.target.checked)
     document.getElementById("markup").style.display=(event.target.checked)?"none":"initial"
     document.getElementById("renderText").style.display=(event.target.checked)?"none":"initial"
   })
@@ -204,6 +204,7 @@ transform.tout = function (fun, tt = 500) {
   transform.tout.t = setTimeout(fun(prevRes), tt);
 };
 
+/*
 function setStylingAndLogic(){
   function setValue(cssId,inputId){
     let inputElement = document.getElementById(inputId)
@@ -213,6 +214,7 @@ function setStylingAndLogic(){
   setValue("pagestyle","styling")
   setValue("pagelogic","logic")
 }
+  */
 
 
 document.getElementById("viewCache").addEventListener("click",()=>{
