@@ -69,9 +69,8 @@ function handleClickEvent(event) {
 function handleChangeEvent(event) {
   const target = event.target;
   
-  // Firefox does not alway GRAB focus when the arrows are clicked.
-  // If a changeEvent fires, grab focus.
-  if (target.matches('input[type="number"]') && target !== document.activeElement) {
+  // Firefox does not alway GRAB focus when the arrows are clicked. If a changeEvent fires, grab focus.
+  if (moduleParams.isFirefoxBrowser && target.matches('input[type="number"]') && target !== document.activeElement) {
     target.focus();
   }
 
@@ -475,12 +474,12 @@ async function stopSubmit(event) {
 
 /**
  * Clear the target form element and remove any responses from the activeQuestionState.
+ * activeQuestionState gets set to undefined in the stateManager.
  * @param {HTMLElement} target - The form element to reset.
  * @returns {void}
  */
 function resetChildren(target) {
-  target.value = undefined; // TODO: stop relying on the form value (Moving away from DOM manipulation).
-
+  
   const appState = getStateManager();
   appState.removeResponse(target.id);
 

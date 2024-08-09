@@ -1,5 +1,6 @@
 import { callExchangeValues } from "./questionnaire.js";
 import { translate } from "./common.js";
+import { math } from './customMathJSImplementation.js';
 
 export function validateInput(inputElement) {
 

@@ -2,360 +2,16 @@ import { Tree } from "./tree.js";
 import { knownFunctions } from "./knownFunctions.js";
 import { validateInput, validationError } from "./validate.js"
 import { translate } from "./common.js";
+import { math } from './customMathJSImplementation.js';
+import { restoreResponses } from "./restoreResponses.js";
 import { getStateManager } from "./stateManager.js";
-
 export const moduleParams = {};
-import  * as mathjs  from 'https://cdn.skypack.dev/mathjs@11.2.0';
-export const math=mathjs.create(mathjs.all)
-window.math = math
 
-
-// create a class YearMonth custom datatype for use in mathjs to handle
-// the month class...
-export function YearMonth(str) {
-  if (str?.isYearMonth) {
-    this.month = str.month
-    this.year = str.year
-  } else {
-    let x = str.match(/^(\d+)\-(\d+)$/)
-    this.month = parseInt(x[2]).toLocaleString(navigator.language, { minimumIntegerDigits: 2 })
-    this.year = x[1]
-  }
-}
-YearMonth.prototype.isYearMonth = true
-YearMonth.prototype.toString = function () {
-  return `${this.year}-${this.month}`
-}
-// create an add function.  Note: YearMonth + integer = String
-YearMonth.prototype.add = function (n) {
-  let m = parseInt(this.month) + n
-  let yr = parseInt(this.year) + ((m > 12) ? 1 : 0);
-  // if month == 0, set it to 12
-  let mon = (m % 12) || 12
-  return new YearMonth(`${yr}-${mon}`).toString()
-}
-
-// Note: YearMonth - n = String
-YearMonth.prototype.subtract = function (n) {
-  let m = parseInt(this.month) - n
-  let yr = parseInt(this.year) - ((m > 0) ? 0 : 1);
-  let mon = ((m + 12) % 12) || 12
-  return new YearMonth(`${yr}-${mon}`).toString()
-}
-
-// Note: YearMonth - YearMonth = integer
-YearMonth.prototype.subMonth = function(ym){
-  return (12*(parseInt(this.year)-parseInt(ym.year)) + parseInt(this.month)-parseInt(ym.month));
-}
-
-// This works in all cases except x=new String(),
-//  which you should never do anyway...
-let isString = (value) => typeof value == 'string'
-
-// Note: these function make explicit
-// use of the fact that the DOM stores information.
-// be careful  the DOM and the localforage become
-// mis-aligned.
-export const myFunctions = {
-  exists: function (x) {
-    if (!x) return false;
-    if (x.toString().includes('.')) {
-      return !math.isUndefined( getKeyedValue(x) )
-    }
-    let element = document.getElementById(x);
-
-    // handle the array case (checkboxes)...
-    if (Array.isArray(element?.value)) return !!element.value.length
-
-    // note !! converts "truthy" values
-    return (!!element && !!element.value) || moduleParams.previousResults.hasOwnProperty(x)
-  },
-  doesNotExist: function (x) {
-    return !math.exists(x)
-  },
-  noneExist: function (...ids) {
-    // if you give me no ids, none of them exist therefore true...
-    // loop through all the ids of any exists then return false...
-    return ids.every(id => math.doesNotExist(id))
-  },
-  someExist: function (...ids) {
-    return ids.some(id => math.exists(id))
-  },
-  allExist: function (...ids) {
-    return ids.every(id => math.exists(id))
-  },
-  _value: function (x) {
-    if (!math.exists(x)) return null
-
-    if (x.toString().includes('.')) {
-      return getKeyedValue(x)
-    }
-
-    let element = document.getElementById(x);
-    let returnValue = (element) ? element.value : moduleParams.previousResults[x]
-    return returnValue
-  },
-  valueEquals: function (id, value) {
-    // if id is not passed in return FALSE
-    if (math.doesNotExist(id)) return false;
-    let element_value = math._value(id);
-
-    // catch if we have a combobox...
-    if (element_value[id]) {
-      element_value = element_value[id]
-    }
-
-    // if the element does not exist return FALSE
-    return (element_value == value)
-  },
-  equals: function(id, value){
-    return math.valueEquals(id,value)
-  },
-  valueIsOneOf: function (id, ...values) {
-    if (myFunctions.doesNotExist(id)) return false;
-    // compare as strings so "1" == "1"
-    values = values.map(v => v.toString())
-
-    let test_values = math._value(id);
-    // catch if we have a combobox...
-    if (test_values[id]) {
-      test_values = test_values[id]
-    }
-    if (Array.isArray(test_values)) {
-      return (test_values.some(v => values.includes(v.toString())))
-    }
-    return values.includes(test_values.toString())
-  },
-  /**
-   * checks whether the value for id is 
-   * between the values of lowerLimit and upperLimit inclusively
-   * lowerLimit <= value(id) <= upperlimit
-   * 
-   * if you pass in an array of ids, it uses the first id that exists.  The
-   * array is passed into valueOrDefault.
-   * 
-   * @param  {Number} lowerLimit The lowest acceptable value
-   * @param  {Number} upperLimit the highest acceptable value
-   * @param  {Array}  ids   An array of values, passed into valueOrDefault.
-   * @return {boolean}     is lowerLimit <= value(id) <= upperLimit
-   */
-  valueIsBetween: function (lowerLimit, upperLimit, ...ids) {
-    if (lowerLimit === undefined || upperLimit === undefined || ids === undefined) return false;
-
-    let value = undefined;
-    value = (ids.length > 1) ? myFunctions.valueOrDefault(ids.shift(), ids) : myFunctions._value(ids.shift())
-    // for this function to work, value, lowerLimit, and 
-    // upperLimit MUST be numeric....
-    if (!isNaN(value) && !isNaN(lowerLimit) && !isNaN(value)) {
-      return (parseFloat(lowerLimit) <= value && value <= parseFloat(upperLimit))
-    }
-    return false
-  },
-  /**
-   * Given a comma separated value of Conditions and values, returns a string of all the values that exist.
-   * separated by a comma or the optional separator
-   * 
-   * i.e. existingValues(exists("ID1"),displaytext,exists("ID2"),displaytext)
-   * 
-   * @param  {args}  the args should be condition1, VAL1, condition2, VAL2, (optional)sep=,
-   * 
-   */
-  existingValues: function (args) {
-    if (!args) return ""
-
-    let argArray = math.parse(args).args
-
-    let sep = ", "
-    if (argArray[argArray.length - 1].name == "sep") {
-      sep = argArray.pop().evaluate()
-    }
-    // we better have (id/value PAIRS)
-    argArray = argArray.reduce((prev, current, index, array) => {
-      // skip the ids...
-      if (index % 2 == 0) return prev
-
-      // see if the id exists, if so keep the value
-      if (array[index - 1].evaluate()) prev.push(math.valueOrDefault(current.evaluate(), current.evaluate()))
-
-      return prev
-    }, [])
-    return argArray.join(sep)
-  },
-  // if the value of id is a string
-  // return the string length, otherwise
-  // return -1
-  valueLength: function(id){
-    // if id is not passed in return FALSE
-    if (math.doesNotExist(id)) return false;
-    let element_value = math._value(id);
-    if (isString(element_value)){
-      return element_value.length
-    }
-    return -1;
-  },
-  dateCompare: function (month1, year1, month2, year2) {
-    if (
-      [month1, month2].some((m) => { let m1 = parseInt(m); m1 < 0 || m1 > 11 })
-    ) {
-      throw 'DateCompareError:months need to be from 0 (Jan) to 11 (Dec)'
-    }
-    if (
-      [year1, year2].some((yr) => isNaN(yr))
-    ) {
-      throw 'DateCompareError:years need to be numeric'
-    }
-
-    let date1 = (new Date(year1, month1)).getTime()
-    let date2 = (new Date(year2, month2)).getTime()
-    return (date1 < date2) ? -1 : (date1 == date2) ? 0 : 1
-  },
-  isSelected: function (id) {
-    // if the id doesnt exist, the ?.checked returns undefined.
-    // !!undefined == false.
-    return (!!document.getElementById(id)?.checked)
-  },
-  someSelected: function (...ids) {
-    return (ids.some(id => math.isSelected(id)))
-  },
-  noneSelected: function(...ids){
-    return (!ids.some(id => math.isSelected(id)))
-  },
-  // defaultValue accepts an Id and a value or a Id/Value
-  // If only 1 default value is given, first it looks it up
-  // if it does not exist assume it is a value...
-  // If 2 default values are given, look up the first, if it
-  // does not exist, return the second as a value...
-  valueOrDefault: function (x, ...defaultValue) {
-    let v = math._value(x)
-
-    let indx = 0;
-    while (v == null && defaultValue.length > indx) {
-      v = math._value(defaultValue[indx])
-      if (v == null) indx++
-    }
-    if (v == null) v = defaultValue[defaultValue.length - 1]
-    return (v)
-  },
-  selectionCount: function(x,countReset=false){
-    let [questionId,name] = x.split(':')
-    name = name ?? questionId
-
-    if (!math.exists(questionId)) return 0
-    let v = math._value(questionId)
-
-    // BUG FIX:  if the data-reset ("none of the above") is selected
-    let questionElement = document.getElementById(questionId)
-    if ( Array.isArray(v)  || Array.isArray(v[name]) ) {
-      v = Array.isArray(v)?v:v[name]
-      if (countReset){
-        return v.length;
-      }
-      // there is a chance that nothing is selected (v.length==0) in that case you will the 
-      // selector will find nothing.  Use the "?" because you cannot find the dataset on a null object.  
-      return questionElement.querySelector(`input[type="checkbox"][name="${name}"]:checked`)?.dataset["reset"]?0:v.length
-    }
-
-    // if we want object to return the number of keys
-    // Object.keys(v).length
-    // otherwise:
-    return 0;
-  },
-  // For a question in a loop, does the value of the response
-  // for ANY ITERATION equal a value from a given set. 
-  loopQuestionValueIsOneOf: function (id, ...values) {
-    // Loops append _n_n to the id, where n is an
-    // integer starting from 1...
-    for (let i = 1; ; i = i + 1) {
-      let tmp_qid = `${id}_${i}_${i}`
-      // the Id does not exist, we've gone through
-      // all potential question and have not found
-      // a value in the set of "acceptable" values...
-      if (math.doesNotExist(tmp_qid)) return false;
-      if (math.valueIsOneOf(tmp_qid, ...values)) return true
-    }
-  },
-  gridQuestionsValueIsOneOf: function (gridId, ...values) {
-    if (math.doesNotExist(gridId)) return false
-    let gridElement = document.getElementById(gridId)
-    if (! "grid" in gridElement.dataset) return false
-
-    values = values.map(v => v.toString())
-    let gridValues = math._value(gridId)
-    for (const gridQuestionId in gridValues) {
-      // even if there is only one value, force it into
-      // an array.  flatten it to make sure that it's a 1-d array
-      let test_values = [gridValues[gridQuestionId]].flat()
-      if (test_values.some(v => values.includes(v.toString()))) {
-        return true;
-      }
-
-    }
-    return false;
-  },
-  yearMonth: function (str) {
-    let isYM = /^(\d+)\-(\d+)$/.test(str)
-    if (isYM) {
-      return new YearMonth(str)
-    }
-    let value = math._value(str)
-    isYM = /^(\d+)\-(\d+)$/.test(value)
-    if (isYM) {
-      return new YearMonth(value)
-    }
-    return false;
-  },
-  YearMonth: YearMonth,
-}
-
-function getKeyedValue(x) {
-  let array = x.toString().split('.')
-  // convert null or undefined to undefined...
-  let obj = math._value(`${array.splice(0, 1)}`) ?? undefined
-  
-  return array.reduce((prev, curr) => {
-    if ( math.isUndefined(prev) ) return prev
-    return prev[curr] ?? undefined
-  }, obj)
-}
-
-// Tell mathjs about the YearMonth class
-math.typed.addType({
-  name: 'YearMonth',
-  test: function (x) {
-    return x && x.isYearMonth
-  }
-})
-
-// Tell math.js how to add a YearMonth with a number
-const add = math.typed('add', {
-  'YearMonth, number': function (dte, m) {
-    return dte.add(m)
-  },
-  'number, YearMonth': function (m, dte) {
-    return dte.add(m)
-  }
-})
-const subtract = math.typed('subtract', {
-  'YearMonth, number': function (dte, m) {
-    return dte.subtract(m)
-  },
-  'YearMonth, YearMonth': function (dte2, dte1) {
-    return dte2.subMonth(dte1)
-  }
-})
-
-myFunctions.add = add;
-myFunctions.subtract = subtract
-window.myFunctions = myFunctions;
-
-math.import({
-  myFunctions
-})
-
+// TODO: break this up into more tightly related files
 
 // The questionQueue is an Tree which contains
 // the question ids in the order they should be displayed.
-export const questionQueue = new Tree();
+export const questionQueue = new Tree(); // TODO: rename to questionTree for future clarity
 
 export function isFirstQuestion() {
   return questionQueue.isEmpty() || questionQueue.isFirst();
@@ -375,7 +31,7 @@ function getNumResponseInputs(form) {
   const responseInputs = new Set();
 
   form.querySelectorAll("input, textarea, select").forEach((current) => {
-    if (current.type !== "submit" || current.type !== "hidden") {
+    if (current.type !== "submit" && current.type !== "hidden") {
       if (["radio", "checkbox"].includes(current.type)) {
         responseInputs.add(current.name);
       } else {
@@ -384,6 +40,7 @@ function getNumResponseInputs(form) {
     }
   });
 
+  // Cache the number of response keys for the form so it doesn't re-evaluate every keystroke.
   const appState = getStateManager();
   appState.setNumResponseKeys(form.id, responseInputs.size);
   appState.clearOtherResponseKeys(form.id);
@@ -401,7 +58,7 @@ function getNumResponseInputs(form) {
 function setResponsesInState(form, value, id) {
   const appState = getStateManager();
   const numResponses = appState?.getNumResponseKeys(form.id) || getNumResponseInputs(form);
-
+  
   // Validate and sanitize inputs.
   if (!id || id.trim() === "") return;
 
@@ -510,8 +167,8 @@ function exchangeValue(element, attrName, newAttrName) {
         validationError(element, `Module Coding Error: ${element.id}:${attrName} ${previousResultsErrorMessage}`)
         return
       }
-      console.log('------------exchanged Vals-----------------')
-      console.log(`${element}, ${attrName}, ${newAttrName}, ${tmpVal}`)
+      //console.log('------------exchanged Vals-----------------')
+      //console.log(`${element}, ${attrName}, ${newAttrName}, ${tmpVal}`)
       element.setAttribute(newAttrName, tmpVal);
     } else {
       element.setAttribute(newAttrName, attr);
@@ -563,70 +220,63 @@ export function textboxinput(inputElement, validate = true) {
   }
 
   clearSelection(inputElement);
-  let value = handleXOR(inputElement);
-  let id = inputElement.id
-  value = value ? value : inputElement.value;
+  const id = inputElement.id
+  const value = handleXOR(inputElement) || inputElement.value;
   setResponsesInState(inputElement.form, value, id);
 }
 
-// onInput/Change handler for radio/checkboxex
+// onInput/Change handler for radio/checkboxes
+// TODO: optimize this flow
 export function rbAndCbClick(event) {
-  let inputElement = event.target;
+  const inputElement = event.target;
   // when we programatically click, the input element is null.
   // however we call radioAndCheckboxUpdate directly..
   if (inputElement) {
     validateInput(inputElement)
     radioAndCheckboxUpdate(inputElement);
-    //radioAndCheckboxClearTextInput(inputElement);
+    radioAndCheckboxClearTextInput(inputElement);
   }
 }
 
-// TODO: is this even needed??
-// //for when radio/checkboxes have input fields, only enable input fields when they are selected
-// export function radioAndCheckboxClearTextInput(inputElement) {
-//   // this fails when the element name is not the same as the question id...
-//   //let parent = document.getElementById(inputElement.name);
-//   let parent = inputElement.form
 
-//   // get all responses that have an input text box (can be number, date ..., not radio/checkbox)
-//   let responses = [...parent.querySelectorAll(".response")]
-//     .filter(resp => resp.querySelectorAll("input:not([type=radio]):not([type=checkbox])").length)
-//     .filter(resp => resp.querySelectorAll("input[type=radio],input[type=checkbox]").length)
+// If radio/checkboxes have input fields, only enable input fields when they are selected
+// Get all responses that have an input text box (can be number, date, etc., not radio/checkbox)
+// If the checkbox is not selected, disable it and clear the value.
+// Note: things that can go wrong: if a response has more than one text box.
+export function radioAndCheckboxClearTextInput(inputElement) {
+  
+  const responses = [...inputElement.form.querySelectorAll(".response")].filter(response => {
+    const textBox = response.querySelector("input:not([type=radio]):not([type=checkbox])")
+    const checkbox = response.querySelector("input[type=checkbox],input[type=radio]");
+    return textBox && checkbox;
+  });
+  
+  responses.forEach(response => {
+    const textBox = response.querySelector("input:not([type=radio]):not([type=checkbox])")
+    const radioOrCheckbox = response.querySelector("input[type=radio],input[type=checkbox]")
 
-//   console.log('PARENT:', parent);
-//   console.log('RESPONSES:', responses);
-//   // if the checkbox is selected, make sure the input box is enable
-//   // if the checkbox is not selected, make disable it and clear the value...
-//   // Note: things that can go wrong.. if a response has more than one text box.
-//   responses.forEach(resp => {
-//     let text_box = resp.querySelector("input:not([type=radio]):not([type=checkbox])")
-//     let checkbox = resp.querySelector("input[type=radio],input[type=checkbox]")
-//     //text_box.disabled = !checkbox.checked
-//     if (!checkbox.checked) {
-//       text_box.value = ""
-//       const formID = parent.id;
-//       const inputID = text_box.id;
-//       console.log('FORM ID:', formID);
-//       console.log('INPUT ID:', inputID);
-//       if (formID && inputID) {
-//         delete inputElement.form.value[text_box.id]
-//       }
-//     }
-//   })
-// }
+    if (textBox && radioOrCheckbox && !radioOrCheckbox.checked) {
+      textBox.value = ""
+      const formID = inputElement.form.id;
+      const inputID = textBox.id;
+
+      if (formID && inputID) {
+        const appState = getStateManager();
+        appState.removeResponseItem(formID, inputID, appState.getNumResponseKeys(formID));
+      }
+    }
+  });
+}
 
 export function radioAndCheckboxUpdate(inputElement) {
   if (!inputElement) return;
   clearSelection(inputElement);
 
-  let selectedValue = {};
+  let selectedValue;
+
   if (inputElement.type == "checkbox") {
     // get all checkboxes with the same name attribute...
-    selectedValue = Array.from(
-      inputElement.form.querySelectorAll(
-        `input[type = "checkbox"][name = ${inputElement.name}]`
-      )
-    )
+    selectedValue = Array.from(inputElement.form.querySelectorAll(`input[type = "checkbox"][name = ${inputElement.name}]`))
       .filter((x) => x.checked)
       .map((x) => x.value);
   } else {
@@ -639,56 +289,51 @@ export function radioAndCheckboxUpdate(inputElement) {
 
 function clearSelection(inputElement) {
   if (!inputElement.form || !inputElement.name) return;
-  let sameName = [
-    ...inputElement.form.querySelectorAll(`input[name = ${inputElement.name}],input[name = ${inputElement.name}] + label > input`)
-  ].filter((x) => x.type != "hidden");
+  const sameNameEles = [...inputElement.form.querySelectorAll(`input[name = ${inputElement.name}],input[name = ${inputElement.name}] + label > input`)].filter((x) => x.type != "hidden");
+  if (!sameNameEles) return;
 
-  /* 
-  if this is a "none of the above", go through all elements with the same name
-  and mark them as "false" or clear the text values
-  */
+  const appState = getStateManager();
 
+   
+  // If this is a "none of the above", go through all elements with the same name and mark them as "false" or clear the text values.
   if (inputElement.dataset.reset) {
-    sameName.forEach((element) => {
+    sameNameEles.forEach((element) => {
 
       switch (element.type) {
         case "checkbox":
           element.checked = element == inputElement ? element.checked : false;
           break;
+
         case "radio":
           break;
+
         default:
           element.value = element == inputElement ? inputElement.value : "";
           setResponsesInState(element.form, element.value, element.id);
           if (element.nextElementSibling && element.nextElementSibling.children.length !== 0) element.nextElementSibling.children[0].innerText = "";
           element.form.classList.remove("invalid");
-          if (inputElement.form.value) {
-            delete inputElement.form.value[element.id];
-          }
+          appState.removeResponseItem(element.form.id, element.id, appState.getNumResponseKeys(element.form.id));
           break;
       }
-
-
     });
   } else {
-    // otherwise if this as another element with the same name and is marked as "none of the above"  clear that.
+    // otherwise if this as another element with the same name and is marked as "none of the above" clear that.
     // don't clear everything though because you are allowed to have multiple choices.
-    sameName.forEach((element) => {
+    sameNameEles.forEach((element) => {
       if (element.dataset.reset) {
-        //uncheck reset value
         element.checked = false
 
-        //removing speciically the reset value from the array of checkboxes checked
-        //removing from forms.value
+        //removing specifically the reset value from the array of checkboxes checked and removing from forms.value
         const key1 = element.name;
         const elementValue = element.value;
-        const vals = element.form?.value ?? {};
+        const vals = appState.getItem(inputElement.form.id) ?? {};
         if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1])) {
+          console.warn("TODO: Unhandled transition to state mgr. test with 'none of the above' checkbox question.");
           let index = vals[key1].indexOf(elementValue)
-          if (index != -1) {
+          if (index !== -1) {
             vals[key1].splice(index, 1)
           }
-          if (vals[key1].length == 0) {
+          if (vals[key1].length === 0) {
             delete vals[key1]
           }
         }
@@ -701,42 +346,47 @@ export function handleXOR(inputElement) {
   if (!inputElement.hasAttribute("xor")) {
     return inputElement.value;
   }
+
   // if the user tabbed through the xor, Dont clear anything
   if (!["checkbox", "radio"].includes(inputElement.type) && inputElement.value.length == 0) {
     return null;
   }
-
-
-  let valueObj = {};
-  valueObj[inputElement.id] = inputElement.value;
-  let sibs = [...inputElement.parentElement.querySelectorAll("input")];
-  sibs = sibs.filter(
-    (x) =>
-      x.hasAttribute("xor") &&
-      x.getAttribute("xor") == inputElement.getAttribute("xor") &&
-      x.id != inputElement.id
-  );
-
-  sibs.forEach((x) => {
-    if (inputElement.form.value) {
-      delete inputElement.form.value[x.id]
-    }
-    if (["checkbox", "radio"].includes(x.type)) {
-      x.checked = x.dataset.reset ? false : x.checked;
-    } else {
-      x.value = "";
-      if (x.nextElementSibling.children.length !== 0 && x.nextElementSibling.children[0].tagName == "SPAN") {
-        if (x.nextElementSibling.children[0].innerText.length != 0) {
-          x.nextElementSibling.children[0].innerText = "";
-          x.classList.remove("invalid");
-          x.form.classList.remove('invalid');
-          x.nextElementSibling.remove();
-        }
-      }
-      valueObj[x.id] = x.value;
-    }
+  
+  const appState = getStateManager();
+  const siblings = getXORSiblings(inputElement);
+  siblings.forEach((sibling) => {
+    appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseKeys(inputElement.form.id));
+    resetSiblingDOMValues(sibling);
   });
-  return valueObj[inputElement.id];
+
+  return inputElement.value;
+}
+
+function getXORSiblings(inputElement) {
+  return [...inputElement.parentElement.querySelectorAll("input")].filter(sibling => 
+    sibling.id !== inputElement.id &&
+    sibling.hasAttribute("xor") &&
+    sibling.getAttribute("xor") === inputElement.getAttribute("xor")
+  );
+}
+
+function resetSiblingDOMValues(sibling) {
+  if (["checkbox", "radio"].includes(sibling.type)) {
+    sibling.checked = sibling.dataset.reset ? false : sibling.checked;
+  } else {
+    sibling.value = "";
+    clearXORValidationMessage(sibling);
+  }
+}
+
+function clearXORValidationMessage(inputElement) {
+  const messageSpan = inputElement.nextElementSibling?.children[0];
+  if (messageSpan?.tagName === "SPAN" && messageSpan.innerText.length !== 0) {
+    messageSpan.innerText = "";
+    inputElement.classList.remove("invalid");
+    inputElement.form.classList.remove('invalid');
+    inputElement.nextElementSibling.remove();
+  }
 }
 
 export async function nextClick(norp) {
@@ -881,7 +531,10 @@ async function nextPage(norp) {
   // NOTE: if the root has no children, add the current question to the queue
   // and call next().
 
-  let questionElement = norp.form;
+  const appState = getStateManager();
+  await appState.syncToStore();
+
+  const questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
     x.value = "true"
     setResponsesInState(questionElement, x.value, x.id)
@@ -890,6 +543,7 @@ async function nextPage(norp) {
   if (checkValid(questionElement) == false) {
     return null;
   }
+
   if (questionQueue.isEmpty()) {
     questionQueue.add(questionElement.id);
     questionQueue.next();
@@ -925,9 +579,6 @@ async function nextPage(norp) {
       console.trace();
     }
   }
-
-  const appState = getStateManager();
-  await appState.syncToStore();
 
   //hide the current question
   questionElement.classList.remove("active");
@@ -974,61 +625,51 @@ let questionFocusSet;
 
 export function displayQuestion(nextElement) {
   // Fail gently in the renderer tool.
-  if (!nextElement && !moduleParams.renderObj.activate) {
-    return;
-  }
+  if (!nextElement && !moduleParams.renderObj.activate) return;
   
   questionFocusSet = false;
 
-  [...nextElement.querySelectorAll("span[forid]")].map((x) => {
+  [...nextElement.querySelectorAll("span[forid]")].forEach((x) => {
     let defaultValue = x.getAttribute("optional")
     x.innerHTML = math.valueOrDefault(decodeURIComponent(x.getAttribute("forid")), defaultValue)
   });
 
-  Array.from(
-    nextElement.querySelectorAll("input[data-max-validation-dependency]")
-  ).map(
-    (x) =>
-      (x.max = document.getElementById(x.dataset.maxValidationDependency).value)
-  );
-  Array.from(
-    nextElement.querySelectorAll("input[data-min-validation-dependency]")
-  ).map(
-    (x) =>
-      (x.min = document.getElementById(x.dataset.minValidationDependency).value)
-  );
+  [...nextElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
+      (x.max = document.getElementById(x.dataset.maxValidationDependency).value));
+
+  [...nextElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) =>
+      (x.min = document.getElementById(x.dataset.minValidationDependency).value));
 
   // check all responses for next question
-  [...nextElement.querySelectorAll('[displayif]')].map((elm) => {
+  [...nextElement.querySelectorAll('[displayif]')].forEach((elm) => {
     let f = evaluateCondition(elm.getAttribute("displayif"));
     elm.style.display = f ? null : "none";
   });
 
   // check for displayif spans...
-  Array.from(nextElement.querySelectorAll("span[displayif],div[displayif]"))
-    .map(elm => {
+  [...nextElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
       let f = evaluateCondition(elm.getAttribute("displayif"));
       elm.style.display = f ? null : "none";
     });
-  Array.from(nextElement.querySelectorAll("span[data-encoded-expression]"))
-  .map(elm=>{
+
+  [...nextElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
       let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
       elm.innerText=f;
-  })
+  });
 
   //Sets the brs after non-displays to not show as well
-  nextElement.querySelectorAll(`[style*="display: none"]+br`).forEach((e) => {
+  [...nextElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
     e.style = "display: none"
-  })
+  });
   
   // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
-  nextElement.querySelectorAll("br").forEach((br) => {
+  [...nextElement.querySelectorAll("br")].forEach((br) => {
     br.setAttribute("aria-hidden", "true");
   });
 
   // ISSUE: 403
   // update {$e:}/{$u} and and {$} elements in grids when the user displays the question ...
-  Array.from(nextElement.querySelectorAll("[data-gridreplace]")).forEach((e) => {
+  [...nextElement.querySelectorAll("[data-gridreplace]")].forEach((e) => {
     if (e.dataset.gridreplacetype == "_val") {
       e.innerText = math._value(decodeURIComponent(e.dataset.gridreplace))
     } else {
@@ -1037,10 +678,9 @@ export function displayQuestion(nextElement) {
   });
   
   // Check if grid elements need to be shown. Elm is a <tr>. If f !== true, remove the row (elm) from the DOM.
-  Array.from(nextElement.querySelectorAll("[data-gridrow][data-displayif]")).forEach((elm) => {
+  [...nextElement.querySelectorAll("[data-gridrow][data-displayif]")].forEach((elm) => {
     const f = evaluateCondition(decodeURIComponent(elm.dataset.displayif));
     console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
-
     if (f !== true) {
       elm.dataset.hidden = "true";
       elm.style.display = "none";
@@ -1051,7 +691,6 @@ export function displayQuestion(nextElement) {
   });
 
   //Replacing all default HTML form validations with datasets
-
   [...nextElement.querySelectorAll("input[required]")].forEach((element) => {
     if (element.hasAttribute("required")) {
       element.removeAttribute("required");
@@ -1085,14 +724,16 @@ export function displayQuestion(nextElement) {
     exchangeValue(element, "data-min-date-uneval", "data-min-date");
     exchangeValue(element, "data-min-date-uneval", "min");
   });
+
   [...nextElement.querySelectorAll("input[data-max-date-uneval]")].forEach((element) => {
     exchangeValue(element, "data-max-date-uneval", "data-max-date");
     exchangeValue(element, "data-max-date-uneval", "max");
   });
+
   nextElement.querySelectorAll("[data-displaylist-args]").forEach(element => {
     console.log(element)
     element.innerHTML = math.existingValues(element.dataset.displaylistArgs)
-  })
+  });
 
   // handle unsupported 'month' input type (Safari for MacOS and Firefox)
   const monthInputs = nextElement.querySelectorAll("input[type='month']");
@@ -1108,7 +749,7 @@ export function displayQuestion(nextElement) {
   // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
   // The tabindex leads to a negative user experience in VoiceOver (macOS).
   if (moduleParams.isWindowsEnvironment) {
-    nextElement.querySelectorAll("div.response").forEach((responseElement) => {
+    [...nextElement.querySelectorAll("div.response")].forEach((responseElement) => {
       responseElement.setAttribute("tabindex", "0");
     });
   }
@@ -1116,7 +757,8 @@ export function displayQuestion(nextElement) {
   // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
   if (moduleParams.renderObj?.activate) manageAccessibleQuestionInit(nextElement.querySelector('fieldset') || nextElement);
 
-  return nextElement;
+  const appState = getStateManager();
+  appState.setActiveQuestionState(nextElement.id);
 }
 
 // Initialize the question text and focus management for screen readers.
@@ -1271,11 +913,15 @@ export async function previousClicked(norp) {
     pv = questionQueue.previous();
   }
 
+  const previousElementID = pv.value.value;
+
   const appState = getStateManager();
   await appState.syncToStore();
-
-  let prevElement = document.getElementById(pv.value.value);
+  
+  let prevElement = document.getElementById(previousElementID);
   norp.form.classList.remove("active");
+
+  restoreResponses(appState.getSurveyState(), previousElementID);
   displayQuestion(prevElement)
 
   return prevElement;
@@ -1394,93 +1040,156 @@ export function getSelectedResponses(questionElement) {
   return [...radiosAndCheckboxes, ...inputFields, ...hiddenInputs];
 }
 
-export function evaluateCondition(txt) {
+// RegExp to segment text conditions passed in as a string with '[', '(', ')', ',', and ']'. https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
+const evaluateConditionRegex = /[\(\),]/g;
 
-  txt = decodeURIComponent(txt)
-  console.log("evaluateCondition: ===>", txt)
+/**
+ * Try to evaluate using mathjs. Use fallback evaluation in the catch block.
+ * math.evaluate(<string>) is a built-in mathjs func to evaluate string as mathematical expression.
+ * @param {string} evalString - The string condition (markdown) to evaluate.
+ * @returns {any}- The result of the evaluation.
+ */
 
-  // try to evaluate using mathjs...
-  // if we fail, fall back to old evaluation...
+export function evaluateCondition(evalString) {
+  evalString = decodeURIComponent(evalString);
+  console.log('EVALUATE CONDITION:', evalString);
+
+
   try {
-    let v = math.evaluate(txt)
-    console.log(`${txt} ==> ${v}`)
-    return v
+    return math.evaluate(evalString)
   } catch (err) {
-    console.log("--- falling back to old evaluation ---")
+    console.log('Using custom evaluation for:', evalString);
+    
+    let displayIfStack = [];
+    let lastMatchIndex = 0;
 
-    //refactored to displayIf from parse
-    function replaceValue(x) {
-      if (typeof x === "string") {
-        let element = document.getElementById(x);
-        if (element != null) {
-          if (element.dataset.grid && (element.type === "radio" || element.type === "checkbox")) {
-            //for displayif conditions with grid elements
-            x = element.checked ? 1 : 0;
-          }
-          else {
-            let tmpVal = x;
-            x = document.getElementById(x).value;
-            if (typeof x == "object" && Array.isArray(x) != true) {
-              x = x[tmpVal];
-            }
-          }
-
-        } else {
-          //look up by name
-          let temp1 = [...document.getElementsByName(x)].filter(
-            (y) => y.checked
-          )[0];
-          x = temp1 ? temp1.value : x;
-          // ***** if it's neither... look in the previous module *****
-          if (!temp1) {
-            // ISSUE 383: when moduleParams.previousResults[x] is 0.  It is FALSE and you 
-            // dont replace the key with the value.
-            x = moduleParams.previousResults.hasOwnProperty(x) ? moduleParams.previousResults[x] : x;
-          }
-        }
-      }
-      return x;
-
+    // split the displayif string into a stack of strings and operators
+    for (const match of evalString.matchAll(evaluateConditionRegex)) {
+      displayIfStack.push(evalString.slice(lastMatchIndex, match.index)); 
+      displayIfStack.push(match[0]);
+      lastMatchIndex = match.index + 1;
     }
-    //https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
-    var re = /[\(\),]/g;
-    var stack = [];
-    var lastMatch = 0;
-    for (const match of txt.matchAll(re)) {
-      stack.push(match.input.substr(lastMatch, match.index - lastMatch));
-      stack.push(match.input.charAt(match.index));
-      lastMatch = match.index + 1;
-    }
-    // remove all blanks...
-    stack = stack.filter((x) => x != "");
 
-    while (stack.indexOf(")") > 0) {
-      let callEnd = stack.indexOf(")");
-      if (
-        stack[callEnd - 4] == "(" &&
-        stack[callEnd - 2] == "," &&
-        stack[callEnd - 5] in knownFunctions
-      ) {
-        // it might hurt performance, but for debugging
-        // expliciting setting the variables are helpful...
-        let fun = stack[callEnd - 5];
-        let arg1 = stack[callEnd - 3];
-        // arg1 one should be a id or a boolean...
-        // either from a element in the document or
-        // from the currently undefined last module...
-        arg1 = replaceValue(arg1);
-        let arg2 = stack[callEnd - 1];
-        arg2 = replaceValue(arg2);
-        let tmpValue = knownFunctions[fun](arg1, arg2);
-        // replace from callEnd-5 to callEnd with  the results...
-        // splice start at callEnd-5, remove 6, add the calculated value...
-        stack.splice(callEnd - 5, 6, tmpValue);
+    // remove all blanks
+    displayIfStack = displayIfStack.filter((x) => x != "");
+
+    // Process the stack
+    while (displayIfStack.indexOf(")") > 0) {
+      const stackEnd = displayIfStack.indexOf(")");
+
+      if (isValidDisplayIfSyntax(displayIfStack, stackEnd)) {
+        const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd);
+        console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2); // Temp for debugging
+        const functionResult = knownFunctions[func](arg1, arg2);
+        console.warn('FUNCTION RESULT:', functionResult); // Temp for debugging
+
+        // Replace from callEnd-5 to callEnd with the results. Splice at callEnd-5, remove 6, add the calculated value.
+        displayIfStack.splice(stackEnd - 5, 6, functionResult);
+
       } else {
-        throw { Message: "Bad Displayif Function: " + txt, Stack: stack };
+        throw { Message: "Bad Displayif Function: " + evalString, Stack: displayIfStack };
       }
     }
-    return stack[0];
+
+    return displayIfStack[0];
   }
 }
-window.evaluateCondition = evaluateCondition
+
+// Test the displayif syntax for a valid function call (converting displayif string to function call).
+const isValidDisplayIfSyntax = (stack, stackEnd) => {
+  return stack[stackEnd - 4] === "(" &&
+    stack[stackEnd - 2] === "," &&
+    stack[stackEnd - 5] in knownFunctions
+}
+
+// func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
+function getFunctionArgsFromStack(stack, callEnd) {
+  const appState = getStateManager();
+  const surveyState = appState.getSurveyState();
+
+  const func = stack[callEnd - 5];
+  
+  let arg1 = stack[callEnd - 3];
+  arg1 = evaluateArg(arg1, appState, surveyState);
+
+  let arg2 = stack[callEnd - 1];
+  arg2 = evaluateArg(arg2, appState, surveyState);
+
+  return { func, arg1, arg2 };
+}
+
+// Evaluate the individual args embedded in conditions.
+function evaluateArg(arg, appState, surveyState) {
+  console.log("evaluateArg: ===>", arg, typeof arg);
+
+  // return early if arg is not a string
+  if (typeof arg !== 'string') return arg;
+
+  if (arg in surveyState) {
+    const value = surveyState[arg];
+
+    // If the value is a string, return it.
+    // Checkbox groups are saved as arrays. If the value exists in the array, it was checked.
+    if (typeof value === 'string' || Array.isArray(value)) {
+      console.log('RETURNING VALUE (string or array):', value); // Temp for debugging
+      return value;
+    }
+    
+    // If the value is an object, it's stored as { key: { key: value }} return the value of the inner key.
+    // There may be two inner keys. The unmatched key is for 'other' text fields.
+    else if (typeof value === 'object' && !Array.isArray(value)) {
+      console.log('RETURNING VALUE (obj):', value[arg]); // Temp for debugging
+      return value[arg];
+    }
+  }
+
+  // const element = document.getElementById(arg);
+  // console.log("element: ===>", element)
+
+  // // If arg is an element ID, return the value of the element.
+  // if (element) {
+  //   // TODO: handle this case
+  //   if (element.dataset.grid && (element.type === "radio" || element.type === "checkbox")) {
+  //     //for displayif conditions with grid elements
+  //     console.log('GRID ELEMENT:', element);
+  //     console.log('GRID ELEMENT - checked?:', element.checked);
+  //     //return surveyState[arg] //is the grid element checked? -> is the id in the array?
+  //     return element.checked ? 1 : 0;
+  //   }
+
+
+  // // Else, look for the arg by name // TODO: handle this case
+  // //const checkedElement = surveyState[arg]//.find((radioOrCheckbox) => radioOrCheckbox.checked);
+  // const checkedElement = [...document.getElementsByName(arg)].find((radioOrCheckbox) => radioOrCheckbox.checked);
+  // console.log("checkedElement: ===>", checkedElement);
+  // if (checkedElement) {
+  //   //console.log('CHECKED ELEMENT - Value:', checkedElement.value);
+  //   return checkedElement.value;
+  // }
+
+  // If it's neither, look in the previous module
+  if (arg in moduleParams.previousResults) {
+    return moduleParams.previousResults[arg];
+  }
+
+  // If it's a number, return it as a string for direct evaluation.
+  const parsedArg = parseInt(arg, 10) || parseFloat(arg);
+  if (!isNaN(parsedArg)) {
+    console.log('RETURNING PARSED ARG:', arg); // Temp for debugging
+    return arg;
+  }
+  
+  // Search for nested values in the state.
+  const nestedArg = appState.findNestedValue(arg);
+  if (nestedArg) {
+    console.log('RETURNING NESTED ARG:', nestedArg); // Temp for debugging
+    return nestedArg;
+  }
+
+  // If all else fails, return the original arg. Unhandled case.
+  console.warn('TODO: (unhandled case) RETURNING ARG (default):', arg); // Temp for debugging
+  return arg;
+}
+
+// TODO: get rid of Window dependency
 window.questionQueue = questionQueue

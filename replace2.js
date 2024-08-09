@@ -1,5 +1,5 @@
 import { questionQueue, moduleParams, rbAndCbClick, displayQuestion } from "./questionnaire.js";
-import { restoreResults } from "./localforageDAO.js";
+import { restoreResponses } from "./restoreResponses.js";
 import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
 import { initSurvey } from "./initSurvey.js";
@@ -35,8 +35,7 @@ transform.render = async (obj, divId, previousResults = {}) => {
   // add the HTML/HEAD/BODY tags...
   document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + transformedContents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
 
-  // Restore the user's existing survey results (if they exist). 
-  restoreResults(initialUserData);
+  // Load the question queue from the tree JSON.
   loadQuestionQueue(initialUserData?.treeJSON);
 
   // Get all the questions and the parent div element.
@@ -55,6 +54,9 @@ transform.render = async (obj, divId, previousResults = {}) => {
     console.error('Active question not found for:', activeQuestionID);
     return false;
   }
+
+  // Restore the user's existing survey response for the active question (if they exist). 
+  restoreResponses(initialUserData, activeQuestionID);
 
   // Clear changed Items are cleared after the initial state is loaded.
   // This is to ensure that only the user's changes are tracked.
@@ -80,6 +82,7 @@ function setModuleParams(obj, previousResults) {
   moduleParams.delayedParameterArray = obj.delayedParameterArray;
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
+  moduleParams.isFirefoxBrowser = isFirefoxBrowser();
 }
 
 // Load the question queue from the tree JSON. If the tree JSON is empty, ensure the question queue is cleared.
@@ -110,7 +113,6 @@ function getActiveQuestionID(questions) {
     questionQueue.next();
   }
   
-  console.log(` ==============>>>>  setting ${currentQuestionID} active`);
   return currentQuestionID;
 }
 
@@ -132,7 +134,7 @@ function setActiveQuestion(questionID, divElement) {
 
   // make the id active.
   activeQuestion.classList.add('active');
-  console.log(`setting ${questionID} active`);
+  console.log(`setting ${questionID} active and restoring responses`);
 
   return activeQuestion;
 }
@@ -175,7 +177,6 @@ function handleDOMManagement(questions, divElement) {
   // enable all popovers...
   const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
   [...popoverTriggerList].forEach(popoverTriggerEl => {
-    console.log("... ",popoverTriggerEl);
     new bootstrap.Popover(popoverTriggerEl);
   });
 }
@@ -185,4 +186,10 @@ function handleDOMManagement(questions, divElement) {
 function isWindowsEnvironment() {
   const userAgent = navigator.userAgent.toLowerCase();
   return userAgent.indexOf("win") > -1;
+}
+
+// Helper for focus issues in Firefox. Firefox has a bug where the focus is not set correctly on numeric up/down arrows.
+// InstallTrigger is a global object in Firefox that is not present in other browsers.
+function isFirefoxBrowser() {
+  return typeof InstallTrigger !== 'undefined';
 }

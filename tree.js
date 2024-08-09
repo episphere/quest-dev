@@ -48,7 +48,7 @@ export class Tree {
 
     if (!tmp.done) {
       this.currentNode = tmp.value;
-      this.printTree();
+      //this.printTree();
     }
 
     return tmp;
@@ -64,7 +64,7 @@ export class Tree {
       this.currentNode.clearChildren();
       //this.currentNode.children.forEach((child) => child.clearChildren());
       console.log(" ================ PREV ================ ");
-      this.printTree();
+      //this.printTree();
     }
     return tmp;
   }
@@ -85,6 +85,7 @@ export class Tree {
     this.previous();
     tmp.removeFromParent();
   }
+  
   isEmpty() {
     return this.rootNode.children.length == 0;
   }
@@ -132,16 +133,17 @@ export class Tree {
     newTree.loadFromVanillaObject(object);
     return newTree;
   }
+
   loadFromJSON(json) {
     this.clear()
     let object = JSON.parse(json);
     this.loadFromVanillaObject(object);
   }
+
   toJSON() {
     let json = JSON.stringify(this.toVanillaObject());
     return json;
   }
-
 
   printTree() {
     console.log(" ============ TREE ===========");

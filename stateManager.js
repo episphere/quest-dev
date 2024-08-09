@@ -13,6 +13,9 @@ let appState = null;
  * @param {Object} initialState - the initial state to be set in the state manager.
  * @returns {Object} stateManager - the state manager object and its methods.
  */
+
+// TODO: not using listener pattern. Under consideration. Remove?
+
 const createStateManager = (store, initialState = {}) => {
     // Set of listeners to notify when the state changes.
     const listeners = new Set(); // TODO: not using this. Remove?
@@ -43,8 +46,7 @@ const createStateManager = (store, initialState = {}) => {
                     break;
             }
 
-            console.log('CHANGED ITEMS - activeQuestionState:', activeQuestionState);
-
+            console.log('StateManager -> setResponse: activeQuestionState:', activeQuestionState);
             notifyListeners();
         },
 
@@ -57,45 +59,68 @@ const createStateManager = (store, initialState = {}) => {
         },
 
         removeResponseItem: (questionID, key, numKeys) => {
-            console.log('StateManager -> removeItem: questionID:', questionID, 'key:', key, 'numKeys:', numKeys);
             if (typeof questionID !== 'string') {
                 throw new Error('StateManager -> removeItem: Key must be a string');
             }
+
+            // Handle 'prefer not to answer' responses where other responses are removed programmatically (and they don't exist yet).
+            if (!activeQuestionState[questionID]) return;
 
             switch (numKeys) {
                 case 1:
                     activeQuestionState[questionID] = undefined;
                     break;
+
                 default:
-                    if (key && activeQuestionState[questionID] && typeof activeQuestionState[questionID] === 'object') {
+                    if (key && typeof activeQuestionState[questionID] === 'object') {
                         delete activeQuestionState[questionID][key];
+
+                        // Remove the question key if all responses inside it are removed.
                         if (Object.keys(activeQuestionState[questionID]).length === 0) {
                             activeQuestionState[questionID] = undefined;
                         }
+
                     } else {
                         throw new Error('StateManager -> removeItem: Key not found');
                     }
                     break;
             }
 
+            console.log('StateManager -> setResponse: activeQuestionState:', activeQuestionState);
             notifyListeners();
         },
 
         // Remove responses from the activeQuestionState. Triggered on 'back' button click.
         removeResponse: (questionID) => {
-            console.log('StateManager -> removeQuestion: questionID:', questionID);
             if (typeof questionID !== 'string') {
                 throw new Error('StateManager -> removeQuestion: Key must be a string');
             }
 
             activeQuestionState[questionID] = undefined;
+
+            console.log('StateManager -> removeQuestion: activeQuestionState:', activeQuestionState);
             notifyListeners();
         },
 
         clearAllState: () => {
             surveyState = {};
             activeQuestionState = {};
+            responseKeysObj = {};
             notifyListeners();
+        },
+
+        // Set the active question state to the provided questionID. Important for: (1) return to survey and (2) 'Back' button click.
+        setActiveQuestionState: (questionID) => {
+            if (typeof questionID !== 'string') {
+                throw new Error('StateManager -> setActiveQuestionState: Key must be a string');
+            }
+
+            if (questionID in surveyState) {
+                activeQuestionState = { [questionID]: surveyState[questionID] };
+                notifyListeners();
+            }
+
+            console.log('StateManager -> setActiveQuestionState: activeQuestionState:', activeQuestionState);
         },
 
         clearActiveQuestionState: () => {
@@ -119,28 +144,23 @@ const createStateManager = (store, initialState = {}) => {
 
         // Sync changed items to the store alongside updated treeJSON. questionID is the form's id property.
         syncToStore: async () => {
-            if (Object.keys(activeQuestionState).length === 0) {
-                console.log('StateManager -> syncToStore: No changes to sync.');
-                return;
-            }
-
             try {    
+                activeQuestionState['treeJSON'] = updateTreeJSON();
+                
                 const changedState = {};
-                changedState[`${moduleParams.questName}.treeJSON`] = updateTreeJSON();
-
-                Object.keys(activeQuestionState).forEach((questionID) => {
-                    changedState[`${moduleParams.questName}.${questionID}`] = activeQuestionState[questionID];
+                Object.keys(activeQuestionState).forEach((key) => {
+                    changedState[`${moduleParams.questName}.${key}`] = activeQuestionState[key];
                 });
-
-                console.log('StateManager -> syncToStore: CHANGED STATE:', changedState);
 
                 if (typeof store === 'function') {
                     showLoadingIndicator();
                     await store(changedState);
                 }
                 
-                surveyState = { ...surveyState, ...changedState };
+                surveyState = { ...surveyState, ...activeQuestionState };
                 activeQuestionState = {};
+
+                console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState);
             } catch (error) {
                 console.error('StateManager -> syncToStore: Error syncing state to store', error);
                 throw error;
@@ -191,6 +211,34 @@ const createStateManager = (store, initialState = {}) => {
                 }
             }
         },
+
+        // Get the value of a nested key in surveyState. Check the top level, then search recursively.
+        findNestedValue: (keyToFind, obj = surveyState) => {
+            if (!keyToFind) return undefined;
+
+            if (typeof keyToFind !== 'string') {
+                throw new Error(`StateManager -> findNestedValue: Key must be a string. Key: ${keyToFind}`);
+            }
+
+            if (keyToFind in obj) {
+                console.log('StateManager -> findNestedValue:', 'keyTofind', keyToFind, 'Found value:', obj[keyToFind]);
+                return obj[keyToFind];
+            }
+
+            for (const key in obj) {
+                const value = obj[key];
+                if (typeof value === 'object') {
+                    const foundValue = appState.findNestedValue(keyToFind, value);
+                    if (foundValue !== undefined) {
+                        console.log('StateManager -> findNestedValue:', 'keyTofind', keyToFind, 'Found value:', foundValue);
+                        return foundValue;
+                    }
+                }
+            }
+
+            //console.log('StateManager -> findNestedValue: Value not found');
+            return undefined;
+        }
     };
 
     return stateManager;
@@ -218,8 +266,6 @@ export function getStateManager() {
 }
 
 // Update the tree in StateManager. This is called when the next button is clicked, before syncToStore().
-// TODO: is treeJSON being handled correctly in stateManager across surveys?
-// TODO: add error handling?
 function updateTreeJSON() {
     return moduleParams.questName && questionQueue
         ? questionQueue.toJSON()
