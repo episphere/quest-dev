@@ -53,28 +53,36 @@ export class YearMonth {
 // TODO: remove the DOM access and use the stateManager
 export const customMathJSFunctions = {
   exists: function (x) {
+    console.log('EXISTS?', x);
     if (!x) return false;
     if (x.toString().includes('.')) {
       return !math.isUndefined(this.getKeyedValue(x));
     }
+
+    if (typeof x === 'number') {
+      console.log('EXISTS (number)', x);
+      return true;
+    }
     
     const appState = getStateManager();
-    const existingResponse = appState.getItem(x);
-    console.log('EXISTING RESPONSE', existingResponse, typeof existingResponse);
+    //const existingResponse = appState.getItem(x);
+    const existingResponse = appState.findResponseValue(x);
+
+    if (typeof existingResponse === 'undefined') {
+      console.log('EXISTING RESPONSE (undefined, checking moduleParams)', x, moduleParams.previousResults[x]);
+      return moduleParams.previousResults.hasOwnProperty(x);
+    }
+
+    //console.log('EXISTING RESPONSE (x)', x, existingResponse, typeof existingResponse);
 
     switch (typeof existingResponse) {
-      case 'undefined':
-        return moduleParams.previousResults.hasOwnProperty(x);
       case 'object':
         return Array.isArray(existingResponse) ? existingResponse.length > 0 : Object.keys(existingResponse).length > 0;
       case 'string':
         return existingResponse.length > 0;
-      case 'number':
-        console.error(`Error: Data Type. Number response type in EXISTS check. Type should be 'string' ${x}.`);
-        return true;
       default:
         console.error(`TODO: unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
-        return moduleParams.previousResults.hasOwnProperty(x);
+        return false;
     }
   },
 
@@ -118,26 +126,37 @@ export const customMathJSFunctions = {
       return this.getKeyedValue(x);
     }
 
+    // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
+    if (typeof x === 'number') {
+      console.log('_VALUE (returning number)', x);
+      return x;
+    }
+
     const appState = getStateManager();
     const existingResponse = appState.getItem(x);
     return existingResponse ?? moduleParams.previousResults[x];
   },
 
   valueEquals: function (id, value) {
+    console.log('VALUE EQUALS', id, value);
+
     // if id is not passed in return FALSE
     if (this.doesNotExist(id)) return false;
     let element_value = this._value(id);
+    console.log('VALUE EQUALS element_value - 1', element_value);
 
     // catch if we have a combobox...
     if (element_value[id]) {
       element_value = element_value[id]
     }
 
+    console.log('VALUE EQUALS element_value - 2', element_value);
     // if the element does not exist return FALSE
     return (element_value == value)
   },
 
   equals: function(id, value){
+    console.log('EQUALS', id, value);
     return this.valueEquals(id,value)
   },
 
@@ -146,10 +165,9 @@ export const customMathJSFunctions = {
     if (this.doesNotExist(id)) return false;
     // compare as strings so "1" == "1"
     values = values.map(v => v.toString())
-    console.log('VALUES', values);
 
     let test_values = math._value(id);
-    console.log('TEST VALUES', test_values);
+
     // catch if we have a combobox...
     if (test_values[id]) {
       test_values = test_values[id]
@@ -239,16 +257,50 @@ export const customMathJSFunctions = {
     let date2 = (new Date(year2, month2)).getTime()
     return (date1 < date2) ? -1 : (date1 == date2) ? 0 : 1
   },
+  
+  // TODO: this works but not a scalable solution . Need to fetch possible values from the DOM and compare to passed in ids.
+  // Refactor once we have individual question DOM structure. Consider querying on init and storing in miscState. markdown func is 'noneSelected'.
   isSelected: function (id) {
-    // if the id doesnt exist, the ?.checked returns undefined.
-    // !!undefined == false.
     console.warn('TODO: (isSelected) remove DOM access and use stateManager', id);
-    return (!!document.getElementById(id)?.checked)
+    const regex = /^([a-zA-Z0-9]+_[a-zA-Z0-9]+)_\d+$/ // the id has _0, _1, _2, etc. Needs to be stripped.
+    const idMatch = id.match(regex);
+    if (idMatch && idMatch[1]) {
+      const appState = getStateManager();
+      const responseValue = appState.findResponseValue(idMatch[1]);
+      // const tableRow = document.getElementById(id)?.form.querySelector('table tbody tr');
+      
+      // if (tableRow) {
+      //   //const firstTableRow = formElement.querySelector('table tbody tr');
+      //   const tds = tableRow.querySelectorAll('td');
+      //   tds.forEach((td) => {
+      //     const radioOrCheckbox = td.querySelector('input[type="radio"], input[type="checkbox"]');
+      //     console.log('ID:', id);
+      //     if (radioOrCheckbox?.value === responseValue) {
+      //       console.log('RADIO OR CHECKBOX MATCHES RESPONSE VALUE', radioOrCheckbox.value, responseValue);
+      //       return true;
+      //     } else {
+      //       console.log('RADIO OR CHECKBOX DOES NOT MATCH RESPONSE VALUE', radioOrCheckbox?.value, responseValue);
+      //       return false;
+      //     }
+      //   }); 
+      // }
+  
+      const valueMatches = ['724612102', '178780048']; // TODO: not scalable.
+      return valueMatches.includes(responseValue);
+    }
+    return false;
+
+
+    //console.log('IS SELECTED - id, responseValue', slicedID, responseValue);
+    //return !!responseValue;
+    //console.log('IS SELECTED - id, old method', id, !!document.getElementById(id)?.checked);
+    //return (!!document.getElementById(id)?.checked)
   },
   someSelected: function (...ids) {
     return (ids.some(id => this.isSelected(id)))
   },
   noneSelected: function(...ids){
+    console.log('NONE SELECTED', ids);
     return (!ids.some(id => this.isSelected(id)))
   },
   // defaultValue accepts an Id and a value or a Id/Value
@@ -258,6 +310,9 @@ export const customMathJSFunctions = {
   // does not exist, return the second as a value...
   valueOrDefault: function (x, ...defaultValue) {
     let v = this._value(x)
+    console.log('VALUE OR DEFAULT x, ...defaultValue', x, ...defaultValue);
+    console.log('VALUE OR DEFAULT v', v);
+
 
     let indx = 0;
     while (v == null && defaultValue.length > indx) {
@@ -265,6 +320,7 @@ export const customMathJSFunctions = {
       if (v == null) indx++
     }
     if (v == null) v = defaultValue[defaultValue.length - 1]
+    console.log('VALUE OR DEFAULT (returning) - v', v);
     return (v)
   },
 

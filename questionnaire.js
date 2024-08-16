@@ -142,11 +142,11 @@ function exchangeValue(element, attrName, newAttrName) {
   // may have to do this for dates too.  <- yeah, had to!
   // Firefox and Safari for MacOS think <input type="month"> has type="text"...
   // so month selection calendar is not shown.
-  if ( (element.getAttribute("type") == "month" && /^\d{4}-\d{1,2}$/.test(attr)) || 
-       (element.getAttribute("type") == "date" && /^\d{4}-\d{1,2}-\d{1,2}$/.test(attr)) ){
+  if ( (element.getAttribute("type") === "month" && /^\d{4}-\d{1,2}$/.test(attr)) || 
+       (element.getAttribute("type") === "date" && /^\d{4}-\d{1,2}-\d{1,2}$/.test(attr)) ){
     
     // if leading zero for single digit month was stripped by the browser, add it back.
-    if (element.getAttribute("type") == "month" && /^\d{4}-\d$/.test(attr)) {
+    if (element.getAttribute("type") === "month" && /^\d{4}-\d$/.test(attr)) {
       attr = attr.replace(/-(\d)$/, '-0$1')
     }
     
@@ -167,14 +167,38 @@ function exchangeValue(element, attrName, newAttrName) {
         validationError(element, `Module Coding Error: ${element.id}:${attrName} ${previousResultsErrorMessage}`)
         return
       }
-      //console.log('------------exchanged Vals-----------------')
-      //console.log(`${element}, ${attrName}, ${newAttrName}, ${tmpVal}`)
       element.setAttribute(newAttrName, tmpVal);
     } else {
       element.setAttribute(newAttrName, attr);
     }
   }
   return element;
+}
+
+/**
+ * Replace the found argument with the form ID for accurate validation.
+ * Sometimes the input element ID doesn't match the form ID due to the markdown/DOM structure.
+ * Search for the parent form ID (which will match a key in state), and replace the date input ID for accurate validation.
+ * Relevant for evaluateCondition calls e.g. min=valueOrDefault("<Some_ID>","2020-03").
+ * @param {string} attribute - the attribute to resolve
+ * @returns {string} - the resolved attribute.
+ */
+// TODO: This logic will need updating when DOM structure changes.
+function resolveAttributeToParentID(attribute) {
+  const decodedAttribute = decodeURIComponent(attribute);
+
+  // If item found in state, no further evaluation needed.
+  const appState = getStateManager();
+  if (appState.findResponseValue(decodedAttribute)) {
+    console.log('found Arg in state:', decodedAttribute);
+    return decodedAttribute;
+  }
+  
+  // If not found in state, search for the parent form ID.
+  const foundElement = document.getElementById(decodedAttribute);
+  if (!foundElement) return decodedAttribute;
+  
+  return foundElement.closest("form")?.id ?? decodedAttribute;
 }
 
 // TODO: Look here for Safari text input delay issue.
@@ -326,16 +350,10 @@ function clearSelection(inputElement) {
         //removing specifically the reset value from the array of checkboxes checked and removing from forms.value
         const key1 = element.name;
         const elementValue = element.value;
+        const numKeys = appState.getNumResponseKeys(element.form.id);
         const vals = appState.getItem(inputElement.form.id) ?? {};
-        if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1])) {
-          console.warn("TODO: Unhandled transition to state mgr. test with 'none of the above' checkbox question.");
-          let index = vals[key1].indexOf(elementValue)
-          if (index !== -1) {
-            vals[key1].splice(index, 1)
-          }
-          if (vals[key1].length === 0) {
-            delete vals[key1]
-          }
+        if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1]) && vals[key1].includes(elementValue)) {
+          appState.removeResponseItem(element.form.id, key1, numKeys, elementValue);
         }
       }
     });
@@ -594,15 +612,16 @@ function exitLoop(nextElement) {
   }
 
   if (nextElement.hasAttribute("firstquestion")) {
-    let loopMaxElement = document.getElementById(nextElement.getAttribute("loopmax"));
+    const loopMaxElement = document.getElementById(nextElement.getAttribute("loopmax"));
     if (!loopMaxElement) {
       console.error(`LoopMaxElement is null or undefined for ${nextElement.id}`);
       return nextElement;
     }
 
-    let loopMax = parseInt(loopMaxElement.value);
-    let firstQuestion = parseInt(nextElement.getAttribute("firstquestion"));
-    let loopIndex = parseInt(nextElement.getAttribute("loopindx"));
+    const appState = getStateManager();
+    const loopMax = appState.getItem(loopMaxElement.id);
+    const firstQuestion = parseInt(nextElement.getAttribute("firstquestion"));
+    const loopIndex = parseInt(nextElement.getAttribute("loopindx"));
 
     if (isNaN(loopMax) || isNaN(firstQuestion) || isNaN(loopIndex)) {
       console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextElement.id}: loopMax=${loopMax}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
@@ -612,7 +631,7 @@ function exitLoop(nextElement) {
     if (math.evaluate(firstQuestion > loopMax)) {
       questionQueue.pop();
       questionQueue.add(`_CONTINUE${loopIndex}_DONE`);
-      let nextQuestionId = questionQueue.next().value;
+      const nextQuestionId = questionQueue.next().value;
       nextElement = document.getElementById(nextQuestionId.value);
     }
   }
@@ -620,25 +639,68 @@ function exitLoop(nextElement) {
   return nextElement;
 }
 
+const replaceForIdWithParentId = (element) => {
+  const forid = decodeURIComponent(element.getAttribute("forid"));
+  const parentID = resolveAttributeToParentID(forid);
+  if (forid === parentID) return;
+
+  const defaultValue = element.getAttribute("optional");
+  const updatedValue = math.valueOrDefault(parentID, defaultValue);
+  element.textContent = updatedValue;
+  element.setAttribute('forid', parentID);
+
+  // Check if the outer wrapping span should be made visible
+  const outerSpan = element.closest(".displayif");
+  if (outerSpan) {
+    const parentDisplayIf = outerSpan.getAttribute('displayif').replace(forid, parentID);
+    outerSpan.setAttribute('displayif', parentDisplayIf)
+  }
+}
+
+
+function removeExtraBRElements(rootElement) {
+  let consecutiveBrs = [];
+  
+  // Traverse the DOM tree to find all <br> elements
+  rootElement.querySelectorAll('br').forEach((br) => {
+    if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
+      consecutiveBrs.push(br);
+    } else {
+      if (consecutiveBrs.length > 2) {
+        // Remove all but the first two <br> elements
+        consecutiveBrs.slice(2).forEach((extraBr) => extraBr.remove());
+      }
+      // Reset the array to start tracking a new sequence
+      consecutiveBrs = [br];
+    }
+  });
+
+  // Final check in case the last sequence of <br>s is at the end of the document
+  if (consecutiveBrs.length > 2) {
+    consecutiveBrs.slice(2).forEach((extraBr) => extraBr.remove());
+  }
+}
+
 // Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
 
 export function displayQuestion(nextElement) {
+  const appState = getStateManager();
   // Fail gently in the renderer tool.
   if (!nextElement && !moduleParams.renderObj.activate) return;
   
   questionFocusSet = false;
 
+  // When the input ID isn't the quesiton ID (e.g. YYYY-MM input), find the parent question ID
   [...nextElement.querySelectorAll("span[forid]")].forEach((x) => {
-    let defaultValue = x.getAttribute("optional")
-    x.innerHTML = math.valueOrDefault(decodeURIComponent(x.getAttribute("forid")), defaultValue)
+    replaceForIdWithParentId(x);
   });
 
   [...nextElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
-      (x.max = document.getElementById(x.dataset.maxValidationDependency).value));
+      (x.max = document.getElementById(x.dataset.maxValidationDependency).value)); // TODO: (rm document search)
 
   [...nextElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) =>
-      (x.min = document.getElementById(x.dataset.minValidationDependency).value));
+      (x.min = document.getElementById(x.dataset.minValidationDependency).value)); // TODO: (rm document search)
 
   // check all responses for next question
   [...nextElement.querySelectorAll('[displayif]')].forEach((elm) => {
@@ -655,16 +717,6 @@ export function displayQuestion(nextElement) {
   [...nextElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
       let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
       elm.innerText=f;
-  });
-
-  //Sets the brs after non-displays to not show as well
-  [...nextElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
-    e.style = "display: none"
-  });
-  
-  // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
-  [...nextElement.querySelectorAll("br")].forEach((br) => {
-    br.setAttribute("aria-hidden", "true");
   });
 
   // ISSUE: 403
@@ -743,6 +795,18 @@ export function displayQuestion(nextElement) {
     });
   }
 
+  removeExtraBRElements(nextElement);
+
+  //Sets the brs after non-displays to not show as well
+  [...nextElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
+    e.style = "display: none"
+  });
+  
+  // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
+  [...nextElement.querySelectorAll("br")].forEach((br) => {
+    br.setAttribute("aria-hidden", "true");
+  });
+
   //move to the next question...
   nextElement.classList.add("active");
 
@@ -757,7 +821,6 @@ export function displayQuestion(nextElement) {
   // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
   if (moduleParams.renderObj?.activate) manageAccessibleQuestionInit(nextElement.querySelector('fieldset') || nextElement);
 
-  const appState = getStateManager();
   appState.setActiveQuestionState(nextElement.id);
 }
 
@@ -1050,14 +1113,15 @@ const evaluateConditionRegex = /[\(\),]/g;
  * @returns {any}- The result of the evaluation.
  */
 
+// TODO: loops: break out of a loop early to avoid unnecessary calculations (currently, all conditions are evaluated for every possible loop iteration).
 export function evaluateCondition(evalString) {
   evalString = decodeURIComponent(evalString);
   console.log('EVALUATE CONDITION:', evalString);
 
-
   try {
     return math.evaluate(evalString)
   } catch (err) {
+    console.error('EVALUATE (backup) - error:', err); // Temp for debugging
     console.log('Using custom evaluation for:', evalString);
     
     let displayIfStack = [];
@@ -1086,6 +1150,8 @@ export function evaluateCondition(evalString) {
         // Replace from callEnd-5 to callEnd with the results. Splice at callEnd-5, remove 6, add the calculated value.
         displayIfStack.splice(stackEnd - 5, 6, functionResult);
 
+        // TODO: look at ways to short-circuit the evaluation of 'or' functions when one evaluates to true and loops beyond the loop index.
+
       } else {
         throw { Message: "Bad Displayif Function: " + evalString, Stack: displayIfStack };
       }
@@ -1105,46 +1171,32 @@ const isValidDisplayIfSyntax = (stack, stackEnd) => {
 // func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
 function getFunctionArgsFromStack(stack, callEnd) {
   const appState = getStateManager();
-  const surveyState = appState.getSurveyState();
-
   const func = stack[callEnd - 5];
   
   let arg1 = stack[callEnd - 3];
-  arg1 = evaluateArg(arg1, appState, surveyState);
+  arg1 = evaluateArg(arg1, appState);
 
   let arg2 = stack[callEnd - 1];
-  arg2 = evaluateArg(arg2, appState, surveyState);
+  arg2 = evaluateArg(arg2, appState);
 
   return { func, arg1, arg2 };
 }
 
 // Evaluate the individual args embedded in conditions.
-function evaluateArg(arg, appState, surveyState) {
+function evaluateArg(arg, appState) {
   console.log("evaluateArg: ===>", arg, typeof arg);
 
-  // return early if arg is not a string
-  if (typeof arg !== 'string') return arg;
+  // Return early if arg is undefined
+  if (arg === null || arg === 'undefined') return arg;
+  
+  // Return early if the arg is a number (hardcoded from the markdown). This gets evaluated in the mathjs block.
+  else if (typeof arg === 'number' || parseInt(arg, 10) || parseFloat(arg)) return arg;
 
-  if (arg in surveyState) {
-    const value = surveyState[arg];
+  // Return early if the arg is a boolean value (some boolean values are hardcoded as strings in the markdown). This gets evaluated in the mathjs block.
+  else if (['true', true, 'false', false].includes(arg)) return arg;
 
-    // If the value is a string, return it.
-    // Checkbox groups are saved as arrays. If the value exists in the array, it was checked.
-    if (typeof value === 'string' || Array.isArray(value)) {
-      console.log('RETURNING VALUE (string or array):', value); // Temp for debugging
-      return value;
-    }
-    
-    // If the value is an object, it's stored as { key: { key: value }} return the value of the inner key.
-    // There may be two inner keys. The unmatched key is for 'other' text fields.
-    else if (typeof value === 'object' && !Array.isArray(value)) {
-      console.log('RETURNING VALUE (obj):', value[arg]); // Temp for debugging
-      return value[arg];
-    }
-  }
-
-  // const element = document.getElementById(arg);
-  // console.log("element: ===>", element)
+  // If the arg is a loop marker, return it.
+  else if (arg === '#loop') return arg;
 
   // // If arg is an element ID, return the value of the element.
   // if (element) {
@@ -1167,28 +1219,23 @@ function evaluateArg(arg, appState, surveyState) {
   //   return checkedElement.value;
   // }
 
-  // If it's neither, look in the previous module
-  if (arg in moduleParams.previousResults) {
-    return moduleParams.previousResults[arg];
-  }
-
-  // If it's a number, return it as a string for direct evaluation.
-  const parsedArg = parseInt(arg, 10) || parseFloat(arg);
-  if (!isNaN(parsedArg)) {
-    console.log('RETURNING PARSED ARG:', arg); // Temp for debugging
-    return arg;
-  }
-  
-  // Search for nested values in the state.
-  const nestedArg = appState.findNestedValue(arg);
+  // Search for values in the surveyState.
+  const nestedArg = appState.findResponseValue(arg);
   if (nestedArg) {
     console.log('RETURNING NESTED ARG:', nestedArg); // Temp for debugging
     return nestedArg;
   }
 
+  // If it's neither, look in the previous module
+  else if (arg in moduleParams.previousResults) {
+    return moduleParams.previousResults[arg];
+  }
+
   // If all else fails, return the original arg. Unhandled case.
-  console.warn('TODO: (unhandled case) RETURNING ARG (default):', arg); // Temp for debugging
-  return arg;
+  else {
+    console.warn('TODO: (unhandled case) RETURNING ARG (default):', arg); // Temp for debugging
+    return arg;
+  }
 }
 
 // TODO: get rid of Window dependency

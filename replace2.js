@@ -83,6 +83,7 @@ function setModuleParams(obj, previousResults) {
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
   moduleParams.isFirefoxBrowser = isFirefoxBrowser();
+  moduleParams.isLocalDevelopment = isLocalDevelopment();
 }
 
 // Load the question queue from the tree JSON. If the tree JSON is empty, ensure the question queue is cleared.
@@ -179,6 +180,10 @@ function handleDOMManagement(questions, divElement) {
   [...popoverTriggerList].forEach(popoverTriggerEl => {
     new bootstrap.Popover(popoverTriggerEl);
   });
+}
+
+function isLocalDevelopment() {
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('github');
 }
 
 // Helper for accessibility features. Certain JAWS (Windows) and VoiceOver (Mac) features are handled differently by each platform.

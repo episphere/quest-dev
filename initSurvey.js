@@ -30,8 +30,7 @@ export async function initSurvey(contents) {
 async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurvey) {
     // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
     // Set the base path for the module. This is used to fetch the stylesheets in init -> .
-    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('github');
-    moduleParams.basePath = !isLocalDev && moduleParams.renderObj?.questVersion
+    moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
         ? 'https://episphere.github.io/quest-dev/'
         : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
     
