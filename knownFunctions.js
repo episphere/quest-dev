@@ -8,20 +8,18 @@ export const knownFunctions = {
     return x || y;
   },
 
-  isDefined: function (x, y) {
+  isDefined: function (x, y, appState) {
     const tmpVal = !x ? y : x;
-    const isnum = /^[\d\.]+$/.test(tmpVal);
-    if (isnum) {
+    if (!isNaN(tmpVal)) {
       return tmpVal;
     }
 
-    const appState = getStateManager();
-    const tmpVal2 = appState.getItem(tmpVal);
+    const tmpVal2 = appState.findResponseValue(tmpVal);
     console.warn('TODO TEST: (use state update): tmpVal2 - IS THIS HANDLED CORRECTLY?', tmpVal2);
     return tmpVal2 ?? y;
   },
 
-  isNotDefined: function (x, y) {
+  isNotDefined: function (x) {
     return !x;
   },
 
@@ -115,7 +113,7 @@ export const knownFunctions = {
 
   percentDiff: function (x, y) {
     if (!x || typeof x !== 'string' || !y || typeof y !== 'string') return NaN;
-    return knownFunctions.difference(x, y) / x;
+    return this.difference(x, y) / x;
   },
 
   numberOfChoicesSelected: function (x) {

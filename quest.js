@@ -1,5 +1,6 @@
 import { transform } from "./replace2.js";
 import { questionQueue, moduleParams } from "./questionnaire.js";
+import { getStateManager } from "./stateManager.js";
 
 
 let prevRes = {};
@@ -12,6 +13,7 @@ HTMLTableRowElement.prototype.insertHead = function(html){
   return cell
 }
 
+// Used to retain settings in the 'Settings' tab.
 const questLF = await localforage.createInstance({
   name:"questParams",
   storeName:"params"
@@ -106,7 +108,8 @@ async function startUp() {
   document.getElementById("decreaseSizeButton").onclick = decreaseSize;
   document.getElementById("clearMem").addEventListener("click",clearLocalForage)
 
-  document.getElementById("updater").onclick = function (event) {
+  // JSON input handling for the renderer 'Settings' tab.
+  document.getElementById("updater").onclick = function () {
     let txt = "";
     try {
       prevRes = (json_input.value.length>0)?JSON.parse(json_input.value):{};
@@ -118,8 +121,7 @@ async function startUp() {
     loaddisplay.innerText = txt;
   };
 
-  let myTree = questionQueue;
-
+  // Styling and logic checkboxes in the renderer tool.
   document.querySelectorAll('#logic,#styling').forEach( (el) => {
     el.addEventListener("change",(event)=>{
       console.log(event.target.id,event.target.checked)
@@ -150,30 +152,44 @@ function decreaseSize() {
 
 // needed for testing...
 window.getLF = async function(){
-  let responses = {}
-  if (moduleParams.questName){
-    responses = await localforage.getItem(moduleParams.questName)
+  const appState = getStateManager(true);
+  if (!appState){
+    return {};
   }
-  return responses;
+
+  return appState.getSurveyState();
 }
 
-async function getCachedResponses(){
-  let responses = {}
-  if (moduleParams.questName){
-    responses = await localforage.getItem(moduleParams.questName)
+/**
+ * Build the Current Responses table in the renderer's 'Settings' tab.
+ * Pass a 'true value to getStateManager for the renderer and fail gently if appState hasn't been initialized yet.
+ * This happens when no survey is loaded in the renderer tool.
+ */
+async function buildCachedResponseTable(){
+  const tableElement=document.getElementById("cacheTable");
+  tableElement.innerHTML = '';
+  
+  const tableHeadElement = tableElement.createTHead();
+  const headerRow = tableHeadElement.insertRow()
+  headerRow.insertHead("Id")
+  headerRow.insertHead("Value")
+  
+  const tableBodyElement = tableElement.createTBody();
+  
+  const appState = getStateManager(true);
+  if (!appState){
+    insertEmptyRow(tableBodyElement, "No responses found. Please load a survey first.");
+    return;
   }
-  console.log(`${moduleParams.questName}`,responses)
-  let tableElement=document.getElementById("cacheTable")
-  tableElement.innerText=""
-  // create head..
-  let tableHeadElement = tableElement.createTHead();
-  let row=tableHeadElement.insertRow()
-  row.insertHead("Id")
-  row.insertHead("Value")
-  // create the rows...
-  let tableBodyElement = tableElement.createTBody();
+
+  const responses = appState.getSurveyState();
+
+  if (Object.keys(responses).length === 0){
+    insertEmptyRow(tableBodyElement, "No responses found. Please load a survey first.");
+  }
+
   Object.entries(responses).forEach( ([key, value]) => {
-    row = tableBodyElement.insertRow()
+    const row = tableBodyElement.insertRow()
     let cell = row.insertCell()
     cell.innerText = key;
     cell = row.insertCell()
@@ -181,6 +197,17 @@ async function getCachedResponses(){
   })
 }
 
+function insertEmptyRow(tableBodyElement, message) {
+  const row = tableBodyElement.insertRow();
+  const cell = row.insertCell();
+  cell.colSpan = 2;  // Span across both columns
+  cell.innerText = message;
+}
+
+/**
+ * Clear the JSON settings in the 'Settings' tab.
+ * LF is retained for this use case, while appState is used for survey data.
+ */
 function clearLocalForage() {
   localforage
     .clear()
@@ -216,7 +243,7 @@ function setStylingAndLogic(){
 
 
 document.getElementById("viewCache").addEventListener("click",()=>{
-  getCachedResponses()
+  buildCachedResponseTable()
 })
 
 if (document.readyState === "loading"){

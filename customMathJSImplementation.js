@@ -1,7 +1,9 @@
 import { getStateManager } from './stateManager.js';
-import { moduleParams } from './questionnaire.js';
 import { create, all } from 'https://cdn.skypack.dev/pin/mathjs@v13.0.3-l5exVmFmmRoBpcv9HZ2w/mode=imports,min/optimized/mathjs.js';
 export const math = create(all);
+
+// Strip '_<num>' when an id that _0, _1, _2, etc. as a suffix.
+export const stripIDSuffixRegex = /^([a-zA-Z0-9]+_[a-zA-Z0-9]+)_\d+$/
 
 /**
  * YearMonth class for use in mathjs to handle the month class
@@ -48,46 +50,32 @@ export class YearMonth {
   }
 }
 
-// Note: these function make explicit use of the fact that the DOM stores information.
-// Be careful: the DOM and the localforage become mis-aligned.
-// TODO: remove the DOM access and use the stateManager
 export const customMathJSFunctions = {
   exists: function (x) {
-    console.log('EXISTS?', x);
-    if (!x) return false;
+    if (x == null || x === '') return false;
+
     if (x.toString().includes('.')) {
       return !math.isUndefined(this.getKeyedValue(x));
     }
 
-    if (typeof x === 'number') {
-      console.log('EXISTS (number)', x);
-      return true;
-    }
+    if (typeof x === 'number') return true;
     
-    const appState = getStateManager();
-    //const existingResponse = appState.getItem(x);
-    const existingResponse = appState.findResponseValue(x);
-
-    if (typeof existingResponse === 'undefined') {
-      console.log('EXISTING RESPONSE (undefined, checking moduleParams)', x, moduleParams.previousResults[x]);
-      return moduleParams.previousResults.hasOwnProperty(x);
-    }
-
-    //console.log('EXISTING RESPONSE (x)', x, existingResponse, typeof existingResponse);
+    const existingResponse = this.appState.findResponseValue(x);
 
     switch (typeof existingResponse) {
       case 'object':
         return Array.isArray(existingResponse) ? existingResponse.length > 0 : Object.keys(existingResponse).length > 0;
       case 'string':
         return existingResponse.length > 0;
+      case 'undefined':
+        return false;
       default:
-        console.error(`TODO: unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
+        console.error(`unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
         return false;
     }
   },
 
   doesNotExist: function (x) {
-    console.log('DOES NOT EXIST?', x);
     return !this.exists(x)
   },
 
@@ -105,7 +93,9 @@ export const customMathJSFunctions = {
     return ids.every(id => this.exists(id))
   },
 
+  // TODO: remove this in favor of appState.findResponseValue()
   getKeyedValue: function(x) {
+    console.warn('TODO: GET KEYED VALUE', x);
     const array = x.toString().split('.');
     const key = array.shift();
     const obj = this._value(key);
@@ -122,56 +112,44 @@ export const customMathJSFunctions = {
   _value: function (x) {
     if (!this.exists(x)) return null
 
-    if (x.toString().includes('.')) {
-      return this.getKeyedValue(x);
-    }
-
+    if (x.toString().includes('.')) return this.getKeyedValue(x);
+    
     // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
-    if (typeof x === 'number') {
-      console.log('_VALUE (returning number)', x);
-      return x;
-    }
+    if (typeof x === 'number') return x;
 
-    const appState = getStateManager();
-    const existingResponse = appState.getItem(x);
-    return existingResponse ?? moduleParams.previousResults[x];
+    return this.appState.findResponseValue(x);
   },
 
   valueEquals: function (id, value) {
-    console.log('VALUE EQUALS', id, value);
 
     // if id is not passed in return FALSE
     if (this.doesNotExist(id)) return false;
     let element_value = this._value(id);
-    console.log('VALUE EQUALS element_value - 1', element_value);
 
     // catch if we have a combobox...
     if (element_value[id]) {
       element_value = element_value[id]
     }
 
-    console.log('VALUE EQUALS element_value - 2', element_value);
     // if the element does not exist return FALSE
     return (element_value == value)
   },
 
   equals: function(id, value){
-    console.log('EQUALS', id, value);
     return this.valueEquals(id,value)
   },
 
   valueIsOneOf: function (id, ...values) {
-    console.log('VALUE IS ONE OF', id, values);
     if (this.doesNotExist(id)) return false;
     // compare as strings so "1" == "1"
     values = values.map(v => v.toString())
-
     let test_values = math._value(id);
 
     // catch if we have a combobox...
     if (test_values[id]) {
       test_values = test_values[id]
     }
+
     if (Array.isArray(test_values)) {
       return (test_values.some(v => values.includes(v.toString())))
     }
@@ -232,6 +210,7 @@ export const customMathJSFunctions = {
     }, [])
     return argArray.join(sep)
   },
+
   // if the value of id is a string
   // return the string length, otherwise
   // return -1
@@ -239,11 +218,13 @@ export const customMathJSFunctions = {
     // if id is not passed in return FALSE
     if (this.doesNotExist(id)) return false;
     let element_value = this._value(id);
+
     if (typeof element_value === 'string'){
       return element_value.length
     }
     return -1;
   },
+
   dateCompare: function (month1, year1, month2, year2) {
     if ([month1, month2].some((m) => { let m1 = parseInt(m); m1 < 0 || m1 > 11 })) {
       throw 'DateCompareError:months need to be from 0 (Jan) to 11 (Dec)'
@@ -257,50 +238,35 @@ export const customMathJSFunctions = {
     let date2 = (new Date(year2, month2)).getTime()
     return (date1 < date2) ? -1 : (date1 == date2) ? 0 : 1
   },
-  
-  // TODO: this works but not a scalable solution . Need to fetch possible values from the DOM and compare to passed in ids.
+
   // Refactor once we have individual question DOM structure. Consider querying on init and storing in miscState. markdown func is 'noneSelected'.
   isSelected: function (id) {
-    console.warn('TODO: (isSelected) remove DOM access and use stateManager', id);
-    const regex = /^([a-zA-Z0-9]+_[a-zA-Z0-9]+)_\d+$/ // the id has _0, _1, _2, etc. Needs to be stripped.
-    const idMatch = id.match(regex);
-    if (idMatch && idMatch[1]) {
-      const appState = getStateManager();
-      const responseValue = appState.findResponseValue(idMatch[1]);
-      // const tableRow = document.getElementById(id)?.form.querySelector('table tbody tr');
-      
-      // if (tableRow) {
-      //   //const firstTableRow = formElement.querySelector('table tbody tr');
-      //   const tds = tableRow.querySelectorAll('td');
-      //   tds.forEach((td) => {
-      //     const radioOrCheckbox = td.querySelector('input[type="radio"], input[type="checkbox"]');
-      //     console.log('ID:', id);
-      //     if (radioOrCheckbox?.value === responseValue) {
-      //       console.log('RADIO OR CHECKBOX MATCHES RESPONSE VALUE', radioOrCheckbox.value, responseValue);
-      //       return true;
-      //     } else {
-      //       console.log('RADIO OR CHECKBOX DOES NOT MATCH RESPONSE VALUE', radioOrCheckbox?.value, responseValue);
-      //       return false;
-      //     }
-      //   }); 
-      // }
-  
-      const valueMatches = ['724612102', '178780048']; // TODO: not scalable.
-      return valueMatches.includes(responseValue);
+    console.warn('TODO: (isSelected) update for single-question DOM structure', id);
+    const match = id.match(stripIDSuffixRegex);
+    if (!match || !match[1]) return false;
+    
+    const responseValue = this.appState.findResponseValue(match[1]);
+    if (!responseValue) return false;
+
+    const baseID = match[1];
+    const cellInputValue = document.getElementById(id)
+      ?.form
+      ?.querySelector(`table tbody tr[data-question-id="${baseID}"] td[data-question-id="${baseID}"] input[id="${id}"]`)
+      ?.value;
+
+    if (!cellInputValue) {
+      console.error('CELL INPUT VALUE NOT FOUND:', id);
+      return false;
     }
-    return false;
 
-
-    //console.log('IS SELECTED - id, responseValue', slicedID, responseValue);
-    //return !!responseValue;
-    //console.log('IS SELECTED - id, old method', id, !!document.getElementById(id)?.checked);
-    //return (!!document.getElementById(id)?.checked)
+    return cellInputValue === responseValue;
   },
-  someSelected: function (...ids) {
+
+  someSelected: function (...ids) { // TODO: test. this is impacted by the isSelected changes.
     return (ids.some(id => this.isSelected(id)))
   },
+
   noneSelected: function(...ids){
-    console.log('NONE SELECTED', ids);
     return (!ids.some(id => this.isSelected(id)))
   },
   // defaultValue accepts an Id and a value or a Id/Value
@@ -310,18 +276,16 @@ export const customMathJSFunctions = {
   // does not exist, return the second as a value...
   valueOrDefault: function (x, ...defaultValue) {
     let v = this._value(x)
-    console.log('VALUE OR DEFAULT x, ...defaultValue', x, ...defaultValue);
-    console.log('VALUE OR DEFAULT v', v);
-
 
     let indx = 0;
     while (v == null && defaultValue.length > indx) {
       v = this._value(defaultValue[indx])
       if (v == null) indx++
     }
+    
     if (v == null) v = defaultValue[defaultValue.length - 1]
-    console.log('VALUE OR DEFAULT (returning) - v', v);
-    return (v)
+
+    return (v);
   },
 
   selectionCount: function(x, countReset=false) {
@@ -341,7 +305,7 @@ export const customMathJSFunctions = {
       console.warn('TODO: (selectionCount) remove DOM access and use stateManager', x);
 
       // BUG FIX:  if the data-reset ("none of the above") is selected
-      let questionElement = document.getElementById(questionId) // TODO: rm DOM access, use stateManager
+      let questionElement = document.getElementById(questionId)
       // there is a chance that nothing is selected (v.length==0) in that case you will the 
       // selector will find nothing.  Use the "?" because you cannot find the dataset on a null object.
       return questionElement.querySelector(`input[type="checkbox"][name="${name}"]:checked`)?.dataset["reset"]?0:responseValue.length
@@ -352,39 +316,39 @@ export const customMathJSFunctions = {
     // otherwise:
     return 0;
   },
-  // For a question in a loop, does the value of the response
-  // for ANY ITERATION equal a value from a given set. 
-  loopQuestionValueIsOneOf: function (id, ...values) {
-    // Loops append _n_n to the id, where n is an
-    // integer starting from 1...
-    for (let i = 1; ; i = i + 1) {
-      let tmp_qid = `${id}_${i}_${i}`
-      // the Id does not exist, we've gone through
-      // all potential question and have not found
-      // a value in the set of "acceptable" values...
-      if (this.doesNotExist(tmp_qid)) return false;
-      if (this.valueIsOneOf(tmp_qid, ...values)) return true
-    }
-  },
-  gridQuestionsValueIsOneOf: function (gridId, ...values) {
-    if (this.doesNotExist(gridId)) return false
-    console.warn('TODO: (gridQuestionsValueIsOneOf) remove DOM access and use stateManager', gridId, ...values);
-    let gridElement = document.getElementById(gridId) // TODO: rm DOM access, use stateManager
-    if (! "grid" in gridElement.dataset) return false
+  // // For a question in a loop, does the value of the response
+  // // for ANY ITERATION equal a value from a given set. 
+  // loopQuestionValueIsOneOf: function (id, ...values) {
+  //   // Loops append _n_n to the id, where n is an
+  //   // integer starting from 1...
+  //   for (let i = 1; ; i = i + 1) {
+  //     let tmp_qid = `${id}_${i}_${i}`
+  //     // the Id does not exist, we've gone through
+  //     // all potential question and have not found
+  //     // a value in the set of "acceptable" values...
+  //     if (this.doesNotExist(tmp_qid)) return false;
+  //     if (this.valueIsOneOf(tmp_qid, ...values)) return true
+  //   }
+  // },
+  // gridQuestionsValueIsOneOf: function (gridId, ...values) {
+  //   if (this.doesNotExist(gridId)) return false
+  //   console.warn('TODO: (gridQuestionsValueIsOneOf) remove DOM access and use stateManager', gridId, ...values);
+  //   let gridElement = document.getElementById(gridId) // TODO: rm DOM access, use stateManager
+  //   if (! "grid" in gridElement.dataset) return false
 
-    values = values.map(v => v.toString())
-    let gridValues = this._value(gridId)
-    for (const gridQuestionId in gridValues) {
-      // even if there is only one value, force it into
-      // an array.  flatten it to make sure that it's a 1-d array
-      let test_values = [gridValues[gridQuestionId]].flat()
-      if (test_values.some(v => values.includes(v.toString()))) {
-        return true;
-      }
+  //   values = values.map(v => v.toString())
+  //   let gridValues = this._value(gridId)
+  //   for (const gridQuestionId in gridValues) {
+  //     // even if there is only one value, force it into
+  //     // an array.  flatten it to make sure that it's a 1-d array
+  //     let test_values = [gridValues[gridQuestionId]].flat()
+  //     if (test_values.some(v => values.includes(v.toString()))) {
+  //       return true;
+  //     }
 
-    }
-    return false;
-  },
+  //   }
+  //   return false;
+  // },
   yearMonth: function (str) {
     let isYM = /^(\d+)\-(\d+)$/.test(str)
     if (isYM) {
@@ -409,34 +373,72 @@ math.typed.addType({
   }
 })
 
-// Tell math.js how to add a YearMonth with a number
+// Add custom math.js handling for YearMonth
+// Define string and number handling before adding the custom functions to mathjs.
 const add = math.typed('add', {
   'YearMonth, number': function (dte, m) {
-    return dte.add(m)
+    return dte.add(m);
   },
+
   'number, YearMonth': function (m, dte) {
-    return dte.add(m)
+    return dte.add(m);
+  },
+
+  'number, number': function (a, b) { 
+    return a + b; 
+  },
+
+  'string, string': function (a, b) {
+    return parseFloat(a) + parseFloat(b);
+  },
+
+  'any, any': function (a, b) {
+    return math.add(parseFloat(a), parseFloat(b));
   }
-})
+});
 
 const subtract = math.typed('subtract', {
   'YearMonth, number': function (dte, m) {
-    return dte.subtract(m)
+    return dte.subtract(m);
   },
+
   'YearMonth, YearMonth': function (dte2, dte1) {
-    return dte2.subMonth(dte1)
+    return dte2.subMonth(dte1);
+  },
+
+  'number, number': function (a, b) { 
+    return a - b; 
+  },
+
+  'string, string': function (a, b) {
+    return parseFloat(a) - parseFloat(b);
+  },
+
+  'any, any': function (a, b) {
+    return math.subtract(parseFloat(a), parseFloat(b));
   }
-})
+});
 
-// Add the custom functions to the customMathJSFunctions object.
-customMathJSFunctions.add = add;
-customMathJSFunctions.subtract = subtract
+/**
+ * Initialize the custom mathjs functions.
+ * Add the custom functions to the customMathJSFunctions object.
+ * Add the appState to the customMathJSFunctions object since it is used often.
+ * Bind the custom functions to the customMathJSFunctions object (appState isn't a function, so it doesn't get bound).
+ * Add the custom functions to mathjs and override any existing mathjs functions.
+ */
+export const initializeCustomMathJSFunctions = () => {
+  customMathJSFunctions.add = add;
+  customMathJSFunctions.subtract = subtract;
+  customMathJSFunctions.appState = getStateManager();
 
-// Bind the custom functions to the customMathJSFunctions object.
-const boundFunctions = Object.keys(customMathJSFunctions).reduce((acc, key) => {
-  acc[key] = customMathJSFunctions[key].bind(customMathJSFunctions);
-  return acc;
-}, {});
+  const boundFunctions = Object.keys(customMathJSFunctions).reduce((acc, key) => {
+    if (typeof customMathJSFunctions[key] === 'function') {
+      acc[key] = customMathJSFunctions[key].bind(customMathJSFunctions);
+    } else {
+      acc[key] = customMathJSFunctions[key];
+    }
+    return acc;
+  }, {});
 
-// Add the custom functions to mathjs and override any existing mathjs functions.
-math.import({ boundFunctions }, { override: true });
+  math.import({ boundFunctions }, { override: true });
+}

@@ -1,6 +1,14 @@
 import { parseGrid } from "./buildGrid.js";
 import { getButtonDiv } from "./questButtons.js";
 
+const questionSeparatorRegExp = new RegExp(
+  "\\[([A-Z_][A-Z0-9_#]*[\\?\\!]?)(?:\\|([^,\\|\\]]+)\\|?)?(,.*?)?\\](.*?)(?=$|\\[[_A-Z]|<form)",
+  "g"
+);
+
+const idWithLoopSuffixRegex = /^([a-zA-Z0-9_]+?)(_?\d+_\d+)?$/;
+const valueOrDefaultRegex = /valueOrDefault\(["']([a-zA-Z0-9_]+?)(_?\d+_\d+)?["'](.*)\)/g;
+
 self.onmessage = (event) => {
   if (event.data.command === 'initialize') {
     self.postMessage('ready');
@@ -93,14 +101,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   // followed by zero or more capital letters/digits or an _
   // note: we want this possessive (NOT greedy) so add a ?
   //       otherwise it would match the first and last square bracket
-
-
-  const questionSeparatorRegExp = new RegExp(
-    "\\[([A-Z_][A-Z0-9_#]*[\\?\\!]?)(?:\\|([^,\\|\\]]+)\\|?)?(,.*?)?\\](.*?)(?=$|\\[[_A-Z]|<form)",
-    "g"
-  );
-  const idMatchRegex = /^([a-zA-Z0-9_]+?)(_?\d+_\d+)?$/;
-  const valueOrDefaultRegex = /valueOrDefault\(["']([a-zA-Z0-9_]+?)(_?\d+_\d+)?["'](.*)\)/g;
 
   // because firefox cannot handle the "s" tag, encode all newlines
   // as a unit seperator ASCII code 1f (decimal: 31)
@@ -259,7 +259,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     function fMonth(fullmatch, opts) {
       const type = fullmatch.match(/[^|]+/);
       const { options, elementId } = guaranteeIdSet(opts, type);
-      const questIDPrefix = questID.match(idMatchRegex)[1];
+      const questIDPrefix = questID.match(idWithLoopSuffixRegex)[1];
 
       const updatedOptions = options.replace(valueOrDefaultRegex, (_, prefix, suffix, rest) => {
         return `valueOrDefault("${questIDPrefix}${suffix}"${rest})`;
@@ -548,7 +548,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       fText
     );
 
-    // TODO: Inspect ServiceNow/DataDog 'Too Much Recursion' error (Windows 10 / Firefox v125.0.0). One occurrence 5/3/24, Module 4.
     function fText(fullmatch, value1, opts, value2) {
       let { options, elementId } = guaranteeIdSet(opts, "txt");
       options = options.replaceAll(/(min|max)len\s*=\s*(\d+)/g,'data-$1len=$2')

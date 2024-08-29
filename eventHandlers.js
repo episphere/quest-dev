@@ -3,8 +3,8 @@ import { clearValidationError } from "./validate.js";
 import { nextClick, previousClicked } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
 
-// Debounced version of handleOtherTextInputKeyPress
-const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
+// // Debounced version of handleOtherTextInputKeyPress
+// const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
 
 // Add event listeners to the div element (questContainer) -> delegate events to the parent div.
 // Note: 'focusout' is used instead of 'blur' because 'blur' does not bubble to the parent div.
@@ -39,7 +39,6 @@ function handleClickEvent(event) {
     if (label) {
       const inputElement = label.querySelector('input:not([type="radio"]):not([type="checkbox"]), textarea');
       if (inputElement) {
-        console.log('click');
         if (!target.checked) {
           inputElement.dataset.lastValue = inputElement.value;
           inputElement.value = '';
@@ -154,19 +153,19 @@ function handleInputEvent(event) {
     if (label) {
       const radioCB = document.getElementById(label.htmlFor) || label.querySelector('input[type="radio"], input[type="checkbox"]');
       if (radioCB && (radioCB.type === 'radio' || radioCB.type === 'checkbox')) {
-        const nchar = target.value.length;
-        if (nchar > 0) radioCB.checked = true;
+        // Check or uncheck the radio or checkbox based on the text input length.
+        target.value.length > 0 ? radioCB.checked = true : radioCB.checked = false;
         radioAndCheckboxUpdate(radioCB);
         target.dataset.lastValue = target.value;
         textboxinput(target);  // Ensure the text input is saved
       }
     }
 
-    // Handle "Other" text inputs
-    const responseContainer = target.closest('.response');
-    if (responseContainer) {
-      debouncedHandleOtherTextInputKeyPress(event);
-    }
+    // // Handle "Other" text inputs
+    // const responseContainer = target.closest('.response');
+    // if (responseContainer) {
+    //   debouncedHandleOtherTextInputKeyPress(event);
+    // }
   }
 }
 
@@ -198,20 +197,20 @@ function closeModalAndFocusQuestion(event) {
   }
 }
 
-// Function to handle "Other" text input key press
-function handleOtherTextInputKeyPress(event) {
-  const responseTarget = event.target.closest('.response');
-  const checkboxOrRadioEle = responseTarget?.querySelector('input[type="checkbox"], input[type="radio"]');
+// // Function to handle "Other" text input key press
+// function handleOtherTextInputKeyPress(event) {
+//   const responseTarget = event.target.closest('.response');
+//   const checkboxOrRadioEle = responseTarget?.querySelector('input[type="checkbox"], input[type="radio"]');
 
-  if (checkboxOrRadioEle) {
-    const inputValue = event.target.value?.trim();
-    const isChecked = checkboxOrRadioEle.checked;
-    // If the input value is removed, uncheck the checkbox/radio
-    if (!inputValue && isChecked) {
-      checkboxOrRadioEle.checked = false;
-    }
-  }
-}
+//   if (checkboxOrRadioEle) {
+//     const inputValue = event.target.value?.trim();
+//     const isChecked = checkboxOrRadioEle.checked;
+//     // If the input value is removed, uncheck the checkbox/radio
+//     if (!inputValue && isChecked) {
+//       checkboxOrRadioEle.checked = false;
+//     }
+//   }
+// }
 
 // Custom Accessible handling for up/down arrow keys.
 // This ensures focus doesn't trap accessible navigation in lists that have 'Other' text inputs.

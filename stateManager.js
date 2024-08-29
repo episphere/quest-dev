@@ -14,11 +14,7 @@ let appState = null;
  * @returns {Object} stateManager - the state manager object and its methods.
  */
 
-// TODO: not using listener pattern. Under consideration. Remove?
-
 const createStateManager = (store, initialState = {}) => {
-    // Set of listeners to notify when the state changes.
-    const listeners = new Set(); // TODO: not using this. Remove?
     // The complete survey state with all questions.
     let surveyState = { ...initialState };
     // The active question state with the current question's responses.
@@ -30,40 +26,94 @@ const createStateManager = (store, initialState = {}) => {
     // Cache found response values for faster access.
     let foundResponseCache = {};
 
-    const notifyListeners = () => {
-        listeners.forEach((listener) => listener(surveyState));
+    function updateStateKey(value, questionID, key = null) {
+
+        if (!activeQuestionState[questionID]) activeQuestionState[questionID] = {};
+        
+        if (key) {
+            const compoundKey = `${key}.${questionID}`;
+            activeQuestionState[questionID][key] = value;
+            responseToQuestionMappingObj[compoundKey] = `${questionID}.${key}`;
+            foundResponseCache[compoundKey] = value;
+        } else {
+            activeQuestionState[questionID] = value;
+            responseToQuestionMappingObj[questionID] = questionID;
+            foundResponseCache[questionID] = value;
+        }
+    }
+    
+    /**
+     * Remove keys from activeQuestionState, mapping, and cache. Triggered on 'reset answer' click and, 'back' button click.
+     * Also triggered when the only selected checkbox is unchecked (Including when text is removed from the 'other' text field in a checkbox).
+     * 
+     * @param {string} questionID - the question ID to delete from the state. Matches the formID.
+     * @param {string} key - the response key for multi-value responses (checkboxes and text responses).
+     * @param {boolean} removeMultipleKeys - whether to remove all keys for the questionID. This is used for multi-value responses when 'reset answer' or the 'back' button is clicked.
+     * @returns {void}
+     */
+    function deleteStateKey(questionID, key = null, removeMultipleKeys = false) {
+
+        if (!activeQuestionState[questionID]) return;
+
+        if (typeof questionID !== 'string' || (key && typeof key !== 'string')) {
+            console.error('StateManager -> deleteStateKey: Question ID and Key must be strings');
+            return;
+        }
+    
+        if ((key || removeMultipleKeys) && typeof activeQuestionState[questionID] !== 'object') {
+            console.error('StateManager -> deleteStateKey: Expected object, got', typeof activeQuestionState[questionID]);
+            return;
+        }
+        
+        // Get all response keys related to the questionID before setting it to undefined.
+        // If it's an object (and not an array), loop through each key and remove it from responseToQuestionObj. If it's a single value, remove it directly.
+        if (removeMultipleKeys) {
+            for (const key in activeQuestionState[questionID]) {
+                const compoundKey = `${key}.${questionID}`;
+                delete responseToQuestionMappingObj[compoundKey];
+                delete foundResponseCache[compoundKey];
+            }
+            activeQuestionState[questionID] = undefined;
+
+        // Clear one key in a multi-value response.
+        } else if (key) {
+            const compoundKey = `${key}.${questionID}`;
+            activeQuestionState[questionID][key] = undefined;
+            delete responseToQuestionMappingObj[compoundKey];
+            delete foundResponseCache[compoundKey];
+    
+            if (Object.keys(activeQuestionState[questionID]).length === 0) {
+                activeQuestionState[questionID] = undefined;
+            }
+
+        // Clear the single value response.
+        } else {
+            activeQuestionState[questionID] = undefined;
+            delete responseToQuestionMappingObj[questionID];
+            delete foundResponseCache[questionID];
+        }
     }
 
     const stateManager = {
+        // Set a response as the user updates form inputs. This is called on input change.
+        // Single value responses are stored directly in the activeQuestionState object (case 1), multi-value responses are stored in an object (default case).
         setResponse: (questionID, key, numKeys, value) => {
-            if (typeof key !== 'string') {
-                throw new Error('StateManager -> setItem: Key must be a string');
+            if (typeof questionID !== 'string' || typeof key !== 'string') {
+                throw new Error('StateManager -> setItem: Question ID and Key must be strings');
             }
 
-            // Construct the compound key and store the mapping
-            const compoundKey = `${key}.${questionID}`;
-
-            if (!responseToQuestionMappingObj[compoundKey]) {
-                responseToQuestionMappingObj[compoundKey] = `${questionID}.${key}`;
-            } else if (responseToQuestionMappingObj[compoundKey] !== `${questionID}.${key}`) {
-                console.error(`Error: The responseKey "${key}" is already mapped to "${responseToQuestionMappingObj[compoundKey]}" and cannot be remapped to "${questionID}.${key}"`);
+            // Check if the response is a single value or an object with multiple keys.
+            // If it's a single value, store it directly in the activeQuestionState object under the questionID.
+            // If it's an object, store it in the activeQuestionState object under the questionID and key.
+            const shouldIncludeKey = numKeys > 1;
+            
+            if (value == null || value === '') {
+                deleteStateKey(questionID, shouldIncludeKey ? key : null);
+            } else {
+                updateStateKey(value, questionID, shouldIncludeKey ? key : null);
             }
-
-            switch (numKeys) {
-                case 1:
-                    activeQuestionState[questionID] = value;
-                    break;
-                default:
-                    if (!activeQuestionState[questionID]) activeQuestionState[questionID] = {};
-                    activeQuestionState[questionID][key] = value;
-                    break;
-            }
-
-            // Cache the found response value for faster lookup access.
-            foundResponseCache[compoundKey] = value;
-
-            console.log('StateManager -> setResponse: activeQuestionState:', activeQuestionState);
-            notifyListeners();
+        
+            console.log('StateManager -> setResponse: activeQuestionState:', activeQuestionState); // Temp for debugging
         },
 
         getItem: (questionID) => {
@@ -74,90 +124,48 @@ const createStateManager = (store, initialState = {}) => {
             return surveyState[questionID];
         },
 
+        // Handle 'prefer not to answer' and 'not sure' types of responses where other responses are removed programmatically (and they don't exist yet).
+        // Handle the cases for string, Array, and Object types.
         removeResponseItem: (questionID, key, numKeys, elementValue) => {
-            if (typeof questionID !== 'string') {
-                throw new Error('StateManager -> removeItem: Key must be a string');
+            if (typeof questionID !== 'string' || (key != null && typeof key !== 'string')) {
+                throw new Error('StateManager -> removeItem: questionID and key must be strings');
             }
-
-            // Handle 'prefer not to answer' and 'not sure' types of responses where other responses are removed programmatically (and they don't exist yet).
-            // Handle the cases for string, Array, and Object types.
+    
             if (!activeQuestionState[questionID]) return;
 
-            const compoundKey = `${key}.${questionID}`;
+            // Check if the response is a single value or an object with multiple keys.
+            // If it's a single value, store it directly in the activeQuestionState object under the questionID.
+            // If it's an object, store it in the activeQuestionState object under the questionID and key.
+            const includeKeyBool = numKeys > 1;
 
-            switch (numKeys) {
-                case 1:
-                    if (Array.isArray(activeQuestionState[questionID])) {
-                        activeQuestionState[questionID] = activeQuestionState[questionID].filter((val) => val !== elementValue);
-                        
-                        if (activeQuestionState[questionID].length === 0) {
-                            activeQuestionState[questionID] = undefined;
-                            delete responseToQuestionMappingObj[compoundKey];
-                            delete foundResponseCache[compoundKey];
-                        }
-                    } else {
-                        activeQuestionState[questionID] = undefined;
-                        delete responseToQuestionMappingObj[compoundKey];
-                        delete foundResponseCache[compoundKey];
-                    }
-                    break;
+            // The array case and string cases are the same here. This only executes on the last array item (checkbox) removal.
+            // If multiple checkboxes are selected, the operations are executed under setResponse().
+            if (!includeKeyBool) {
+                deleteStateKey(questionID);
 
-                default:
-                    if (key && typeof activeQuestionState[questionID] === 'object') {
-                        const value = activeQuestionState[questionID][key];
+            } else if (key && typeof activeQuestionState[questionID] === 'object') {
+                deleteStateKey(questionID, key);
 
-                        if (Array.isArray(value)) {
-                            activeQuestionState[questionID][key] = value.filter((val) => val !== elementValue);
-
-                            if (activeQuestionState[questionID][key].length === 0) {
-                                activeQuestionState[questionID][key] = undefined;
-                                delete responseToQuestionMappingObj[compoundKey];
-                                delete foundResponseCache[compoundKey];
-                            }
-                        } else {                            
-                            delete activeQuestionState[questionID][key];
-                            delete responseToQuestionMappingObj[compoundKey];
-                            delete foundResponseCache[compoundKey];
-
-                            if (Object.keys(activeQuestionState[questionID]).length === 0) {
-                                activeQuestionState[questionID] = undefined;
-                            }
-                        }
-                    } else {
-                        throw new Error('StateManager -> removeItem: Key not found');
-                    }
-                    break;
+            } else {
+                throw new Error('StateManager -> removeItem: Key not found');
             }
 
-            console.log('StateManager -> setResponse: activeQuestionState:', activeQuestionState);
-            notifyListeners();
+            console.log('StateManager -> removeResponseItem: activeQuestionState:', activeQuestionState); // Temp for debugging
         },
 
-        // Remove responses from the activeQuestionState. Triggered on 'back' button click.
+        // Remove responses from the activeQuestionState. Triggered on 'back' button click or 'reset answer' click.
         removeResponse: (questionID) => {
             if (typeof questionID !== 'string') {
-                throw new Error('StateManager -> removeQuestion: Key must be a string');
+                throw new Error('StateManager -> removeQuestion: questionID must be a string');
             }
 
-            // Get all response keys related to the questionID before setting it to undefined.
-            // If it's an object, loop through each key and remove it from responseToQuestionObj. If it's a single value, remove it directly.
-            if (activeQuestionState[questionID]) {
-                if (typeof activeQuestionState[questionID] === 'object') {
-                    for (const key in activeQuestionState[questionID]) {
-                        const compoundKey = `${key}.${questionID}`;
-                        delete responseToQuestionMappingObj[compoundKey];
-                        delete foundResponseCache[compoundKey];
-                    }
-                } else {
-                    delete responseToQuestionMappingObj[questionID];
-                    delete foundResponseCache[questionID];
-                }
-            }
+            if (!activeQuestionState[questionID]) return;
 
-            activeQuestionState[questionID] = undefined;
-
-            console.log('StateManager -> removeQuestion: activeQuestionState:', activeQuestionState);
-            notifyListeners();
+            // Check if the response is a single value or an object with multiple keys.
+            const removeMultipleKeysBool = typeof activeQuestionState[questionID] === 'object' && !Array.isArray(activeQuestionState[questionID]);
+            deleteStateKey(questionID, null, removeMultipleKeysBool);
+            
+            console.log('StateManager -> removeResponse: activeQuestionState:', activeQuestionState); // Temp for debugging
         },
 
         clearAllState: () => {
@@ -166,7 +174,6 @@ const createStateManager = (store, initialState = {}) => {
             responseKeysObj = {};
             responseToQuestionMappingObj = {};
             foundResponseCache = {};
-            notifyListeners();
         },
 
         // Set the active question state to the provided questionID. Important for: (1) return to survey and (2) 'Back' button click.
@@ -177,20 +184,11 @@ const createStateManager = (store, initialState = {}) => {
 
             if (surveyState.hasOwnProperty(questionID)) {
                 activeQuestionState = { [questionID]: surveyState[questionID] };
-                notifyListeners();
             }
-
-            console.log('StateManager -> setActiveQuestionState: activeQuestionState:', activeQuestionState);
         },
 
         clearActiveQuestionState: () => {
             activeQuestionState = {};
-            notifyListeners();
-        },
-
-        subscribe: (listener) => {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
         },
 
         getSurveyState: () => ({ ...surveyState }),
@@ -206,7 +204,7 @@ const createStateManager = (store, initialState = {}) => {
 
         // Sync changed items to the store alongside updated treeJSON. questionID is the form's id property.
         syncToStore: async () => {
-            try {    
+            try {
                 activeQuestionState['treeJSON'] = updateTreeJSON();
                 
                 const changedState = {};
@@ -216,13 +214,17 @@ const createStateManager = (store, initialState = {}) => {
 
                 if (typeof store === 'function') {
                     showLoadingIndicator();
-                    await store(changedState);
+                    
+                    // TODO: update store function to return a response. Check response to handle errors & navigation.
+                    /*const response = await*/ store(changedState);
+                } else {
+                    delete activeQuestionState['treeJSON'];
                 }
                 
                 surveyState = { ...surveyState, ...activeQuestionState };
                 activeQuestionState = {};
 
-                console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState);
+                console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState); // Temp for debugging. NOTE: keep for renderer -> check with `if (!store)`
             } catch (error) {
                 console.error('StateManager -> syncToStore: Error syncing state to store', error);
                 throw error;
@@ -230,6 +232,8 @@ const createStateManager = (store, initialState = {}) => {
                 hideLoadingIndicator();
             }
         },
+
+        getResponseToQuestionMapping: () => ({ ...responseToQuestionMappingObj }),
 
         getCache: () => ({ ...foundResponseCache }),
 
@@ -258,17 +262,17 @@ const createStateManager = (store, initialState = {}) => {
         },
 
         // Set the num response keys for a question when the setFormValue function first triggers for the question.
-        setNumResponseKeys: (key, value) => {
+        setNumResponseInputs: (key, value) => {
             responseKeysObj[key] = value;
         },
 
         // Get the num response keys for a question.
-        getNumResponseKeys: (key) => {
+        getNumResponseInputs: (key) => {
             return responseKeysObj[key];
         },
     
         // Clear all keys other than the active key since displayif questions can change available responses for each key.
-        clearOtherResponseKeys: (activeKey) => {
+        clearOtherResponseInputEntries: (activeKey) => {
             for (const key in responseKeysObj) {
                 if (key !== activeKey) {
                     delete responseKeysObj[key];
@@ -288,13 +292,18 @@ const createStateManager = (store, initialState = {}) => {
                 throw new Error('StateManager -> findResponseValue: Key(s) must be strings');
             }
 
+            // If the responseKey is a number, and not a conceptID, return it directly.
+            if (!isNaN(parseFloat(responseKey)) && (responseKey < 100000000 || responseKey > 999999999)) {
+                console.log('RETURNING (parseInt):', responseKey); // Temp for debugging
+                return responseKey;
+            }
+
             const compoundKey = questionID
                 ? `${responseKey}.${questionID}`
                 : responseKey;
 
             // Check the cache first for a found response value.
             if (foundResponseCache.hasOwnProperty(compoundKey)) {
-                console.log('RETURNING CACHE HIT:', foundResponseCache[compoundKey]); // Temp for debugging
                 return foundResponseCache[compoundKey];
             }
 
@@ -305,22 +314,22 @@ const createStateManager = (store, initialState = {}) => {
 
                 // If the value is a string, return it.
                 if (typeof existingResponse === 'string') {
-                    console.log('RETURNING VALUE (string):', compoundKey, existingResponse); // Temp for debugging
+                    console.log('RETURNING (string):', compoundKey, existingResponse); // Temp for debugging
                     value = existingResponse;
                     
                 // Checkbox groups are saved as arrays. If the value exists in the array, it was checked.
                 } else if (Array.isArray(existingResponse)) {
-                    console.log('RETURNING VALUE (array):', compoundKey, existingResponse); // Temp for debugging
+                    console.log('RETURNING (array):', compoundKey, existingResponse); // Temp for debugging
                     value = existingResponse;
                 
                 // If the value is an object, it's stored as { key: { key: value }} return the value of the inner key.
-                // There may be two inner keys. The unmatched key is for 'other' text fields and is not used in evaluation.
+                // There may be two inner keys. The unmatched key is for 'other' text fields. Return the object when multiple keys exist. 
                 } else if (typeof existingResponse === 'object') {
                     if (Object.keys(existingResponse).length === 1) {
-                        console.log('RETURNING VALUE (one key in object):', compoundKey, existingResponse[Object.keys(existingResponse)[0]]); // Temp for debugging
+                        console.log('RETURNING (one key in object):', compoundKey, existingResponse[Object.keys(existingResponse)[0]]); // Temp for debugging
                         value = existingResponse[Object.keys(existingResponse)[0]];
                     } else {
-                        console.log('RETURNING VALUE (nested object):', compoundKey, existingResponse[compoundKey]); // Temp for debugging
+                        console.log('RETURNING (nested object):', compoundKey, existingResponse[compoundKey]); // Temp for debugging
                         value = existingResponse[compoundKey];
                     }
                 }
@@ -330,24 +339,32 @@ const createStateManager = (store, initialState = {}) => {
                     return value;
                 }
 
-                console.warn('RETURNING VALUE (UNHANDLED RESPONSE TYPE):', existingResponse);
+                console.warn('RETURNING (default):', existingResponse); // Temp for debugging
+                foundResponseCache[compoundKey] = existingResponse;
                 return existingResponse;
             }
 
+            // Check the previous results for known keys (these keys are accesesed on survey load for some surveys).
+            if (moduleParams.previousResults.hasOwnProperty(responseKey)) {
+                console.log('RETURNING (previousResults):', responseKey, moduleParams.previousResults[responseKey]); // Temp for debugging
+                return moduleParams.previousResults[responseKey].toString();
+            }
+
             // If that fails, use the responseToQuestionMappingObj to find the full path to the value in surveyState.
-            // Combine the responseKey and questionID if questionID is provided, then get the full path from the mapping object
+            // Combine the responseKey and questionID if questionID is provided, then get the full path from the mapping object.
             let pathToData;
+            let foundKey;
 
             if (!questionID) {
-                // TODO: TEMP FOR TESTING. Remove after testing.
+                // TODO: TEMP FOR TESTING. Ensure no conflicts with this method. Remove after testing.
                 const foundKeyArray = Object.keys(responseToQuestionMappingObj).filter((key) => key.startsWith(compoundKey));
                 if (foundKeyArray.length > 1) {
                     console.error('StateManager -> findResponseValue: (MULTIPLE FOUND - searching with startsWith):', compoundKey);
                 }
 
-                const foundKey = Object.keys(responseToQuestionMappingObj).find((key) => key.startsWith(compoundKey));
+                foundKey = Object.keys(responseToQuestionMappingObj).find((key) => key.startsWith(compoundKey));
                 if (!foundKey) {
-                    console.warn('StateManager -> findResponseValue: (NOT FOUND - searching with startsWith):', compoundKey);
+                    console.log('StateManager -> findResponseValue: (not found - searching with startsWith):', compoundKey); // Temp for debugging
                     return undefined;
                 }
                 pathToData = responseToQuestionMappingObj[foundKey];
@@ -369,8 +386,10 @@ const createStateManager = (store, initialState = {}) => {
                 }
             }
 
-            console.log('RETURNING VALUE (found by path):', compoundKey, value);
-            foundResponseCache[compoundKey] = value;
+            console.log('RETURNING (found by path):', foundKey ?? compoundKey, value); // Temp for debugging
+            foundKey
+                ? foundResponseCache[foundKey] = value
+                : foundResponseCache[compoundKey] = value;
             return value;
         },
     };
@@ -392,8 +411,9 @@ export function initializeStateManager(store, initialState = {}) {
     }
 }
 
-export function getStateManager() {
+export function getStateManager(isRenderer = false) {
     if (!appState) {
+        if (isRenderer) return null;
         throw new Error('StateManager -> getStateManager: State manager has not been initialized. Call initializeStateManager() first.');
     }
     return appState;
@@ -454,6 +474,11 @@ function generateResponseKeyToQuestionIDMapping(surveyState) {
     return responseToQuestionMapping;
 }
 
+/**
+ * Map the response keys to the cache for faster access. This especially helps with otherwise repetetive .startsWith() lookups in findResponseValue.
+ * @param {Object} responseToQuestionMappingObj - the response to question ID mapping object.
+ * @returns {Object} foundResponseCache - the cache of found response values.
+ */
 function mapResponseKeysToCache(responseToQuestionMappingObj) {
     const foundResponseCache = {};
 

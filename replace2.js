@@ -15,7 +15,6 @@ export let transform = function () {
 transform.rbAndCbClick = rbAndCbClick
 
 transform.render = async (obj, divId, previousResults = {}) => {
-  console.log('RENDERING - LOCAL FORAGE REMOVAL Branch');
 
   // Set the global moduleParams object with data needed for different parts of the app.
   setModuleParams(obj, previousResults);
@@ -130,7 +129,6 @@ function setActiveQuestion(questionID, divElement) {
   // remove active from all questions.
   divElement.querySelectorAll('.active').forEach((element) => {
     element.classList.remove('active');
-    console.log(`removing active from ${element.id}`);
   });
 
   // make the id active.
@@ -159,6 +157,7 @@ function handleDOMManagement(questions, divElement) {
     x.style.display = "none";
   });
 
+  // TODO: need to update all 'document' handling upon single-question DOM implementation.
   // validate confirm. If the confirm was used instead of data-confirm, fix it now
   document.querySelectorAll("[confirm]").forEach( (element) => {
     element.dataset.confirm = element.getAttribute("confirm")
@@ -166,7 +165,6 @@ function handleDOMManagement(questions, divElement) {
   });
 
   document.querySelectorAll("[data-confirm]").forEach( (element) => {
-    console.log(element.dataset.confirm)
     if (!document.getElementById(element.dataset.confirm)) {
       console.warn(`... cannot confirm ${element.id}. `)      
       delete element.dataset.confirm

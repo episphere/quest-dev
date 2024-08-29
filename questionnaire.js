@@ -11,7 +11,7 @@ export const moduleParams = {};
 
 // The questionQueue is an Tree which contains
 // the question ids in the order they should be displayed.
-export const questionQueue = new Tree(); // TODO: rename to questionTree for future clarity
+export const questionQueue = new Tree(); // TODO: rename to questionTree for future clarity?
 
 export function isFirstQuestion() {
   return questionQueue.isEmpty() || questionQueue.isFirst();
@@ -42,8 +42,8 @@ function getNumResponseInputs(form) {
 
   // Cache the number of response keys for the form so it doesn't re-evaluate every keystroke.
   const appState = getStateManager();
-  appState.setNumResponseKeys(form.id, responseInputs.size);
-  appState.clearOtherResponseKeys(form.id);
+  appState.setNumResponseInputs(form.id, responseInputs.size);
+  appState.clearOtherResponseInputEntries(form.id);
   return responseInputs.size;
 }
 
@@ -57,7 +57,7 @@ function getNumResponseInputs(form) {
 
 function setResponsesInState(form, value, id) {
   const appState = getStateManager();
-  const numResponses = appState?.getNumResponseKeys(form.id) || getNumResponseInputs(form);
+  const numResponses = appState?.getNumResponseInputs(form.id) || getNumResponseInputs(form);
   
   // Validate and sanitize inputs.
   if (!id || id.trim() === "") return;
@@ -184,13 +184,11 @@ function exchangeValue(element, attrName, newAttrName) {
  * @returns {string} - the resolved attribute.
  */
 // TODO: This logic will need updating when DOM structure changes.
-function resolveAttributeToParentID(attribute) {
+function resolveAttributeToParentID(attribute, appState) {
   const decodedAttribute = decodeURIComponent(attribute);
 
   // If item found in state, no further evaluation needed.
-  const appState = getStateManager();
   if (appState.findResponseValue(decodedAttribute)) {
-    console.log('found Arg in state:', decodedAttribute);
     return decodedAttribute;
   }
   
@@ -199,6 +197,116 @@ function resolveAttributeToParentID(attribute) {
   if (!foundElement) return decodedAttribute;
   
   return foundElement.closest("form")?.id ?? decodedAttribute;
+}
+
+/**
+ * Resolve the entered attributes for the runtime evaluateCondition functions.
+ * @param {string} attribute - the attribute to resolve (e.g. valueLength("ID")).
+ * @returns {string} - the resolved value.
+ */
+
+const valueLengthRegex = /valueLength\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const doesNotExistRegex = /doesNotExist\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const existsRegex = /exists\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const equalsRegex = /equals\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const isNotDefinedRegex = /isNotDefined\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+
+const resolveRuntimeConditions = (attribute) => {
+  const attributeConditionString = decodeURIComponent(attribute);
+  const appState = getStateManager();
+
+  // Check if the attribute contains nested functions (multiple conditions to evaluate from the markdown).
+  function hasNestedFunctions(str) {
+    const firstIndex = str.indexOf('(');
+    if (firstIndex === -1) return false; // No '(' found
+    
+    const secondIndex = str.indexOf('(', firstIndex + 1);
+    return secondIndex !== -1;
+  }
+
+  // Only simple functions are evaluated here. If the attribute contains nested functions, return early.
+  // TODO: consider whether evaluateCondtion() might be a helpful optimization here.
+  if (hasNestedFunctions(attributeConditionString)) {
+    return null;
+  }
+
+  const resolveCondition = (regex, additionalConstraint = null) => {
+    const match = attributeConditionString.match(regex);
+    if (match && match[1]) {
+      const idToSearch = match[1];
+      if (idToSearch) {
+        const value = appState.findResponseValue(idToSearch);
+        if (typeof value === 'string' && value.length > 0 && (!additionalConstraint || !value.match(additionalConstraint))) {
+          return value;
+        }
+      }
+    }
+  }
+
+  const value = resolveCondition(valueLengthRegex, /\b\d{9}\b/) ||
+    resolveCondition(doesNotExistRegex) ||
+    resolveCondition(existsRegex) ||
+    resolveCondition(equalsRegex) ||
+    resolveCondition(isNotDefinedRegex)
+
+  if (value !== null) {
+    return value;
+  }
+
+  if (!['valueLength', 'doesNotExist', 'exists', 'equals', 'isNotDefined'].some(substring => attributeConditionString.includes(substring))) {
+    console.error(`Unhandled attribute type in ${attributeConditionString} (resolveRuntimeConditions)`);
+  }
+
+  console.warn(`TODO: confirm empty string response in (resolveRuntimeConditions): ${attributeConditionString}`);
+  
+  return '';
+}
+
+/**
+ * Evaluate the condition in the 'forid' attribute for runtime functions.
+ * ForID attributes are used to evaluate conditions at runtime and update the DOM accordingly.
+ * For questions where one response exists, we need to evaluate the parent ID (mismatch to the response ID).
+ * When multiple responses exist, we evaluate the response ID directly.
+ * @param {Array<Node>} forIDElementArray - the array of 'forid' elements to evaluate.
+ * @returns {void} - updates the DOM with the evaluated values.
+ */
+const handleForIDAttributes = (forIDElementArray) => {
+  const appState = getStateManager();
+
+  if (forIDElementArray.length === 1) {
+    const forIDElement = forIDElementArray[0];    
+    const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
+    const parentID = resolveAttributeToParentID(forid, appState);
+
+    const defaultValue = forIDElement.getAttribute("optional");
+    const updatedValue = math.valueOrDefault(parentID, defaultValue);
+    
+    forIDElement.textContent = updatedValue;
+    forIDElement.setAttribute('forid', parentID);
+
+    // Update the parent displayif attribute if it exists.
+    const outerSpan = forIDElement.closest(".displayif");
+    if (outerSpan) {
+      const parentDisplayIf = outerSpan.getAttribute('displayif').replace(forid, parentID);
+      outerSpan.setAttribute('displayif', parentDisplayIf)
+    }
+
+  } else {
+    forIDElementArray.forEach(element => {
+      const forid = decodeURIComponent(element.getAttribute("forid"));
+      const foundValue = appState.findResponseValue(forid);
+      toggleElementVisibility(element, foundValue);
+    });
+  }
+}
+
+const toggleElementVisibility = (element, textContent) => {
+  if (textContent) {
+    element.style.display = null;
+    element.textContent = textContent;
+  } else {
+    element.style.display = "none";
+  }
 }
 
 // TODO: Look here for Safari text input delay issue.
@@ -286,7 +394,7 @@ export function radioAndCheckboxClearTextInput(inputElement) {
 
       if (formID && inputID) {
         const appState = getStateManager();
-        appState.removeResponseItem(formID, inputID, appState.getNumResponseKeys(formID));
+        appState.removeResponseItem(formID, inputID, appState.getNumResponseInputs(formID));
       }
     }
   });
@@ -336,7 +444,7 @@ function clearSelection(inputElement) {
           setResponsesInState(element.form, element.value, element.id);
           if (element.nextElementSibling && element.nextElementSibling.children.length !== 0) element.nextElementSibling.children[0].innerText = "";
           element.form.classList.remove("invalid");
-          appState.removeResponseItem(element.form.id, element.id, appState.getNumResponseKeys(element.form.id));
+          appState.removeResponseItem(element.form.id, element.id, appState.getNumResponseInputs(element.form.id));
           break;
       }
     });
@@ -350,7 +458,7 @@ function clearSelection(inputElement) {
         //removing specifically the reset value from the array of checkboxes checked and removing from forms.value
         const key1 = element.name;
         const elementValue = element.value;
-        const numKeys = appState.getNumResponseKeys(element.form.id);
+        const numKeys = appState.getNumResponseInputs(element.form.id);
         const vals = appState.getItem(inputElement.form.id) ?? {};
         if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1]) && vals[key1].includes(elementValue)) {
           appState.removeResponseItem(element.form.id, key1, numKeys, elementValue);
@@ -373,7 +481,7 @@ export function handleXOR(inputElement) {
   const appState = getStateManager();
   const siblings = getXORSiblings(inputElement);
   siblings.forEach((sibling) => {
-    appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseKeys(inputElement.form.id));
+    appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseInputs(inputElement.form.id));
     resetSiblingDOMValues(sibling);
   });
 
@@ -639,25 +747,6 @@ function exitLoop(nextElement) {
   return nextElement;
 }
 
-const replaceForIdWithParentId = (element) => {
-  const forid = decodeURIComponent(element.getAttribute("forid"));
-  const parentID = resolveAttributeToParentID(forid);
-  if (forid === parentID) return;
-
-  const defaultValue = element.getAttribute("optional");
-  const updatedValue = math.valueOrDefault(parentID, defaultValue);
-  element.textContent = updatedValue;
-  element.setAttribute('forid', parentID);
-
-  // Check if the outer wrapping span should be made visible
-  const outerSpan = element.closest(".displayif");
-  if (outerSpan) {
-    const parentDisplayIf = outerSpan.getAttribute('displayif').replace(forid, parentID);
-    outerSpan.setAttribute('displayif', parentDisplayIf)
-  }
-}
-
-
 function removeExtraBRElements(rootElement) {
   let consecutiveBrs = [];
   
@@ -666,9 +755,9 @@ function removeExtraBRElements(rootElement) {
     if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
       consecutiveBrs.push(br);
     } else {
-      if (consecutiveBrs.length > 2) {
+      if (consecutiveBrs.length > 3) {
         // Remove all but the first two <br> elements
-        consecutiveBrs.slice(2).forEach((extraBr) => extraBr.remove());
+        consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
       }
       // Reset the array to start tracking a new sequence
       consecutiveBrs = [br];
@@ -676,8 +765,8 @@ function removeExtraBRElements(rootElement) {
   });
 
   // Final check in case the last sequence of <br>s is at the end of the document
-  if (consecutiveBrs.length > 2) {
-    consecutiveBrs.slice(2).forEach((extraBr) => extraBr.remove());
+  if (consecutiveBrs.length > 3) {
+    consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
   }
 }
 
@@ -685,16 +774,16 @@ function removeExtraBRElements(rootElement) {
 let questionFocusSet;
 
 export function displayQuestion(nextElement) {
-  const appState = getStateManager();
   // Fail gently in the renderer tool.
   if (!nextElement && !moduleParams.renderObj.activate) return;
+  
+  const appState = getStateManager();
   
   questionFocusSet = false;
 
   // When the input ID isn't the quesiton ID (e.g. YYYY-MM input), find the parent question ID
-  [...nextElement.querySelectorAll("span[forid]")].forEach((x) => {
-    replaceForIdWithParentId(x);
-  });
+  const forIDElementArray = nextElement.querySelectorAll("span[forid]");
+  if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
 
   [...nextElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
       (x.max = document.getElementById(x.dataset.maxValidationDependency).value)); // TODO: (rm document search)
@@ -710,9 +799,29 @@ export function displayQuestion(nextElement) {
 
   // check for displayif spans...
   [...nextElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
-      let f = evaluateCondition(elm.getAttribute("displayif"));
-      elm.style.display = f ? null : "none";
-    });
+    const textContent = elm.textContent;
+    const isPlainText = textContent === elm.innerHTML;
+
+    if (elm.getAttribute('data-fallback') === null) {
+        elm.setAttribute('data-fallback', isPlainText ? textContent : '');
+    }
+
+    const displayIfAttribute = elm.getAttribute("displayif");
+    let f = evaluateCondition(displayIfAttribute);
+    if (f) {
+      elm.style.display = null;
+
+      let displayIfText = resolveRuntimeConditions(displayIfAttribute) ?? elm.getAttribute('data-fallback');
+      if (displayIfText) {
+        if (textContent.startsWith(',')) {
+          displayIfText = ', ' + displayIfText;
+        }
+        elm.textContent = displayIfText;
+      }
+    } else {
+      elm.style.display = "none";
+    }
+  });
 
   [...nextElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
       let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
@@ -732,7 +841,6 @@ export function displayQuestion(nextElement) {
   // Check if grid elements need to be shown. Elm is a <tr>. If f !== true, remove the row (elm) from the DOM.
   [...nextElement.querySelectorAll("[data-gridrow][data-displayif]")].forEach((elm) => {
     const f = evaluateCondition(decodeURIComponent(elm.dataset.displayif));
-    console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
     if (f !== true) {
       elm.dataset.hidden = "true";
       elm.style.display = "none";
@@ -753,16 +861,16 @@ export function displayQuestion(nextElement) {
   [...nextElement.querySelectorAll("input[min]")].forEach((element) => {
     exchangeValue(element, "min", "data-min");
   });
-  [...nextElement.querySelectorAll("input[max]")].forEach((element) =>
+  [...nextElement.querySelectorAll("input[max]")].forEach((element) => {
     exchangeValue(element, "max", "data-max")
-  );
+  });
   // supporting legacy code... dont use minval
   [...nextElement.querySelectorAll("input[minval]")].forEach((element) => {
     exchangeValue(element, "minval", "data-min");
   });
-  [...nextElement.querySelectorAll("input[maxval]")].forEach((element) =>
+  [...nextElement.querySelectorAll("input[maxval]")].forEach((element) => {
     exchangeValue(element, "maxval", "data-max")
-  );
+  });
 
   [...nextElement.querySelectorAll("input[data-min]")].forEach((element) =>
     exchangeValue(element, "data-min", "data-min")
@@ -783,7 +891,6 @@ export function displayQuestion(nextElement) {
   });
 
   nextElement.querySelectorAll("[data-displaylist-args]").forEach(element => {
-    console.log(element)
     element.innerHTML = math.existingValues(element.dataset.displaylistArgs)
   });
 
@@ -1116,12 +1223,10 @@ const evaluateConditionRegex = /[\(\),]/g;
 // TODO: loops: break out of a loop early to avoid unnecessary calculations (currently, all conditions are evaluated for every possible loop iteration).
 export function evaluateCondition(evalString) {
   evalString = decodeURIComponent(evalString);
-  console.log('EVALUATE CONDITION:', evalString);
 
   try {
     return math.evaluate(evalString)
   } catch (err) {
-    console.error('EVALUATE (backup) - error:', err); // Temp for debugging
     console.log('Using custom evaluation for:', evalString);
     
     let displayIfStack = [];
@@ -1137,17 +1242,18 @@ export function evaluateCondition(evalString) {
     // remove all blanks
     displayIfStack = displayIfStack.filter((x) => x != "");
 
+    const appState = getStateManager();
+
     // Process the stack
     while (displayIfStack.indexOf(")") > 0) {
       const stackEnd = displayIfStack.indexOf(")");
 
-      if (isValidDisplayIfSyntax(displayIfStack, stackEnd)) {
-        const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd);
-        console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2); // Temp for debugging
-        const functionResult = knownFunctions[func](arg1, arg2);
-        console.warn('FUNCTION RESULT:', functionResult); // Temp for debugging
+      if (isValidFunctionSyntax(displayIfStack, stackEnd)) {
+        const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd, appState);
+        const functionResult = knownFunctions[func](arg1, arg2, appState);
+        console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2, 'RESULT', functionResult); // Temp for debugging
 
-        // Replace from callEnd-5 to callEnd with the results. Splice at callEnd-5, remove 6, add the calculated value.
+        // Replace from stackEnd-5 to stackEnd with the results. Splice and replace the function call with the result.
         displayIfStack.splice(stackEnd - 5, 6, functionResult);
 
         // TODO: look at ways to short-circuit the evaluation of 'or' functions when one evaluates to true and loops beyond the loop index.
@@ -1161,16 +1267,15 @@ export function evaluateCondition(evalString) {
   }
 }
 
-// Test the displayif syntax for a valid function call (converting displayif string to function call).
-const isValidDisplayIfSyntax = (stack, stackEnd) => {
+// Test the string-based function syntax for a valid function call (converting markdown function strings to function calls).
+const isValidFunctionSyntax = (stack, stackEnd) => {
   return stack[stackEnd - 4] === "(" &&
     stack[stackEnd - 2] === "," &&
     stack[stackEnd - 5] in knownFunctions
 }
 
 // func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
-function getFunctionArgsFromStack(stack, callEnd) {
-  const appState = getStateManager();
+function getFunctionArgsFromStack(stack, callEnd, appState) {
   const func = stack[callEnd - 5];
   
   let arg1 = stack[callEnd - 3];
@@ -1182,59 +1287,28 @@ function getFunctionArgsFromStack(stack, callEnd) {
   return { func, arg1, arg2 };
 }
 
-// Evaluate the individual args embedded in conditions.
+/**
+ * Evaluate the individual args embedded in conditions.
+ * Return early for: undefined, hardcoded numbers and booleans (they get evaluated in mathjs), and known loop markers.
+ * @param {string} arg - The argument to evaluate.
+ * @param {*} appState - The application state.
+ * @returns 
+ */
+
 function evaluateArg(arg, appState) {
-  console.log("evaluateArg: ===>", arg, typeof arg);
 
-  // Return early if arg is undefined
   if (arg === null || arg === 'undefined') return arg;
-  
-  // Return early if the arg is a number (hardcoded from the markdown). This gets evaluated in the mathjs block.
   else if (typeof arg === 'number' || parseInt(arg, 10) || parseFloat(arg)) return arg;
-
-  // Return early if the arg is a boolean value (some boolean values are hardcoded as strings in the markdown). This gets evaluated in the mathjs block.
   else if (['true', true, 'false', false].includes(arg)) return arg;
-
-  // If the arg is a loop marker, return it.
   else if (arg === '#loop') return arg;
 
-  // // If arg is an element ID, return the value of the element.
-  // if (element) {
-  //   // TODO: handle this case
-  //   if (element.dataset.grid && (element.type === "radio" || element.type === "checkbox")) {
-  //     //for displayif conditions with grid elements
-  //     console.log('GRID ELEMENT:', element);
-  //     console.log('GRID ELEMENT - checked?:', element.checked);
-  //     //return surveyState[arg] //is the grid element checked? -> is the id in the array?
-  //     return element.checked ? 1 : 0;
-  //   }
-
-
-  // // Else, look for the arg by name // TODO: handle this case
-  // //const checkedElement = surveyState[arg]//.find((radioOrCheckbox) => radioOrCheckbox.checked);
-  // const checkedElement = [...document.getElementsByName(arg)].find((radioOrCheckbox) => radioOrCheckbox.checked);
-  // console.log("checkedElement: ===>", checkedElement);
-  // if (checkedElement) {
-  //   //console.log('CHECKED ELEMENT - Value:', checkedElement.value);
-  //   return checkedElement.value;
-  // }
-
-  // Search for values in the surveyState.
-  const nestedArg = appState.findResponseValue(arg);
-  if (nestedArg) {
-    console.log('RETURNING NESTED ARG:', nestedArg); // Temp for debugging
-    return nestedArg;
-  }
-
-  // If it's neither, look in the previous module
-  else if (arg in moduleParams.previousResults) {
-    return moduleParams.previousResults[arg];
-  }
-
-  // If all else fails, return the original arg. Unhandled case.
-  else {
-    console.warn('TODO: (unhandled case) RETURNING ARG (default):', arg); // Temp for debugging
-    return arg;
+  // Search for values in the surveyState. This search covers responses and 'previousResults' (passed in at startup).
+  const foundValue = appState.findResponseValue(arg);
+  if (foundValue) {
+    return foundValue;
+  } else {
+    console.log('RETURNING (default) empty string for:', arg); // Temp for debugging
+    return '';
   }
 }
 

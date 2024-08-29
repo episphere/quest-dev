@@ -31,10 +31,8 @@ export function restoreResponses(results, questionID) {
       return;
     }
 
-    console.log("==========  dont know how to handle this  ==========", questionElement, id, value)
+    console.warn('RESTORE RESPONSES (unhandled response)', questionElement, id, value)
   }
-
-  //console.log('-------checking qid:', qid);
   
   let formElement = document.querySelector("#" + CSS.escape(questionID));
   // not sure have a non-question would be here
@@ -53,20 +51,18 @@ export function restoreResponses(results, questionID) {
     // it could have been dynamically create (think SOCcer...) just return..
     if (!element) return
     // null handle element, skip if null (load failing when participant is in the middle of unanswered SOCcer questions)
-    if (element?.type == "radio") {
+    if (element?.type === "radio") {
       let selector = `input[value='${results[questionID]}']`;
       let selectedRadioElement = formElement.querySelector(selector);
       if (selectedRadioElement) {
         selectedRadioElement.checked = true;
       } else {
-        console.log("...  problem with ", element);
+        console.log("RESTORE RESPONSE: Problem with radio:", element);
       }
       radioAndCheckboxUpdate(selectedRadioElement);
     } else {
-      if (element?.type == "submit") {
-        console.log(
-          `local forage is trying to change the value of a submit button. Question ${questionID} response value: ${results[questionID]}; skipping this 1 value..`
-        );
+      if (element?.type === "submit") {
+        console.log(`RESTORE RESPONSE: Question ID ${questionID} response value: ${results[questionID]}. Submit button: skipping update.`);
         return;
       }
 
@@ -104,14 +100,11 @@ export function restoreResponses(results, questionID) {
     if (Array.isArray(results[questionID])) {
       getFromRbCb(questionID, results[questionID]);
     } else {
-      //console.log("...  for KEY ", qid, " ...1 WE HAVE AN OBJECT!!!  ... ", Object.keys(results[qid]), Object.values(results[qid]));
-
+      // Handle the object case
       Object.keys(results[questionID]).forEach((resKey) => {
         if (!resKey) {
           // added because dynamic questions sometimes muck up the previous button.
-          console.log(
-            `empty key in local forage Question ${questionID} response value: ${results[questionID]}; skipping this 1 value..`
-          );
+          console.log(`RESTORE RESPONSE: Empty key in QuestionID ${questionID} response value: ${results[questionID]}; skipping.`);
           return;
         }
         let resObject = results[questionID][resKey];
@@ -151,7 +144,7 @@ export function restoreResponses(results, questionID) {
             if (selectedRadioElement) {
               selectedRadioElement.checked = true;
             } else {
-              console.log("...  problem with ", element);
+              console.warn("RESTORE RESPONSE: Problem with DIV/FORM:", element);
             }
             radioAndCheckboxUpdate(selectedRadioElement);
           } else {

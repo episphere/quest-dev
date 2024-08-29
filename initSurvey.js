@@ -1,6 +1,6 @@
 import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
 import { moduleParams } from './questionnaire.js';
-import { math } from './customMathJSImplementation.js';
+import { initializeCustomMathJSFunctions, math } from './customMathJSImplementation.js';
 import { initializeStateManager } from './stateManager.js';
 
 let questName = 'Questionnaire';
@@ -14,6 +14,7 @@ let questName = 'Questionnaire';
 export async function initSurvey(contents) {
     // Initialize the state manager. This will drive all data flow and UI updating in the app.
     initializeStateManager(moduleParams.renderObj.store);
+    initializeCustomMathJSFunctions();
 
     const precalculated_values = getPreCalculatedValues(contents);    
     return moduleParams.renderObj?.activate
