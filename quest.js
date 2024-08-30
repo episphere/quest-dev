@@ -150,7 +150,7 @@ function decreaseSize() {
   ta.style.fontSize = fontSize - 1 + "px";
 }
 
-// needed for testing...
+// needed for testing... // TODO: remove this (double check)
 window.getLF = async function(){
   const appState = getStateManager(true);
   if (!appState){
@@ -163,9 +163,9 @@ window.getLF = async function(){
 /**
  * Build the Current Responses table in the renderer's 'Settings' tab.
  * Pass a 'true value to getStateManager for the renderer and fail gently if appState hasn't been initialized yet.
- * This happens when no survey is loaded in the renderer tool.
+ * This happens when no survey is loaded in the renderer tool, so there's no need to throw an appState initialization error whe getStateManager() returns null.
  */
-async function buildCachedResponseTable(){
+async function buildCurrentResponseTable(){
   const tableElement=document.getElementById("cacheTable");
   tableElement.innerHTML = '';
   
@@ -243,7 +243,7 @@ function setStylingAndLogic(){
 
 
 document.getElementById("viewCache").addEventListener("click",()=>{
-  buildCachedResponseTable()
+  buildCurrentResponseTable()
 })
 
 if (document.readyState === "loading"){
