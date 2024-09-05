@@ -1,5 +1,6 @@
 import { parseGrid } from "./buildGrid.js";
 import { getButtonDiv } from "./questButtons.js";
+import { moduleParams, questions } from "./questionnaire.js";
 
 self.onmessage = (event) => {
   if (event.data.command === 'initialize') {
@@ -26,7 +27,11 @@ let reduceObj = (obj) => {
 
 // This routine takes the markdown contents and converts it to HTML
 // It's called from (1) the worker thread, (2) the worker's 'onerror' to process inline if the worker fails.
-export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
+export function transformMarkdownToHTML() {
+  
+  const precalculated_values = moduleParams.precalculated_values;
+  const i18n = moduleParams.i18n;
+  
   // build the buttons
   const button_text_obj = {
     back: i18n.backButton,
@@ -34,6 +39,8 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     next: i18n.nextButton,
     submit: i18n.submitSurveyButton
   }
+
+  let contents = questions.current().text;
 
   // Define the Date function dateToQuestFormat
   const dateToQuestFormat = (date) => {
@@ -74,6 +81,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     .replace(/\/\*.*\*\//g, "")
     .replace(/\/\/.*/g, "");
 
+  /*
   let questName = 'Questionnaire'; // this is the name of the questionnaire. Either the module ID or 'Questionnaire'. Find in the questionnaire as {"name":"moduleID"}
   const questModuleNameRegExp = new RegExp(/{"name":"(\w*)"}/);
   if (questModuleNameRegExp.test(contents)) {
@@ -83,6 +91,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       return "";
     }
   }
+  */
 
   // first let's deal with breaking up questions..
   // a question starts with the [ID1] regex pattern
@@ -103,13 +112,18 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   // because firefox cannot handle the "s" tag, encode all newlines
   // as a unit seperator ASCII code 1f (decimal: 31)
   contents = contents.replace(/(?:\r\n|\r|\n)/g, "\u001f");
-  contents = contents.replace(questionSeparatorRegExp, function (
+
+  contents = markdownTransform(questions.current().id, questions.current().opts, questions.current().args, contents);
+
+  function markdownTransform(questID, questEdit, questArgs, questText) {
+  /*
+    contents = contents.replace(questionSeparatorRegExp, function (
     page,
     questID,
     questOpts,
     questArgs,
     questText
-  ) {
+  ) {*/
 
     questText = questText.replace(/\u001f/g, "\n");
     questText = questText.replace(/(?:\r\n|\r|\n)/g, "<br>");
@@ -122,12 +136,13 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     });
 
     //handle options for question
-    questOpts = questOpts ? questOpts : "";
-    questOpts = questOpts.replaceAll(/(min|max)-count\s*=\s*(\d+)/g,'data-$1-count=$2')
+    questArgs = questArgs ? questArgs : "";
+    // questOpts = questOpts ? questOpts : "";
+    questArgs = questArgs.replaceAll(/(min|max)-count\s*=\s*(\d+)/g,'data-$1-count=$2')
 
     // handle displayif on the question...
     // if questArgs is undefined set it to blank.
-    questArgs = questArgs ? questArgs : "";
+    
 
     // make sure that this is a "displayif"
     const displayifMatch = questArgs.match(/displayif\s*=\s*.*/);
@@ -144,10 +159,9 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
 
     let target = "";
 
-    let hardBool = questID.endsWith("!");
-    let softBool = questID.endsWith("?");
+    let hardBool = questEdit === "hard";
+    let softBool = questEdit === "soft";
     if (hardBool || softBool) {
-      questID = questID.slice(0, -1);
       if (hardBool) {
         target = "data-target='#hardModal'";
       } else {
@@ -361,7 +375,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     let radioCheckboxAndInput = false;
     if (questText.match(/(\[|\()(\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?(\)|\])\s*(.*?\|_.*?\|)/g)) {
       radioCheckboxAndInput = true;
-      questOpts = questOpts + " radioCheckboxAndInput";
+      questArgs = questArgs + " radioCheckboxAndInput";
     }
 
     questText = questText.replace(/<br>/g, "<br>\n");
@@ -413,6 +427,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     let buttonRegex = /\((\d+)(?:\:(\w+))?(?:\|(\w+))?(?:,displayif=([^)]*))?(\s*\))/;
     for (let match = questText.match(buttonRegex); !!match; match = questText.match(buttonRegex)) {
       questText = handleButton(match);
+      console.log();
     }
 
     // replace [XX] with checkbox
@@ -689,17 +704,17 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     const questButtonsDiv = getButtonDiv(button_text_obj, hasInputfield, questID, endMatch, target);
     
     let rv = `
-      <form class='question' id='${questID}' ${questOpts} ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
+      <form class='question' id='${questID}' ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
         <fieldset>
           ${questText}
         </fieldset>
-        ${questButtonsDiv}
+          ${questButtonsDiv}
         <div class="spacePadding"></div>
       </form>`;
     
     return rv;
-  });
-
+  //});
+  }
 
   // handle the display if case...
   contents = contents.replace(
@@ -710,7 +725,7 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   //removing random &#x1f; unit separator chars
   contents = contents.replace(//g, "");
 
-  return [contents, questName];
+  return contents;
 }
 
 function ordinal(a, lang) {

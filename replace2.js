@@ -3,6 +3,7 @@ import { restoreResults } from "./localforageDAO.js";
 import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
 import { initSurvey } from "./initSurvey.js";
+import { questions } from "./questionnaire.js";
 
 
 import en from "./i18n/en.js";
@@ -23,16 +24,20 @@ transform.render = async (obj, divId, previousResults = {}) => {
   moduleParams.delayedParameterArray = obj.delayedParameterArray;
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
+  moduleParams.divId = divId;
   
   // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
-  let contents = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
+  let contents = moduleParams.renderObj?.text // || await fetch(moduleParams.renderObj?.url).then(response => response.text());
 
   // Initialize the survey and transform the markdown contents to HTML.
-  const [transformedContents, questName, retrievedData] = await initSurvey(contents);
-  moduleParams.questName = questName;
+  const [transformedContents, retrievedData] = await initSurvey(contents);
+  // moduleParams.questName = questName;
+  await renderQuestion(transformedContents, retrievedData);
+}
 
+export const renderQuestion = async (transformedContents, retrievedData) => {
   // add the HTML/HEAD/BODY tags...
-  document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + transformedContents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
+  document.getElementById(moduleParams.divId).innerHTML = ariaLiveAnnouncementRegions() + transformedContents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
 
   // Get the active question from the tree and set it as active.
   function setActive(id) {
@@ -47,7 +52,6 @@ transform.render = async (obj, divId, previousResults = {}) => {
       }
     );
     // make the id active...
-    console.log(`setting ${id} active`);
     displayQuestion(active);
   }
 
@@ -74,35 +78,31 @@ transform.render = async (obj, divId, previousResults = {}) => {
   function resetTree() {
     // make the appropriate question active...
     // don't bother if there are no questions...
-    if (questions.length > 0) {
+    if (questions.stack.length > 0) {
       let currentId = questionQueue.currentNode.value;
       console.log("currentId", currentId);
       if (currentId) {
-        console.log(` ==============>>>>  setting ${currentId} active`);
         setActive(currentId);
-      } else {
-        console.log(
-          ` ==============>>>>  setting the first question ${questions[0].id} active`
-        );
-
+      } 
+      else {
         // if the tree is empty add the first question to the tree...
         // and make it active...
-        questionQueue.add(questions[0].id);
+        questionQueue.add(questions.current().id);
         questionQueue.next();
-        setActive(questions[0].id);
+        setActive(questions.current().id);
       }
     }
   }
   
-  let questions = [...document.getElementsByClassName("question")];
-  let divElement = document.getElementById(divId);
+  let divElement = document.getElementById(moduleParams.divId);
 
   // wait for the objects to be retrieved,
   // then reset the tree.
-  await fillForm();
+  // await fillForm();
 
   // get the tree from either 1) the client or 2) localforage..
   // either way, we always use the version in LF...
+  /*
   if (obj.treeJSON) {
     questionQueue.loadFromJSON(obj.treeJSON)
   } else {
@@ -119,14 +119,17 @@ transform.render = async (obj, divId, previousResults = {}) => {
       setActive(questionQueue.currentNode.value);
     });
   }
-
-  // remove the first 'previous' button and the final 'next' button.
-  if (questions.length > 0) {
-    let buttonToRemove = questions[0].querySelector(".previous");
+    */
+  
+  if (questions.current() === questions.first()) {
+    const buttonToRemove = document.querySelector(".previous");
     if (buttonToRemove) {
       buttonToRemove.remove();
     }
-    buttonToRemove = [...questions].pop().querySelector(".next");
+  }
+
+  if (questions.current() === questions.last()) {
+    const buttonToRemove = document.querySelector(".next");
     if (buttonToRemove) {
       buttonToRemove.remove();
     }
@@ -172,7 +175,6 @@ transform.render = async (obj, divId, previousResults = {}) => {
   // enable all popovers...
   const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]')
   const popoverList = [...popoverTriggerList].map(popoverTriggerEl => {
-    console.log("... ",popoverTriggerEl)
     new bootstrap.Popover(popoverTriggerEl)
   })
 

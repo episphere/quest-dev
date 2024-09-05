@@ -3,9 +3,14 @@ import { knownFunctions } from "./knownFunctions.js";
 import { removeQuestion } from "./localforageDAO.js";
 import { validateInput, validationError } from "./validate.js"
 import { translate } from "./common.js";
+import { Survey } from "./survey.js";
+import { transformMarkdownToHTML } from "./transformMarkdownWorker.js";
 
 export const moduleParams = {};
+export const questions = new Survey();
+
 import  * as mathjs  from 'https://cdn.skypack.dev/mathjs@11.2.0';
+import { renderQuestion } from "./replace2.js";
 export const math=mathjs.create(mathjs.all)
 window.math = math
 
@@ -718,10 +723,12 @@ export function nextClick(norp, store) {
     norp = document.getElementById(norp).querySelector(".next");
   }
 
+  /* need to add back validation
   // check that each required element is set...
   norp.form.querySelectorAll("[data-required]").forEach((elm) => {
     validateInput(elm)
   });
+  */
 
   showModal(norp, store);
 }
@@ -766,6 +773,8 @@ function setNumberOfQuestionsInModal(num, norp, store, soft) {
 
 // show modal function
 function showModal(norp, store) {
+  
+  /*
   if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
@@ -811,6 +820,7 @@ function showModal(norp, store) {
       return null;
     }
   }
+    */
   nextPage(norp, store);
 }
 
@@ -872,6 +882,7 @@ async function nextPage(norp, store) {
   // NOTE: if the root has no children, add the current question to the queue
   // and call next().
 
+  /*
   let questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
     x.value = "true"
@@ -881,10 +892,14 @@ async function nextPage(norp, store) {
   if (checkValid(questionElement) == false) {
     return null;
   }
+    
   if (questionQueue.isEmpty()) {
     questionQueue.add(questionElement.id);
     questionQueue.next();
   }
+    */
+
+  /*
   let questName = moduleParams.questName;
   tempObj[questionElement.id] = questionElement.value;
 
@@ -895,7 +910,10 @@ async function nextPage(norp, store) {
   // get the actual HTML element.
   let nextElement = document.getElementById(nextQuestionId.value);
   nextElement = exitLoop(nextElement);
+  */
 
+
+  /*
   // before we add the next question to the queue...
   // check for the displayif status...
   while (nextElement?.hasAttribute("displayif")) {
@@ -920,7 +938,9 @@ async function nextPage(norp, store) {
       console.trace();
     }
   }
+    */
 
+  /*
   //Check if questionElement exists first so its not pushing undefineds
   if (store) {
     try {
@@ -961,11 +981,19 @@ async function nextPage(norp, store) {
         });
       });
   }
+      */
 
   //hide the current question
-  questionElement.classList.remove("active");
+  // questionElement.classList.remove("active");
 
-  displayQuestion(nextElement);
+  questions.next();
+  questionQueue.add(questions.current().id);
+  questionQueue.next();
+
+  const contents = transformMarkdownToHTML();
+  await renderQuestion(contents);
+
+  // displayQuestion(nextElement);
   window.scrollTo(0, 0);
 }
 
@@ -1314,26 +1342,44 @@ function isMonthInputSupported() {
   return input.type === 'month';
 }
 
-export async function previousClicked(norp, store) {
+export async function previousClick(norp, store) {
   // get the previousElement...
+  questions.previous();
   let pv = questionQueue.previous();
+
+  const contents = transformMarkdownToHTML();
+  await renderQuestion(contents);
+
+  // displayQuestion(nextElement);
+  window.scrollTo(0, 0);
+
+
+
+  /*
   while (pv.value.value.substring(0, 9) == "_CONTINUE") {
     pv = questionQueue.previous();
   }
+    */
+
+  /*
   let prevElement = document.getElementById(pv.value.value);
   norp.form.classList.remove("active");
-  displayQuestion(prevElement)
+  */
 
+  // displayQuestion(prevElement)
+
+  /*
   if (store) {
     console.log("setting... ", moduleParams.questName, "=== UNDEFINED")
     let formData = {};
     formData[`${moduleParams.questName}.${norp.form.id}`] = undefined;
     store(formData);
   } else removeQuestion(moduleParams.questName, norp.form.id);
+  */
 
-  updateTree();
+  // updateTree();
 
-  return prevElement;
+  // return prevElement;
 }
 
 // this function just adds questions to the
@@ -1539,3 +1585,4 @@ export function evaluateCondition(txt) {
 }
 window.evaluateCondition = evaluateCondition
 window.questionQueue = questionQueue
+window.questions = questions

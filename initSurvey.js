@@ -1,5 +1,6 @@
 import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
 import { math, moduleParams } from './questionnaire.js';
+import { parseMarkdown } from "./parse.js";
 
 let questName = 'Questionnaire';
 
@@ -11,7 +12,9 @@ let questName = 'Questionnaire';
  */
 export async function initSurvey(contents) {
 
-    const precalculated_values = getPreCalculatedValues(contents);    
+    const precalculated_values = getPreCalculatedValues(contents);  
+    moduleParams.precalculated_values = precalculated_values;
+
     return moduleParams.renderObj?.activate
         ? await initEmbeddedSurvey(contents, precalculated_values)
         : await initRendererSurvey(contents, precalculated_values);
@@ -63,13 +66,13 @@ async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurv
         console.error('Error initializing transformMarkdownWorker. Fallback to inline processing:', error);
         transformMarkdownWorker.terminate();
 
-        [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
+        [contents, questName] = transformMarkdownToHTML(contents, isEmbeddedSurvey);
         const retrievedData = await retrievedDataPromise;
         return [contents, questName, retrievedData];
     }
 
     // Post the transform command to the worker.
-    transformMarkdownWorker.postMessage({ command: 'transform', data: [contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey] });
+    transformMarkdownWorker.postMessage({ command: 'transform', data: [contents, isEmbeddedSurvey] });
 
     const transformContentsWorkerPromise = new Promise((resolve) => {
         let isPromiseResolved = false;
@@ -99,7 +102,7 @@ async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurv
                 clearTimeout(timeout);
                 isPromiseResolved = true;
 
-                [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
+                [contents, questName] = transformMarkdownToHTML(contents, isEmbeddedSurvey);
 
                 transformMarkdownWorker.terminate();
                 resolve();
@@ -120,10 +123,13 @@ async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurv
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
 async function initRendererSurvey(contents, precalculated_values) {
-    [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n);
+
+    parseMarkdown(contents);
+
+    contents = transformMarkdownToHTML(contents);
 
     const retrievedData = null; // No retrieve function for the renderer and styling is referenced elsewhere (nothing to do here).
-    return [contents, questName, retrievedData];
+    return [contents, retrievedData];
 }
 
 /**

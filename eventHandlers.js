@@ -1,6 +1,6 @@
 import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestionInit, moduleParams } from "./questionnaire.js";
 import { clearValidationError } from "./validate.js";
-import { nextClick, previousClicked } from "./questionnaire.js";
+import { nextClick, previousClick } from "./questionnaire.js";
 
 // Debounced version of handleOtherTextInputKeyPress
 const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
@@ -450,7 +450,7 @@ function stopSubmit(event) {
   switch (clickType) {
     case 'previous':
       resetChildren(event.target.elements);
-      previousClicked(buttonClicked, moduleParams.renderObj.store);
+      previousClick(buttonClicked, moduleParams.renderObj.store);
       break;
 
     case 'reset':
