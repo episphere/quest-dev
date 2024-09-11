@@ -1,5 +1,6 @@
 // TODO: The buttons can be attached to the parent div or the question. They don't need to be repeated in the question DOM (Caveat: renderer in question list format).
 // TODO: use moduleParams to conditionally apply the button text. moduleParams.renderObj?.activate -> if true, add button text at render time in displayQuestion (embedded use). If false, add to DOM for each question (renderer).
+// TODO: use questionHandler and remove this file.
 export const getButtonDiv = (button_text_obj, hasInputField, questID, endMatch, target) => {
 
     let nextButton = endMatch

@@ -25,6 +25,8 @@ const createStateManager = (store, initialState = {}) => {
     let responseToQuestionMappingObj = {};
     // Cache found response values for faster access.
     let foundResponseCache = {};
+    // Set up the questionProcessor object
+    let questionProcessor = null;
 
     function updateStateKey(value, questionID, key = null) {
 
@@ -126,7 +128,7 @@ const createStateManager = (store, initialState = {}) => {
 
         // Handle 'prefer not to answer' and 'not sure' types of responses where other responses are removed programmatically (and they don't exist yet).
         // Handle the cases for string, Array, and Object types.
-        removeResponseItem: (questionID, key, numKeys, elementValue) => {
+        removeResponseItem: (questionID, key, numKeys) => {
             if (typeof questionID !== 'string' || (key != null && typeof key !== 'string')) {
                 throw new Error('StateManager -> removeItem: questionID and key must be strings');
             }
@@ -174,6 +176,7 @@ const createStateManager = (store, initialState = {}) => {
             responseKeysObj = {};
             responseToQuestionMappingObj = {};
             foundResponseCache = {};
+            questionProcessor = null;
         },
 
         // Set the active question state to the provided questionID. Important for: (1) return to survey and (2) 'Back' button click.
@@ -182,7 +185,7 @@ const createStateManager = (store, initialState = {}) => {
                 throw new Error('StateManager -> setActiveQuestionState: Key must be a string');
             }
 
-            if (surveyState.hasOwnProperty(questionID)) {
+            if (Object.prototype.hasOwnProperty.call(surveyState, questionID)) {
                 activeQuestionState = { [questionID]: surveyState[questionID] };
             }
         },
@@ -261,6 +264,14 @@ const createStateManager = (store, initialState = {}) => {
             }
         },
 
+        setQuestionProcessor: (processor) => {
+            questionProcessor = processor;
+        },
+
+        getQuestionProcessor: () => {
+            return questionProcessor;
+        },
+
         // Set the num response keys for a question when the setFormValue function first triggers for the question.
         setNumResponseInputs: (key, value) => {
             responseKeysObj[key] = value;
@@ -303,7 +314,7 @@ const createStateManager = (store, initialState = {}) => {
                 : responseKey;
 
             // Check the cache first for a found response value.
-            if (foundResponseCache.hasOwnProperty(compoundKey)) {
+            if (Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
                 return foundResponseCache[compoundKey];
             }
 
@@ -345,7 +356,7 @@ const createStateManager = (store, initialState = {}) => {
             }
 
             // Check the previous results for known keys (these keys are accesesed on survey load for some surveys).
-            if (moduleParams.previousResults.hasOwnProperty(responseKey)) {
+            if (Object.prototype.hasOwnProperty.call(moduleParams.previousResults, responseKey)) {
                 console.log('RETURNING (previousResults):', responseKey, moduleParams.previousResults[responseKey]); // Temp for debugging
                 return moduleParams.previousResults[responseKey].toString();
             }

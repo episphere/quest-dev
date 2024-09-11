@@ -1,26 +1,28 @@
-import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestionInit, moduleParams } from "./questionnaire.js";
+import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestion, moduleParams } from "./questionnaire.js";
 import { clearValidationError } from "./validate.js";
 import { nextClick, previousClicked } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
+
+// TODO: all document level access can be scoped down to the moduleParams.questDiv level
 
 // // Debounced version of handleOtherTextInputKeyPress
 // const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
 
 // Add event listeners to the div element (questContainer) -> delegate events to the parent div.
 // Note: 'focusout' is used instead of 'blur' because 'blur' does not bubble to the parent div.
-export function addEventListeners(questContainer) {
-  questContainer.addEventListener('click', handleClickEvent);
-  questContainer.addEventListener('change', handleChangeEvent);
-  questContainer.addEventListener('keydown', handleKeydownEvent);
-  questContainer.addEventListener('keyup', handleKeyupEvent);
-  questContainer.addEventListener('input', handleInputEvent);
-  questContainer.addEventListener('focusout', handleBlurFocusoutEvent);
-  questContainer.addEventListener('submit', handleSubmitEvent);
+export function addEventListeners() {
+  moduleParams.questDiv.addEventListener('click', handleClickEvent);
+  moduleParams.questDiv.addEventListener('change', handleChangeEvent);
+  moduleParams.questDiv.addEventListener('keydown', handleKeydownEvent);
+  moduleParams.questDiv.addEventListener('keyup', handleKeyupEvent);
+  moduleParams.questDiv.addEventListener('input', handleInputEvent);
+  moduleParams.questDiv.addEventListener('focusout', handleBlurFocusoutEvent);
+  moduleParams.questDiv.addEventListener('submit', handleSubmitEvent);
 
   // Attach event listeners to modal and close buttons (for screen readers)
-  // Modals are at the document level, not embedded in the question.
-  const modal = document.getElementById('softModal');
-  const closeButton = document.getElementById('closeModal');
+  // Modals are at the questDiv level, not embedded in the question.
+  const modal = moduleParams.questDiv.querySelector('#softModal');
+  const closeButton = moduleParams.questDiv.querySelector('#closeModal');
 
   modal?.addEventListener('click', closeModalAndFocusQuestion);
   closeButton?.addEventListener('click', closeModalAndFocusQuestion);
@@ -84,7 +86,6 @@ function handleChangeEvent(event) {
     const isTable = target.closest('table') !== null;
 
     if (moduleParams.isWindowsEnvironment) {
-      
       if (isTable) {
         handleRadioCheckboxTableEvents(event);
       } else {
@@ -151,13 +152,13 @@ function handleInputEvent(event) {
   if (target.matches('input[type="text"], textarea')) {
     const label = target.closest('label');
     if (label) {
-      const radioCB = document.getElementById(label.htmlFor) || label.querySelector('input[type="radio"], input[type="checkbox"]');
+      const radioCB = label.querySelector(`#${label.htmlFor}`) || label.querySelector('input[type="radio"], input[type="checkbox"]');
       if (radioCB && (radioCB.type === 'radio' || radioCB.type === 'checkbox')) {
         // Check or uncheck the radio or checkbox based on the text input length.
         target.value.length > 0 ? radioCB.checked = true : radioCB.checked = false;
         radioAndCheckboxUpdate(radioCB);
         target.dataset.lastValue = target.value;
-        textboxinput(target);  // Ensure the text input is saved
+        textboxinput(target);
       }
     }
 
@@ -180,7 +181,7 @@ function handleSubmitEvent(event) {
 // Close the modal and focus on the question text.
 // Re-build the question text and focus management for screen readers.
 function closeModalAndFocusQuestion(event) {
-  const modal = document.getElementById('softModal');
+  const modal = moduleParams.questDiv.querySelector('#softModal');
   const isWindowClick = event.target === modal;
   const isButtonClick = ['close', 'modalCloseButton', 'modalContinueButton'].includes(event.target.id);
 
@@ -188,11 +189,11 @@ function closeModalAndFocusQuestion(event) {
     modal.style.display = 'none';
 
     // Find the active question
-    const activeQuestion = document.querySelector('.question.active');
+    const activeQuestion = moduleParams.questDiv.querySelector('.question.active');
 
     if (activeQuestion) {
       const isModalClose = true;
-      manageAccessibleQuestionInit(activeQuestion.querySelector('fieldset') || activeQuestion, isModalClose);
+      manageAccessibleQuestion(activeQuestion.querySelector('fieldset') || activeQuestion, isModalClose);
     }
   }
 }
@@ -229,7 +230,7 @@ function handleUpDownArrowKeys(event) {
 // Important for JAWS compatibility with text input fields in radio/checkbox groups.
 function focusNextElement(currentElement) {
   const focusableElements = 'a, button, input:not([type="hidden"]), label, select, textarea, [tabindex]:not([tabindex="-1"])';
-  const allFocusable = Array.from(document.querySelectorAll(focusableElements));
+  const allFocusable = Array.from(moduleParams.questDiv.querySelectorAll(focusableElements));
 
   const currentIndex = allFocusable.indexOf(currentElement);
   if (currentIndex !== -1) {
@@ -239,7 +240,7 @@ function focusNextElement(currentElement) {
     do {
       newIndex ++;
       nextElement = allFocusable[newIndex];
-    } while (nextElement && (nextElement === currentElement || (nextElement.tagName === 'INPUT' && nextElement.type === 'text' && document.activeElement === nextElement && directionIndex === -1)));
+    } while (nextElement && (nextElement === currentElement || (nextElement.tagName === 'INPUT' && nextElement.type === 'text' && document.activeElement === nextElement)));
 
     if (nextElement) {
       setTimeout(() => {
@@ -293,7 +294,7 @@ function handleRadioCheckboxTableEvents(event) {
 
     switch (radioOrCheckbox.type) {
       // If it's a radio click, focus the hidden element on the next question (the first column of the next row).
-      case 'radio':
+      case 'radio': {
 
         const nextRow = currentRow.nextElementSibling;
         // If next row exists, focus the question (the first cell in the next row).
@@ -303,12 +304,13 @@ function handleRadioCheckboxTableEvents(event) {
           : focusNextQuestionButton();
       
         break;
+      }
 
       // If it's a checkbox click, focus the hidden element on the selection so the user can continue making selections.
       // If middle of row, place focus back on the checkbox.
       // If end of row, focus the next question button so the user can continue.
       // If end of last row, focus the next question button so the user can continue.
-      case 'checkbox':
+      case 'checkbox': {
         updateAriaLiveSelectionAnnouncerTable(responseCell);
         const nextCell = responseCell.nextElementSibling;
         const isLastCellInRow = !nextCell;
@@ -320,7 +322,8 @@ function handleRadioCheckboxTableEvents(event) {
           focusSelectedCheckbox(responseCell);
         }
         break;
-
+      }
+      
       default:
         console.error('RadioCheckboxTableEvent: Invalid event type', event.type);
     }
@@ -329,7 +332,7 @@ function handleRadioCheckboxTableEvents(event) {
 
 // Update the aria-live region with the current selection announcement in a list (for screen readers).
 function updateAriaLiveSelectionAnnouncer(responseDiv) {
-    const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
+    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
     const label = responseDiv.querySelector('label');
     const input = responseDiv.querySelector('input[type="checkbox"], input[type="radio"]');
 
@@ -353,7 +356,7 @@ function updateAriaLiveSelectionAnnouncer(responseDiv) {
 // Update the aria-live region with the current selection announcement in a table (for screen readers).
 // Note: cell-specific targeting is required for dependable selection announcements.
 function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
-  const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
+  const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
   const cell = responseDiv.closest('td'); // Get the closest table cell (td)
   const label = cell?.querySelector('label'); // Find the label within the cell
   const input = cell?.querySelector('input[type="checkbox"], input[type="radio"]'); 
@@ -394,7 +397,7 @@ function focusNextQuestionButton() {
     const focusHelper = getFocusHelper();
     if (!focusHelper) return;
 
-    const activeQuestion = document.querySelector('form.question.active');
+    const activeQuestion = moduleParams.questDiv.querySelector('.question.active');
     if (!activeQuestion) {
       console.error('Active question not found', document.activeElement);
       return;
@@ -422,7 +425,7 @@ function focusSelectedCheckbox(responseCell) {
 }
 
 function getFocusHelper() {
-  const focusHelper = document.getElementById('srFocusHelper');
+  const focusHelper = moduleParams.questDiv.querySelector('#srFocusHelper');
   if (!focusHelper) {
     console.error('Focus helper not found');
     return null;
@@ -432,7 +435,7 @@ function getFocusHelper() {
 }
 
 function clearSelectionAnnouncement() {
-  const liveRegion = document.getElementById('ariaLiveSelectionAnnouncer');
+  const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
   if (liveRegion) {
     liveRegion.textContent = '';
   }
@@ -459,7 +462,7 @@ async function stopSubmit(event) {
       break;
 
     case 'submitSurvey':
-      new bootstrap.Modal(document.getElementById('submitModal')).show();
+      new bootstrap.Modal(moduleParams.questDiv.querySelector('#submitModal')).show();
       break;
 
     case 'next':
@@ -495,26 +498,26 @@ function resetChildren(target) {
   }
 }
 
-// Debounce the input event to prevent multiple rapid-fire events.
-function debounce(func, wait) {
-  let timeout;
-  return function execute(...args) {
-      const later = () => {
-          clearTimeout(timeout);
-          func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-  };
-}
+// // Debounce the input event to prevent multiple rapid-fire events.
+// function debounce(func, wait) {
+//   let timeout;
+//   return function execute(...args) {
+//       const later = () => {
+//           clearTimeout(timeout);
+//           func(...args);
+//       };
+//       clearTimeout(timeout);
+//       timeout = setTimeout(later, wait);
+//   };
+// }
 
 function addSubmitSurveyListener() {
-  document.getElementById("submitModalButton").onclick = async () => {
-    const lastBackButton = document.getElementById('lastBackButton');
+  moduleParams.questDiv.querySelector('#submitModalButton').onclick = async () => {
+    const lastBackButton = moduleParams.questDiv.querySelector('#lastBackButton');
     if (lastBackButton) {
       lastBackButton.remove();
     }
-    const submitButton = document.getElementById('submitButton');
+    const submitButton = moduleParams.questDiv.querySelector('#submitButton');
     if (submitButton) {
       submitButton.remove();
     }

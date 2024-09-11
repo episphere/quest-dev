@@ -69,6 +69,11 @@ function buildHtmlTable(grid_obj, button_text_obj){
   let shared_text = grid_text_displayif(grid_obj.shared_text)
   shared_text = grid_replace_piped_variables(shared_text)  
   
+  // const questionIDRegex = /id="([^"]+)"/;
+  // const match = grid_obj.args.match(questionIDRegex);
+  // const questionID = match ? match[1] : '';
+  // [${ questionID }] | GRID |
+  
   // Begin form and set up accessibility description.
   // Ask the main question, then begin the table structure (this semantic HTML helps screen readers).
   let grid_html = `
@@ -114,6 +119,7 @@ function buildHtmlTable(grid_obj, button_text_obj){
 
   grid_html+=`</tbody></table>${getButtonDiv(button_text_obj, true)}</form>`;
   
+  //console.log('GRID HTML', grid_html);
   return grid_html;
 }
 
@@ -121,6 +127,7 @@ function buildHtmlTable(grid_obj, button_text_obj){
 // the regex for a grid is /\|grid\|([^|]*?)\|([^|]*?)\|([^|]*?)\|
 // you  can use the /g and then pass it to the function one at a time...
 export function parseGrid(text, ...args) {
+  //console.log('PARSE GRID', text, args);
   const button_text_obj = args.pop();
   let grid_obj = {};
   //  look for key elements of the text
@@ -178,5 +185,7 @@ export function parseGrid(text, ...args) {
       }
     }
   }
+
+  // TODO: work in Progress. This builds the grid HTML
   return buildHtmlTable(grid_obj, button_text_obj);
 }

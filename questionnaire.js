@@ -11,11 +11,7 @@ export const moduleParams = {};
 
 // The questionQueue is an Tree which contains
 // the question ids in the order they should be displayed.
-export const questionQueue = new Tree(); // TODO: rename to questionTree for future clarity?
-
-export function isFirstQuestion() {
-  return questionQueue.isEmpty() || questionQueue.isFirst();
-}
+export const questionQueue = new Tree();
 
 /**
  * Determine the storage format for the response data.
@@ -26,7 +22,6 @@ export function isFirstQuestion() {
  * @returns {number} - the number of response keys.
  */
 
-//TODO: test for grid questions
 function getNumResponseInputs(form) {
   const responseInputs = new Set();
 
@@ -155,8 +150,7 @@ function exchangeValue(element, attrName, newAttrName) {
   }
 
   if (attr) {
-    let isnum = /^[\d\.]+$/.test(attr);
-    if (!isnum) {
+    if (isNaN(attr)) {
       let tmpVal = evaluateCondition(attr);
       // note: tmpVal==tmpVal means that tmpVal is Not Nan
       if (tmpVal == undefined || tmpVal == null || tmpVal != tmpVal) {
@@ -460,8 +454,8 @@ function clearSelection(inputElement) {
         const elementValue = element.value;
         const numKeys = appState.getNumResponseInputs(element.form.id);
         const vals = appState.getItem(inputElement.form.id) ?? {};
-        if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1]) && vals[key1].includes(elementValue)) {
-          appState.removeResponseItem(element.form.id, key1, numKeys, elementValue);
+        if (Object.prototype.hasOwnProperty.call(vals, key1) && Array.isArray(vals[key1]) && vals[key1].includes(elementValue)) {
+          appState.removeResponseItem(element.form.id, key1, numKeys);
         }
       }
     });
@@ -604,7 +598,7 @@ async function analyzeFormResponses(norp) {
     } else if ((numBlankResponses == 0) == true && hasNoResponses == false) {
       numBlankResponses = 0;
     } else if ((numBlankResponses == 0) == false && hasNoResponses == true) {
-      numBlankResponses = numBlankResponses;
+      // do nothing
     } else {
       numBlankResponses = 0;
     }
@@ -617,22 +611,22 @@ async function analyzeFormResponses(norp) {
   await nextPage(norp);
 }
 
-function getNextQuestionId(currentFormElement) {
-  // get the next question from the questionQueue
-  // if it exists... otherwise get the next look at the
-  // markdown and get the question follows.
+/**
+ * Get the next question from the questionQueue if it exists. Otherwise get the next sequential question from the markdown.
+ * @returns {string} - the ID of the next question.
+ */
+function getNextQuestionId() {
   let nextQuestionNode = questionQueue.next();
+  
   if (nextQuestionNode.done) {
-    // We are at the end of the question queue...
-    // get the next element from the markdown...
-    let tmp = currentFormElement.nextElementSibling;
-    // we are at a question that should be displayed add it to the queue and
-    // make it the current node.
-    questionQueue.add(tmp.id);
+    const appState = getStateManager();
+    const questionProcessor = appState.getQuestionProcessor();
+    const nextSequentialQuestionEle = questionProcessor.findQuestion(undefined);
+    questionQueue.add(nextSequentialQuestionEle.id);
     nextQuestionNode = questionQueue.next();
   }
 
-  return nextQuestionNode.value;
+  return nextQuestionNode.value.value;
 }
 
 // TODO: move these to a separate file
@@ -651,26 +645,27 @@ export function hideLoadingIndicator() {
 }
 
 // norp == next or previous button (which ever is clicked...)
+// The root is defined as null, so if the question is not the same as the
+// current value in the questionQueue. Add it.  Only the root should be effected.
+// NOTE: if the root has no children, add the current question to the queue
+// and call next().
 async function nextPage(norp) {
-  // The root is defined as null, so if the question is not the same as the
-  // current value in the questionQueue. Add it.  Only the root should be effected.
-  // NOTE: if the root has no children, add the current question to the queue
-  // and call next().
-
-  const appState = getStateManager();
-  await appState.syncToStore();
-
   const questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
     x.value = "true"
     setResponsesInState(questionElement, x.value, x.id)
   });
 
-  if (checkValid(questionElement) == false) {
+  const appState = getStateManager();
+  await appState.syncToStore();
+  const questionProcessor = appState.getQuestionProcessor();
+
+  if (checkValid(questionElement) === false) {
     return null;
   }
 
   if (questionQueue.isEmpty()) {
+    console.log('QUESTION QUEUE IS EMPTY');
     questionQueue.add(questionElement.id);
     questionQueue.next();
   }
@@ -678,73 +673,100 @@ async function nextPage(norp) {
   // check if we need to add questions to the question queue
   checkForSkips(questionElement);
 
-  let nextQuestionId = getNextQuestionId(questionElement);
-  // get the actual HTML element.
-  let nextElement = document.getElementById(nextQuestionId.value);
-  nextElement = exitLoop(nextElement);
+  let nextQuestionId = getNextQuestionId();  
+  let nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
+  nextQuestionEle = exitLoop(nextQuestionEle);
 
   // before we add the next question to the queue...
   // check for the displayif status...
-  while (nextElement?.hasAttribute("displayif")) {
-    // not sure what to do if the next element is is not a question ...
-    if (nextElement.classList.contains("question")) {
-      let display = evaluateCondition(nextElement.getAttribute("displayif"));
-      if (display) break;
-      if (nextElement.id.substring(0, 9) != "_CONTINUE") questionQueue.pop();
+  while (nextQuestionEle?.hasAttribute("displayif")) {
+    if (nextQuestionEle.classList.contains("question")) {
+      let shouldDisplayQuestion = evaluateCondition(nextQuestionEle.getAttribute("displayif"));
+      if (shouldDisplayQuestion) break;
 
-      let nextQuestionId = nextElement.dataset.nodisplay_skip;
-      if (nextElement.dataset.nodisplay_skip) {
-        questionQueue.add(nextElement.dataset.nodisplay_skip);
+      if (nextQuestionEle.id.substring(0, 9) != "_CONTINUE") questionQueue.pop();
+
+      let nextQuestionId = nextQuestionEle.dataset.nodisplay_skip;
+      if (nextQuestionEle.dataset.nodisplay_skip) {
+        questionQueue.add(nextQuestionEle.dataset.nodisplay_skip);
       }
-      nextQuestionId = getNextQuestionId(nextElement);
 
-      nextElement = document.getElementById(nextQuestionId.value);
-      nextElement = exitLoop(nextElement);
+      nextQuestionId = getNextQuestionId();
+      nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
+      nextQuestionEle = exitLoop(nextQuestionEle);
     } else {
-      console.error(" ============= next element is not a question...  not sure what went wrong...");
+      console.error(`Error (nextPage): nextQuestionEle is not a question element. ${nextQuestionEle}`);
       console.trace();
     }
   }
 
-  //hide the current question
-  questionElement.classList.remove("active");
-
-  displayQuestion(nextElement);
-  window.scrollTo(0, 0);
+  swapVisibleQuestion(nextQuestionEle);
 }
 
-function exitLoop(nextElement) {
-  if (!nextElement) {
-    console.error("nextElement is null or undefined");
-    return null;
+function exitLoop(nextQuestionEle) {
+  if (!nextQuestionEle || !nextQuestionEle.hasAttribute("firstquestion")) {
+    return nextQuestionEle;
   }
 
-  if (nextElement.hasAttribute("firstquestion")) {
-    const loopMaxElement = document.getElementById(nextElement.getAttribute("loopmax"));
-    if (!loopMaxElement) {
-      console.error(`LoopMaxElement is null or undefined for ${nextElement.id}`);
-      return nextElement;
-    }
+  const loopMaxElement = nextQuestionEle.closest(`#${nextQuestionEle.getAttribute("loopmax")}`);
+  if (!loopMaxElement) {
+    console.error(`LoopMaxElement is null or undefined for ${nextQuestionEle.id}`);
+    return nextQuestionEle;
+  }
 
-    const appState = getStateManager();
-    const loopMax = appState.getItem(loopMaxElement.id);
-    const firstQuestion = parseInt(nextElement.getAttribute("firstquestion"));
-    const loopIndex = parseInt(nextElement.getAttribute("loopindx"));
+  const appState = getStateManager();
+  const loopMax = appState.getItem(loopMaxElement.id);
+  const firstQuestion = parseInt(nextQuestionEle.getAttribute("firstquestion"));
+  const loopIndex = parseInt(nextQuestionEle.getAttribute("loopindx"));
 
-    if (isNaN(loopMax) || isNaN(firstQuestion) || isNaN(loopIndex)) {
-      console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextElement.id}: loopMax=${loopMax}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
-      return nextElement;
-    }
+  if (isNaN(loopMax) || isNaN(firstQuestion) || isNaN(loopIndex)) {
+    console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextQuestionEle.id}: loopMax=${loopMax}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
+    return nextQuestionEle;
+  }
 
-    if (math.evaluate(firstQuestion > loopMax)) {
-      questionQueue.pop();
-      questionQueue.add(`_CONTINUE${loopIndex}_DONE`);
-      const nextQuestionId = questionQueue.next().value;
-      nextElement = document.getElementById(nextQuestionId.value);
-    }
+  if (math.evaluate(firstQuestion > loopMax)) {
+    questionQueue.pop();
+    questionQueue.add(`_CONTINUE${loopIndex}_DONE`);
+    const nextQuestionId = questionQueue.next().value.value;
+    const questionProcessor = appState.getQuestionProcessor();
+    console.log9('TODO: TEST THIS (exitLoop)', nextQuestionId);
+    nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
+    // TODO: handle this with questionProcessor
+    //nextQuestionEle = document.getElementById(nextQuestionId.value);
   }
   
-  return nextElement;
+  return nextQuestionEle;
+}
+
+
+/**
+ * Update the active question in the DOM.
+ * Identifies the existing question and swaps it with the new question.
+ * If an existing question is not found (this happens on startup), the new question is appended to the parent div.
+ * @param {HTMLElement} questDiv - The parent div housing the Quest UI.
+ * @param {string} questionHTMLString - The HTML string of the question to be swapped in.
+ */
+export function swapVisibleQuestion(questionEle) {
+  console.log('SWAP VISIBLE QUESTION:', questionEle);
+  const questDiv = moduleParams.questDiv;
+
+  const existingQuestionEle = questDiv.querySelector('.question');
+  if (existingQuestionEle) {
+    questDiv.replaceChild(questionEle, existingQuestionEle);
+  } else {
+    // Handle the survey loading case (first quesiton added).
+    const modalEle = questDiv.querySelector('.modal');
+    modalEle
+      ? questDiv.insertBefore(questionEle, modalEle)
+      : questDiv.appendChild(questionEle);
+  }
+
+  // Ensure the question is appended to the active DOM before calling displayQuestion for accessibility.
+  displayQuestion(questionEle);
+  //questionEle.scrollIntoView({ behavior: 'smooth' });
+  //window.scrollTo({top: 0, left: 0, behavior: 'smooth'});
+
+  return questionEle;
 }
 
 function removeExtraBRElements(rootElement) {
@@ -773,32 +795,32 @@ function removeExtraBRElements(rootElement) {
 // Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
 
-export function displayQuestion(nextElement) {
+export function displayQuestion(questionElement) {
   // Fail gently in the renderer tool.
-  if (!nextElement && !moduleParams.renderObj.activate) return;
+  if (!questionElement && !moduleParams.renderObj.activate) return;
   
   const appState = getStateManager();
   
   questionFocusSet = false;
 
   // When the input ID isn't the quesiton ID (e.g. YYYY-MM input), find the parent question ID
-  const forIDElementArray = nextElement.querySelectorAll("span[forid]");
+  const forIDElementArray = questionElement.querySelectorAll("span[forid]");
   if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
 
-  [...nextElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
+  [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
       (x.max = document.getElementById(x.dataset.maxValidationDependency).value)); // TODO: (rm document search)
 
-  [...nextElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) =>
+  [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) =>
       (x.min = document.getElementById(x.dataset.minValidationDependency).value)); // TODO: (rm document search)
 
   // check all responses for next question
-  [...nextElement.querySelectorAll('[displayif]')].forEach((elm) => {
+  [...questionElement.querySelectorAll('[displayif]')].forEach((elm) => {
     let f = evaluateCondition(elm.getAttribute("displayif"));
     elm.style.display = f ? null : "none";
   });
 
   // check for displayif spans...
-  [...nextElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
+  [...questionElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
     const textContent = elm.textContent;
     const isPlainText = textContent === elm.innerHTML;
 
@@ -823,14 +845,14 @@ export function displayQuestion(nextElement) {
     }
   });
 
-  [...nextElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
+  [...questionElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
       let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
       elm.innerText=f;
   });
 
   // ISSUE: 403
   // update {$e:}/{$u} and and {$} elements in grids when the user displays the question ...
-  [...nextElement.querySelectorAll("[data-gridreplace]")].forEach((e) => {
+  [...questionElement.querySelectorAll("[data-gridreplace]")].forEach((e) => {
     if (e.dataset.gridreplacetype == "_val") {
       e.innerText = math._value(decodeURIComponent(e.dataset.gridreplace))
     } else {
@@ -839,7 +861,7 @@ export function displayQuestion(nextElement) {
   });
   
   // Check if grid elements need to be shown. Elm is a <tr>. If f !== true, remove the row (elm) from the DOM.
-  [...nextElement.querySelectorAll("[data-gridrow][data-displayif]")].forEach((elm) => {
+  [...questionElement.querySelectorAll("[data-gridrow][data-displayif]")].forEach((elm) => {
     const f = evaluateCondition(decodeURIComponent(elm.dataset.displayif));
     if (f !== true) {
       elm.dataset.hidden = "true";
@@ -851,89 +873,108 @@ export function displayQuestion(nextElement) {
   });
 
   //Replacing all default HTML form validations with datasets
-  [...nextElement.querySelectorAll("input[required]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[required]")].forEach((element) => {
     if (element.hasAttribute("required")) {
       element.removeAttribute("required");
       element.dataset.required = "true";
     }
   });
 
-  [...nextElement.querySelectorAll("input[min]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[min]")].forEach((element) => {
     exchangeValue(element, "min", "data-min");
   });
-  [...nextElement.querySelectorAll("input[max]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[max]")].forEach((element) => {
     exchangeValue(element, "max", "data-max")
   });
   // supporting legacy code... dont use minval
-  [...nextElement.querySelectorAll("input[minval]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[minval]")].forEach((element) => {
     exchangeValue(element, "minval", "data-min");
   });
-  [...nextElement.querySelectorAll("input[maxval]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[maxval]")].forEach((element) => {
     exchangeValue(element, "maxval", "data-max")
   });
 
-  [...nextElement.querySelectorAll("input[data-min]")].forEach((element) =>
+  [...questionElement.querySelectorAll("input[data-min]")].forEach((element) =>
     exchangeValue(element, "data-min", "data-min")
   );
-  [...nextElement.querySelectorAll("input[data-max]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[data-max]")].forEach((element) => {
     exchangeValue(element, "data-max", "data-max");
   });
 
   // rewrite the data-(min|max)-date-uneval with a calulated value
-  [...nextElement.querySelectorAll("input[data-min-date-uneval]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[data-min-date-uneval]")].forEach((element) => {
     exchangeValue(element, "data-min-date-uneval", "data-min-date");
     exchangeValue(element, "data-min-date-uneval", "min");
   });
 
-  [...nextElement.querySelectorAll("input[data-max-date-uneval]")].forEach((element) => {
+  [...questionElement.querySelectorAll("input[data-max-date-uneval]")].forEach((element) => {
     exchangeValue(element, "data-max-date-uneval", "data-max-date");
     exchangeValue(element, "data-max-date-uneval", "max");
   });
 
-  nextElement.querySelectorAll("[data-displaylist-args]").forEach(element => {
+  questionElement.querySelectorAll("[data-displaylist-args]").forEach(element => {
     element.innerHTML = math.existingValues(element.dataset.displaylistArgs)
   });
 
   // handle unsupported 'month' input type (Safari for MacOS and Firefox)
-  const monthInputs = nextElement.querySelectorAll("input[type='month']");
+  const monthInputs = questionElement.querySelectorAll("input[type='month']");
   if (monthInputs.length > 0 && !isMonthInputSupported()) {
     monthInputs.forEach(input => {
       input.setAttribute('placeholder', 'YYYY-MM');
     });
   }
 
-  removeExtraBRElements(nextElement);
+  removeExtraBRElements(questionElement);
 
   //Sets the brs after non-displays to not show as well
-  [...nextElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
+  [...questionElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
     e.style = "display: none"
   });
   
   // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
-  [...nextElement.querySelectorAll("br")].forEach((br) => {
+  [...questionElement.querySelectorAll("br")].forEach((br) => {
     br.setAttribute("aria-hidden", "true");
   });
-
-  //move to the next question...
-  nextElement.classList.add("active");
 
   // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
   // The tabindex leads to a negative user experience in VoiceOver (macOS).
   if (moduleParams.isWindowsEnvironment) {
-    [...nextElement.querySelectorAll("div.response")].forEach((responseElement) => {
+    [...questionElement.querySelectorAll("div.response")].forEach((responseElement) => {
       responseElement.setAttribute("tabindex", "0");
     });
   }
 
-  // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
-  if (moduleParams.renderObj?.activate) manageAccessibleQuestionInit(nextElement.querySelector('fieldset') || nextElement);
+  appState.setActiveQuestionState(questionElement.id);
 
-  appState.setActiveQuestionState(nextElement.id);
+  // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
+  if (moduleParams.renderObj?.activate) {
+    handleUserScrollLocation();
+    setTimeout(() => {
+      manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement);
+    }, 500);
+  }
+}
+
+function handleUserScrollLocation() {
+  const rootElement = document.getElementById('root') || moduleParams.questDiv.parentElement || moduleParams.questDiv;
+  if (!isRootElementInViewport(rootElement)) {
+    rootElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function isRootElementInViewport(rootElement) {
+  const rect = rootElement.getBoundingClientRect();
+  const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+  const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+  const inVerticalView = rect.top >= 0 && rect.bottom <= windowHeight;
+  const inHorizontalView = rect.left >= 0 && rect.right <= windowWidth;
+
+  return inVerticalView && inHorizontalView;
 }
 
 // Initialize the question text and focus management for screen readers.
 // This drives the screen reader's question announcement and focus when a question is loaded.
-export function manageAccessibleQuestionInit(fieldsetEle, isModalClose = false) {
+export function manageAccessibleQuestion(fieldsetEle, isModalClose = false) {
   //reset the questionFocusSet flag on modal close so the question is read by the screen reader.
   if (isModalClose) questionFocusSet = false;
 
@@ -1076,10 +1117,10 @@ function isMonthInputSupported() {
   return input.type === 'month';
 }
 
-export async function previousClicked(norp) {
-  // get the previousElement...
+export async function previousClicked() {
+  // Get the previousElement from questionQueue
   let pv = questionQueue.previous();
-  while (pv.value.value.substring(0, 9) == "_CONTINUE") {
+  while (pv.value.value.substring(0, 9) === "_CONTINUE") {
     pv = questionQueue.previous();
   }
 
@@ -1087,14 +1128,12 @@ export async function previousClicked(norp) {
 
   const appState = getStateManager();
   await appState.syncToStore();
+
+  const questionProcessor = appState.getQuestionProcessor();
+  const previousQuestionEle = questionProcessor.loadPreviousQuestion(previousElementID);
   
-  let prevElement = document.getElementById(previousElementID);
-  norp.form.classList.remove("active");
-
+  swapVisibleQuestion(previousQuestionEle);
   restoreResponses(appState.getSurveyState(), previousElementID);
-  displayQuestion(prevElement)
-
-  return prevElement;
 }
 
 // this function just adds questions to the
@@ -1106,9 +1145,7 @@ function checkForSkips(questionElement) {
   let numSelected = selectedElements.filter((x) => x.type != "hidden").length;
   // if there are NO non-hidden responses ...
   if (numSelected == 0) {
-    // there may be either a noResponse, a default response
-    // or both or neither...
-
+    // there may be either a noResponse, a default response, both, or neither...
     // sort array so that noResponse comes first..
     // noResponse has a classlist length of 1/default =0
     let classSort = function (a, b) {
@@ -1159,7 +1196,7 @@ export function gridHasAllAnswers(questionFieldset) {
   let gridRows = Array.from(questionFieldset.querySelectorAll("tr[data-gridrow='true']"));
 
   const checked = (element) => element.checked;
-  return gridRows.reduce( (acc,current,index) => {
+  return gridRows.reduce( (acc,current) => {
     if (current.style.display=='none') return acc // skip hidden rows
 
     let name = current.dataset.questionId
@@ -1171,7 +1208,7 @@ export function gridHasAllAnswers(questionFieldset) {
 export function numberOfUnansweredGridQuestions(questionFieldset) {
   let gridRows = Array.from(questionFieldset.querySelectorAll("tr[data-gridrow='true']"));
   const checked = (element) => element.checked;
-  return gridRows.reduce( (acc,current,index) => {
+  return gridRows.reduce( (acc,current) => {
     if (current.style.display=='none') return acc // skip hidden rows
 
     let name = current.dataset.questionId
@@ -1211,7 +1248,9 @@ export function getSelectedResponses(questionElement) {
 }
 
 // RegExp to segment text conditions passed in as a string with '[', '(', ')', ',', and ']'. https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
-const evaluateConditionRegex = /[\(\),]/g;
+// TODO: test updated regexp
+//const evaluateConditionRegex = /[\(\),]/g;
+const evaluateConditionRegex = /[(),]/g;
 
 /**
  * Try to evaluate using mathjs. Use fallback evaluation in the catch block.
@@ -1226,7 +1265,7 @@ export function evaluateCondition(evalString) {
 
   try {
     return math.evaluate(evalString)
-  } catch (err) {
+  } catch (err) { //eslint-disable-line no-unused-vars
     console.log('Using custom evaluation for:', evalString);
     
     let displayIfStack = [];
@@ -1313,4 +1352,4 @@ function evaluateArg(arg, appState) {
 }
 
 // TODO: get rid of Window dependency
-window.questionQueue = questionQueue
+//window.questionQueue = questionQueue

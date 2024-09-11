@@ -1,133 +1,30 @@
-import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
 import { moduleParams } from './questionnaire.js';
 import { initializeCustomMathJSFunctions, math } from './customMathJSImplementation.js';
 import { initializeStateManager } from './stateManager.js';
-
-let questName = 'Questionnaire';
+import { QuestionProcessor } from './questionHandler.js';
+import { getStateManager } from './stateManager.js';
 
 /**
- * Initialize the survey. Route the survey to the appropriate initialization function based on the renderObj configuration.
+ * Initialize the survey: state manager, precalculated values, mathJS implementation, and questionProcessor
  * moduleParams.renderObj.activate determines if the survey is embedded in an application or found in the included rendering tool.
+ * If activate is true, the survey is embedded and the retrieve function and CSS files are fetched.
+ * If activate is false, the survey is standalone in the renderer tool.
  * @param {String} contents - The markdown contents of the survey prior to transformation.
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
 export async function initSurvey(contents) {
-    // Initialize the state manager. This will drive all data flow and UI updating in the app.
     initializeStateManager(moduleParams.renderObj.store);
     initializeCustomMathJSFunctions();
 
-    const precalculated_values = getPreCalculatedValues(contents);    
+    const precalculated_values = getPreCalculatedValues(contents);
+    const questionProcessor = new QuestionProcessor(contents, precalculated_values, moduleParams.i18n);
+    
+    const stateManager = getStateManager();
+    stateManager.setQuestionProcessor(questionProcessor);
+
     return moduleParams.renderObj?.activate
-        ? await initEmbeddedSurvey(contents, precalculated_values)
-        : await initRendererSurvey(contents, precalculated_values);
-}
-
-/**
- * Initialize the survey for an embedded application.
- * @param {String} contents - The markdown contents of the survey prior to transformation.
- * @param {Object} precalculated_values - The precalculated values for the survey (values that aren't compatible with service worker calculation).
- * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
- */
-async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurvey) {
-    // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
-    // Set the base path for the module. This is used to fetch the stylesheets in init -> .
-    moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
-        ? 'https://episphere.github.io/quest-dev/'
-        : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
-    
-    // Fetch the resources for the survey. Await completion later in the routine.
-    const retrievedDataPromise = fetchAndProcessResources();
-
-    // Initialize the worker and wait for ready status.
-    const transformMarkdownWorker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
-    transformMarkdownWorker.postMessage({ command: 'initialize' });
-    
-    const workerReadyPromise = new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            reject(new Error('Worker initialization timed out'));
-        }, 2000); // Set timeout for worker initialization
-
-        transformMarkdownWorker.onmessage = (event) => {
-            if (event.data === 'ready') {
-                clearTimeout(timeout);
-                resolve();
-            }
-        };
-
-        transformMarkdownWorker.onerror = (error) => {
-            clearTimeout(timeout);
-            reject(new Error(`Worker initialization failed: ${error.message}`));
-        };
-    });
-
-    // Wait for the worker to initialize. If the worker fails to initialize, fallback to inline processing.
-    try {
-        await workerReadyPromise;
-    } catch (error) {
-        console.error('Error initializing transformMarkdownWorker. Fallback to inline processing:', error);
-        transformMarkdownWorker.terminate();
-
-        [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
-        const retrievedData = await retrievedDataPromise;
-        return [contents, questName, retrievedData];
-    }
-
-    // Post the transform command to the worker.
-    transformMarkdownWorker.postMessage({ command: 'transform', data: [contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey] });
-
-    const transformContentsWorkerPromise = new Promise((resolve) => {
-        let isPromiseResolved = false;
-        const timeout = setTimeout(() => {
-            if (!isPromiseResolved) {
-                const error = new Error('Worker timed out');
-                transformMarkdownWorker.onerror(error);
-            }
-        }, 10000); // 10 seconds
-
-        transformMarkdownWorker.onmessage = (messageResponse) => {
-            if (!isPromiseResolved && messageResponse.data.command === 'transformDone') {
-                clearTimeout(timeout);
-                isPromiseResolved = true;
-
-                [contents, questName] = messageResponse.data.result;
-
-                transformMarkdownWorker.terminate();
-                resolve();
-            }
-        };
-
-        transformMarkdownWorker.onerror = (error) => {
-            console.error('Error in transformMarkdownWorker. Fallback to inline processing:', error);
-
-            if (!isPromiseResolved) {
-                clearTimeout(timeout);
-                isPromiseResolved = true;
-
-                [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
-
-                transformMarkdownWorker.terminate();
-                resolve();
-            }
-        };
-    });
-
-    // Wait for the retrievedData fetch and worker completion.
-    const [retrievedData] = await Promise.all([retrievedDataPromise, transformContentsWorkerPromise]);
-
-    return [contents, questName, retrievedData];
-}
-
-/**
- * The renderer doesn't use the service worker, so processing is handled inline.
- * @param {String} contents - The markdown contents of the survey prior to transformation.
- * @param {Object} precalculated_values - The precalculated values for the survey.
- * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
- */
-async function initRendererSurvey(contents, precalculated_values) {
-    [contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n);
-
-    const retrievedData = null; // No retrieve function for the renderer and styling is referenced elsewhere (nothing to do here).
-    return [contents, questName, retrievedData];
+        ? await fetchAndProcessResources()
+        : null;
 }
 
 /**
@@ -200,7 +97,7 @@ function getPreCalculatedValues(contents) {
     };
 
     // Find all user variables in the questText and add them to precalculated_values.
-    [...contents.matchAll(/\{\$u:(\w+)}/g)].forEach(([match, varName]) => {
+    [...contents.matchAll(/\{\$u:(\w+)}/g)].forEach(([, varName]) => {
         precalculated_values[varName] = math._value(varName);
     });
 

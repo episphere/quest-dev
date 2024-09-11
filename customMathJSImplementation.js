@@ -240,29 +240,30 @@ export const customMathJSFunctions = {
   },
 
   // Refactor once we have individual question DOM structure. Consider querying on init and storing in miscState. markdown func is 'noneSelected'.
-  isSelected: function (id) {
-    console.warn('TODO: (isSelected) update for single-question DOM structure', id);
-    const match = id.match(stripIDSuffixRegex);
+  // id is the id of the specific radio button or checkbox. This is evaluated on a per-id basis, so if a row
+  // has multiple radio buttons or checkboxes, each radio button will be evaluated separately.
+  isSelected: function (radioOrCheckboxID) {
+    // Get the value of the cell input for the radio or checkbox from the form - table - tbody - tr - td - input structure in the QuestionProcessor's questions array.
+    const questionProcessor = this.appState.getQuestionProcessor();
+    const cellInputValue = questionProcessor.findGridRadioCheckboxEle(radioOrCheckboxID);
+    if (!cellInputValue) {
+      return false;
+    }
+    
+    const match = radioOrCheckboxID.match(stripIDSuffixRegex);
     if (!match || !match[1]) return false;
     
-    const responseValue = this.appState.findResponseValue(match[1]);
-    if (!responseValue) return false;
+    const baseRadioCheckboxID = match[1];
+    const responseValue = this.appState.findResponseValue(baseRadioCheckboxID);
 
-    const baseID = match[1];
-    const cellInputValue = document.getElementById(id)
-      ?.form
-      ?.querySelector(`table tbody tr[data-question-id="${baseID}"] td[data-question-id="${baseID}"] input[id="${id}"]`)
-      ?.value;
-
-    if (!cellInputValue) {
-      console.error('CELL INPUT VALUE NOT FOUND:', id);
+    if (!responseValue) {
       return false;
     }
 
     return cellInputValue === responseValue;
   },
 
-  someSelected: function (...ids) { // TODO: test. this is impacted by the isSelected changes.
+  someSelected: function (...ids) {
     return (ids.some(id => this.isSelected(id)))
   },
 
