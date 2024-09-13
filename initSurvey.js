@@ -1,5 +1,7 @@
 import { transformMarkdownToHTML } from './transformMarkdownWorker.js';
-import { math, moduleParams } from './questionnaire.js';
+import { moduleParams } from './questionnaire.js';
+import { initializeCustomMathJSFunctions, math } from './customMathJSImplementation.js';
+import { initializeStateManager } from './stateManager.js';
 
 let questName = 'Questionnaire';
 
@@ -10,6 +12,9 @@ let questName = 'Questionnaire';
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
 export async function initSurvey(contents) {
+    // Initialize the state manager. This will drive all data flow and UI updating in the app.
+    initializeStateManager(moduleParams.renderObj.store);
+    initializeCustomMathJSFunctions();
 
     const precalculated_values = getPreCalculatedValues(contents);    
     return moduleParams.renderObj?.activate
@@ -26,8 +31,7 @@ export async function initSurvey(contents) {
 async function initEmbeddedSurvey(contents, precalculated_values, isEmbeddedSurvey) {
     // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
     // Set the base path for the module. This is used to fetch the stylesheets in init -> .
-    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('github');
-    moduleParams.basePath = !isLocalDev && moduleParams.renderObj?.questVersion
+    moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
         ? 'https://episphere.github.io/quest-dev/'
         : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
     

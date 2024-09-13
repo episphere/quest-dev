@@ -1,6 +1,14 @@
 import { parseGrid } from "./buildGrid.js";
 import { getButtonDiv } from "./questButtons.js";
 
+const questionSeparatorRegExp = new RegExp(
+  "\\[([A-Z_][A-Z0-9_#]*[\\?\\!]?)(?:\\|([^,\\|\\]]+)\\|?)?(,.*?)?\\](.*?)(?=$|\\[[_A-Z]|<form)",
+  "g"
+);
+
+const idWithLoopSuffixRegex = /^([a-zA-Z0-9_]+?)(_?\d+_\d+)?$/;
+const valueOrDefaultRegex = /valueOrDefault\(["']([a-zA-Z0-9_]+?)(_?\d+_\d+)?["'](.*)\)/g;
+
 self.onmessage = (event) => {
   if (event.data.command === 'initialize') {
     self.postMessage('ready');
@@ -94,12 +102,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
   // note: we want this possessive (NOT greedy) so add a ?
   //       otherwise it would match the first and last square bracket
 
-
-  const questionSeparatorRegExp = new RegExp(
-    "\\[([A-Z_][A-Z0-9_#]*[\\?\\!]?)(?:\\|([^,\\|\\]]+)\\|?)?(,.*?)?\\](.*?)(?=$|\\[[_A-Z]|<form)",
-    "g"
-  );
-
   // because firefox cannot handle the "s" tag, encode all newlines
   // as a unit seperator ASCII code 1f (decimal: 31)
   contents = contents.replace(/(?:\r\n|\r|\n)/g, "\u001f");
@@ -164,13 +166,14 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
     // replace {$id} with span tag
     questText = questText.replace(/\{\$(\w+(?:\.\w+)?):?([a-zA-Z0-9 ,.!?"-]*)\}/g, fID);
     function fID(fullmatch, forId, optional) {
-      if (optional == undefined) {
+      if (optional == null || optional === "") {
         optional = "";
       } else {
-        optional = optional;
+        optional = `optional='${encodeURIComponent(optional)}'`;
       }
-      return `<span forId='${forId}' optional='${optional}'>${forId}</span>`;
+      return `<span forId='${forId}' ${optional}>${forId}</span>`;
     }
+
     // replace {#id} with span tag
     questText=questText.replace(/\{\#([^}#]+)\}/g,fHash)
     function fHash(fullmatch,expr){
@@ -225,7 +228,9 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
 
     // replace |date| with a date input
     questText = questText.replace(/\|date\|(?:([^\|\<]+[^\|]+)\|)?/g, fDate);
-    questText = questText.replace(/\|month\|(?:([^\|]+)\|)?/g, fDate);
+    questText = questText.replace(/\|month\|(?:([^\|]+)\|)?/g, fMonth);
+
+    // TODO: does this have the same DOM ID / input ID mismatch issue as month inputs (resolved in fMonth)? If yes, refactor to combine and use the fMonth approach.
     function fDate(fullmatch, opts) {
       let type = fullmatch.match(/[^|]+/);
       let { options, elementId } = guaranteeIdSet(opts, type);
@@ -249,6 +254,36 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       // Adding placeholders and aria-describedby attributes in one line
       options += ` placeholder='Select ${type}' aria-describedby='${elementId}-desc' aria-label='Select ${type}'`;
       return `<input type='${type}' ${options}><span id='${elementId}-desc' class='sr-only'>${descText}</span>`;
+    }
+
+    function fMonth(fullmatch, opts) {
+      const type = fullmatch.match(/[^|]+/);
+      const { options, elementId } = guaranteeIdSet(opts, type);
+      const questIDPrefix = questID.match(idWithLoopSuffixRegex)[1];
+
+      const updatedOptions = options.replace(valueOrDefaultRegex, (_, prefix, suffix, rest) => {
+        return `valueOrDefault("${questIDPrefix}${suffix}"${rest})`;
+      });
+
+      const optionObj = paramSplit(updatedOptions);
+      if (optionObj.hasOwnProperty("value")) {
+          optionObj.value = decodeURIComponent(optionObj.value);
+      }
+
+      const unevaluatedDates = [];
+      
+      if (optionObj.hasOwnProperty("min")) {
+        unevaluatedDates.push(`data-min-date-uneval=${optionObj.min}`);
+      }
+
+      if (optionObj.hasOwnProperty("max")) {
+        unevaluatedDates.push(`data-max-date-uneval=${optionObj.max}`);
+      }
+  
+      const descText = "Enter the month and year in format: four digit year - two digit month. YYYY-MM";
+      const finalOptions = `${updatedOptions} ${unevaluatedDates.join(' ')} placeholder='Select month' aria-describedby='${elementId}-desc' aria-label='Select month'`;
+
+      return `<input type='${type}' ${finalOptions}><span id='${elementId}-desc' class='sr-only'>${descText}</span>`;
     }
 
     // replace |tel| with phone input
@@ -513,7 +548,6 @@ export function transformMarkdownToHTML(contents, precalculated_values, i18n) {
       fText
     );
 
-    // TODO: Inspect ServiceNow/DataDog 'Too Much Recursion' error (Windows 10 / Firefox v125.0.0). One occurrence 5/3/24, Module 4.
     function fText(fullmatch, value1, opts, value2) {
       let { options, elementId } = guaranteeIdSet(opts, "txt");
       options = options.replaceAll(/(min|max)len\s*=\s*(\d+)/g,'data-$1len=$2')

@@ -1,20 +1,21 @@
 import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestionInit, moduleParams } from "./questionnaire.js";
 import { clearValidationError } from "./validate.js";
 import { nextClick, previousClicked } from "./questionnaire.js";
+import { getStateManager } from "./stateManager.js";
 
-// Debounced version of handleOtherTextInputKeyPress
-const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
+// // Debounced version of handleOtherTextInputKeyPress
+// const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
 
-// Add event listeners to the div element (delegate events to the parent div)
+// Add event listeners to the div element (questContainer) -> delegate events to the parent div.
 // Note: 'focusout' is used instead of 'blur' because 'blur' does not bubble to the parent div.
-export function addEventListeners(divElement) {
-  divElement.addEventListener('click', handleClickEvent);
-  divElement.addEventListener('change', handleChangeEvent);
-  divElement.addEventListener('keydown', handleKeydownEvent);
-  divElement.addEventListener('keyup', handleKeyupEvent);
-  divElement.addEventListener('input', handleInputEvent);
-  divElement.addEventListener('focusout', handleBlurFocusoutEvent);
-  divElement.addEventListener('submit', handleSubmitEvent);
+export function addEventListeners(questContainer) {
+  questContainer.addEventListener('click', handleClickEvent);
+  questContainer.addEventListener('change', handleChangeEvent);
+  questContainer.addEventListener('keydown', handleKeydownEvent);
+  questContainer.addEventListener('keyup', handleKeyupEvent);
+  questContainer.addEventListener('input', handleInputEvent);
+  questContainer.addEventListener('focusout', handleBlurFocusoutEvent);
+  questContainer.addEventListener('submit', handleSubmitEvent);
 
   // Attach event listeners to modal and close buttons (for screen readers)
   // Modals are at the document level, not embedded in the question.
@@ -23,6 +24,8 @@ export function addEventListeners(divElement) {
 
   modal?.addEventListener('click', closeModalAndFocusQuestion);
   closeButton?.addEventListener('click', closeModalAndFocusQuestion);
+
+  addSubmitSurveyListener();
 }
 
 function handleClickEvent(event) {
@@ -36,7 +39,6 @@ function handleClickEvent(event) {
     if (label) {
       const inputElement = label.querySelector('input:not([type="radio"]):not([type="checkbox"]), textarea');
       if (inputElement) {
-        console.log('click');
         if (!target.checked) {
           inputElement.dataset.lastValue = inputElement.value;
           inputElement.value = '';
@@ -66,9 +68,8 @@ function handleClickEvent(event) {
 function handleChangeEvent(event) {
   const target = event.target;
   
-  // Firefox does not alway GRAB focus when the arrows are clicked.
-  // If a changeEvent fires, grab focus.
-  if (target.matches('input[type="number"]') && target !== document.activeElement) {
+  // Firefox does not alway GRAB focus when the arrows are clicked. If a changeEvent fires, grab focus.
+  if (moduleParams.isFirefoxBrowser && target.matches('input[type="number"]') && target !== document.activeElement) {
     target.focus();
   }
 
@@ -152,19 +153,19 @@ function handleInputEvent(event) {
     if (label) {
       const radioCB = document.getElementById(label.htmlFor) || label.querySelector('input[type="radio"], input[type="checkbox"]');
       if (radioCB && (radioCB.type === 'radio' || radioCB.type === 'checkbox')) {
-        const nchar = target.value.length;
-        if (nchar > 0) radioCB.checked = true;
+        // Check or uncheck the radio or checkbox based on the text input length.
+        target.value.length > 0 ? radioCB.checked = true : radioCB.checked = false;
         radioAndCheckboxUpdate(radioCB);
         target.dataset.lastValue = target.value;
         textboxinput(target);  // Ensure the text input is saved
       }
     }
 
-    // Handle "Other" text inputs
-    const responseContainer = target.closest('.response');
-    if (responseContainer) {
-      debouncedHandleOtherTextInputKeyPress(event);
-    }
+    // // Handle "Other" text inputs
+    // const responseContainer = target.closest('.response');
+    // if (responseContainer) {
+    //   debouncedHandleOtherTextInputKeyPress(event);
+    // }
   }
 }
 
@@ -196,20 +197,20 @@ function closeModalAndFocusQuestion(event) {
   }
 }
 
-// Function to handle "Other" text input key press
-function handleOtherTextInputKeyPress(event) {
-  const responseTarget = event.target.closest('.response');
-  const checkboxOrRadioEle = responseTarget?.querySelector('input[type="checkbox"], input[type="radio"]');
+// // Function to handle "Other" text input key press
+// function handleOtherTextInputKeyPress(event) {
+//   const responseTarget = event.target.closest('.response');
+//   const checkboxOrRadioEle = responseTarget?.querySelector('input[type="checkbox"], input[type="radio"]');
 
-  if (checkboxOrRadioEle) {
-    const inputValue = event.target.value?.trim();
-    const isChecked = checkboxOrRadioEle.checked;
-    // If the input value is removed, uncheck the checkbox/radio
-    if (!inputValue && isChecked) {
-      checkboxOrRadioEle.checked = false;
-    }
-  }
-}
+//   if (checkboxOrRadioEle) {
+//     const inputValue = event.target.value?.trim();
+//     const isChecked = checkboxOrRadioEle.checked;
+//     // If the input value is removed, uncheck the checkbox/radio
+//     if (!inputValue && isChecked) {
+//       checkboxOrRadioEle.checked = false;
+//     }
+//   }
+// }
 
 // Custom Accessible handling for up/down arrow keys.
 // This ensures focus doesn't trap accessible navigation in lists that have 'Other' text inputs.
@@ -438,23 +439,23 @@ function clearSelectionAnnouncement() {
 }
 
 // Handle the next, reset, and back buttons
-function stopSubmit(event) {
+async function stopSubmit(event) {
   event.preventDefault();
 
   // Clear the selection announcement
   clearSelectionAnnouncement();
-  
+
   const clickType = event.submitter.getAttribute('data-click-type');
   const buttonClicked = event.target.querySelector(`.${clickType}`);
 
   switch (clickType) {
     case 'previous':
-      resetChildren(event.target.elements);
-      previousClicked(buttonClicked, moduleParams.renderObj.store);
+      resetChildren(event.target);
+      await previousClicked(buttonClicked);
       break;
 
     case 'reset':
-      resetChildren(event.target.elements);
+      resetChildren(event.target);
       break;
 
     case 'submitSurvey':
@@ -462,7 +463,7 @@ function stopSubmit(event) {
       break;
 
     case 'next':
-      nextClick(buttonClicked, moduleParams.renderObj.store);
+      await nextClick(buttonClicked);
       break;
 
     default:
@@ -470,10 +471,19 @@ function stopSubmit(event) {
   }
 }
 
-function resetChildren(nodes) {
-  if (nodes == null) {
-    return;
-  }
+/**
+ * Clear the target form element and remove any responses from the activeQuestionState.
+ * activeQuestionState gets set to undefined in the stateManager.
+ * @param {HTMLElement} target - The form element to reset.
+ * @returns {void}
+ */
+function resetChildren(target) {
+  
+  const appState = getStateManager();
+  appState.removeResponse(target.id);
+
+  const nodes = target.elements;
+  if (nodes == null) return;
 
   for (let node of nodes) {
     if (node.type === "radio" || node.type === "checkbox") {
@@ -495,5 +505,23 @@ function debounce(func, wait) {
       };
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
+  };
+}
+
+function addSubmitSurveyListener() {
+  document.getElementById("submitModalButton").onclick = async () => {
+    const lastBackButton = document.getElementById('lastBackButton');
+    if (lastBackButton) {
+      lastBackButton.remove();
+    }
+    const submitButton = document.getElementById('submitButton');
+    if (submitButton) {
+      submitButton.remove();
+    }
+
+    // Submit the survey and reload the page.
+    const appState = getStateManager();
+    await appState.submitSurvey();
+    location.reload();
   };
 }

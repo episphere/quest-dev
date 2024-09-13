@@ -1,22 +1,28 @@
 export const knownFunctions = {
+
   and: function (x, y) {
     return x && y;
   },
+
   or: function (x, y) {
     return x || y;
   },
-  isDefined: function (x, y) {
-    let tmpVal = !x ? y : x;
-    let isnum = /^[\d\.]+$/.test(tmpVal);
-    if (isnum) {
+
+  isDefined: function (x, y, appState) {
+    const tmpVal = !x ? y : x;
+    if (!isNaN(tmpVal)) {
       return tmpVal;
     }
-    let tmpVal2 = document.getElementById(tmpVal);
-    return tmpVal2 ? tmpVal2.value : y;   //used to be return tmpVal2 ? tmpVal2.value : tmpVal; but now it will return y if x is undefined
+
+    const tmpVal2 = appState.findResponseValue(tmpVal);
+    console.warn('TODO TEST: (use state update): tmpVal2 - IS THIS HANDLED CORRECTLY?', tmpVal2);
+    return tmpVal2 ?? y;
   },
-  isNotDefined: function (x, y) {
+
+  isNotDefined: function (x) {
     return !x;
   },
+
   min: function (x, y) {
     if (!x && !y) {
       return "";
@@ -25,6 +31,7 @@ export const knownFunctions = {
     y = !isNaN(y) ? y : Number.POSITIVE_INFINITY;
     return Math.min(parseFloat(x), parseFloat(y));
   },
+
   max: function (x, y) {
     if (!x && !y) {
       return "";
@@ -33,6 +40,7 @@ export const knownFunctions = {
     y = !isNaN(y) ? y : Number.NEGATIVE_INFINITY;
     return Math.max(parseFloat(x), parseFloat(y));
   },
+
   equals: function (x, y) {
     if (x == undefined && y == "undefined") {
       return true;
@@ -53,6 +61,7 @@ export const knownFunctions = {
     }
     return Array.isArray(x) ? x.includes(y) : x == y;
   },
+
   doesNotEqual: function (x, y) {
     if (x == undefined && y == "undefined") {
       return false;
@@ -73,42 +82,40 @@ export const knownFunctions = {
     }
     return Array.isArray(x) ? !x.includes(y) : x != y;
   },
+
   lessThan: function (x, y) {
     return parseFloat(x) < parseFloat(y);
   },
+
   lessThanOrEqual: function (x, y) {
     return parseFloat(x) <= parseFloat(y);
   },
+
   greaterThan: function (x, y) {
     return parseFloat(x) > parseFloat(y);
   },
+
   greaterThanOrEqual: function (x, y) {
     return parseFloat(x) >= parseFloat(y);
   },
+
   setFalse: function (x, y) {
     return false;
   },
+
   difference: function (x, y) {
-    if (typeof y == "string" && document.getElementById(y)) {
-      y = document.getElementById(y).value;
-    }
     return parseInt(x) - parseInt(y);
   },
+
   sum: function (x, y) {
-    if (typeof y == "string" && document.getElementById(y)) {
-      y = document.getElementById(y).value;
-    }
     return parseInt(x) + parseInt(y);
   },
+
   percentDiff: function (x, y) {
-    if (x == "" || y == "") {
-      return false;
-    }
-    if (typeof y == "string" && document.getElementById(y)) {
-      y = document.getElementById(y).value;
-    }
-    return knownFunctions.difference(x, y) / x;
+    if (!x || typeof x !== 'string' || !y || typeof y !== 'string') return NaN;
+    return this.difference(x, y) / x;
   },
+
   numberOfChoicesSelected: function (x) {
     return x == undefined ? 0 : x.length;
   },

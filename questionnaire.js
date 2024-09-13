@@ -1,361 +1,17 @@
 import { Tree } from "./tree.js";
 import { knownFunctions } from "./knownFunctions.js";
-import { removeQuestion } from "./localforageDAO.js";
 import { validateInput, validationError } from "./validate.js"
 import { translate } from "./common.js";
-
+import { math } from './customMathJSImplementation.js';
+import { restoreResponses } from "./restoreResponses.js";
+import { getStateManager } from "./stateManager.js";
 export const moduleParams = {};
-import  * as mathjs  from 'https://cdn.skypack.dev/mathjs@11.2.0';
-export const math=mathjs.create(mathjs.all)
-window.math = math
 
-
-// create a class YearMonth custom datatype for use in mathjs to handle
-// the month class...
-export function YearMonth(str) {
-  if (str?.isYearMonth) {
-    this.month = str.month
-    this.year = str.year
-  } else {
-    let x = str.match(/^(\d+)\-(\d+)$/)
-    this.month = parseInt(x[2]).toLocaleString(navigator.language, { minimumIntegerDigits: 2 })
-    this.year = x[1]
-  }
-}
-YearMonth.prototype.isYearMonth = true
-YearMonth.prototype.toString = function () {
-  return `${this.year}-${this.month}`
-}
-// create an add function.  Note: YearMonth + integer = String
-YearMonth.prototype.add = function (n) {
-  let m = parseInt(this.month) + n
-  let yr = parseInt(this.year) + ((m > 12) ? 1 : 0);
-  // if month == 0, set it to 12
-  let mon = (m % 12) || 12
-  return new YearMonth(`${yr}-${mon}`).toString()
-}
-
-// Note: YearMonth - n = String
-YearMonth.prototype.subtract = function (n) {
-  let m = parseInt(this.month) - n
-  let yr = parseInt(this.year) - ((m > 0) ? 0 : 1);
-  let mon = ((m + 12) % 12) || 12
-  return new YearMonth(`${yr}-${mon}`).toString()
-}
-
-// Note: YearMonth - YearMonth = integer
-YearMonth.prototype.subMonth = function(ym){
-  return (12*(parseInt(this.year)-parseInt(ym.year)) + parseInt(this.month)-parseInt(ym.month));
-}
-
-// This works in all cases except x=new String(),
-//  which you should never do anyway...
-let isString = (value) => typeof value == 'string'
-
-// Note: these function make explicit
-// use of the fact that the DOM stores information.
-// be careful  the DOM and the localforage become
-// mis-aligned.
-export const myFunctions = {
-  exists: function (x) {
-    if (!x) return false;
-    if (x.toString().includes('.')) {
-      return !math.isUndefined( getKeyedValue(x) )
-    }
-    let element = document.getElementById(x);
-
-    // handle the array case (checkboxes)...
-    if (Array.isArray(element?.value)) return !!element.value.length
-
-    // note !! converts "truthy" values
-    return (!!element && !!element.value) || moduleParams.previousResults.hasOwnProperty(x)
-  },
-  doesNotExist: function (x) {
-    return !math.exists(x)
-  },
-  noneExist: function (...ids) {
-    // if you give me no ids, none of them exist therefore true...
-    // loop through all the ids of any exists then return false...
-    return ids.every(id => math.doesNotExist(id))
-  },
-  someExist: function (...ids) {
-    return ids.some(id => math.exists(id))
-  },
-  allExist: function (...ids) {
-    return ids.every(id => math.exists(id))
-  },
-  _value: function (x) {
-    if (!math.exists(x)) return null
-
-    if (x.toString().includes('.')) {
-      return getKeyedValue(x)
-    }
-
-    let element = document.getElementById(x);
-    let returnValue = (element) ? element.value : moduleParams.previousResults[x]
-    return returnValue
-  },
-  valueEquals: function (id, value) {
-    // if id is not passed in return FALSE
-    if (math.doesNotExist(id)) return false;
-    let element_value = math._value(id);
-
-    // catch if we have a combobox...
-    if (element_value[id]) {
-      element_value = element_value[id]
-    }
-
-    // if the element does not exist return FALSE
-    return (element_value == value)
-  },
-  equals: function(id, value){
-    return math.valueEquals(id,value)
-  },
-  valueIsOneOf: function (id, ...values) {
-    if (myFunctions.doesNotExist(id)) return false;
-    // compare as strings so "1" == "1"
-    values = values.map(v => v.toString())
-
-    let test_values = math._value(id);
-    // catch if we have a combobox...
-    if (test_values[id]) {
-      test_values = test_values[id]
-    }
-    if (Array.isArray(test_values)) {
-      return (test_values.some(v => values.includes(v.toString())))
-    }
-    return values.includes(test_values.toString())
-  },
-  /**
-   * checks whether the value for id is 
-   * between the values of lowerLimit and upperLimit inclusively
-   * lowerLimit <= value(id) <= upperlimit
-   * 
-   * if you pass in an array of ids, it uses the first id that exists.  The
-   * array is passed into valueOrDefault.
-   * 
-   * @param  {Number} lowerLimit The lowest acceptable value
-   * @param  {Number} upperLimit the highest acceptable value
-   * @param  {Array}  ids   An array of values, passed into valueOrDefault.
-   * @return {boolean}     is lowerLimit <= value(id) <= upperLimit
-   */
-  valueIsBetween: function (lowerLimit, upperLimit, ...ids) {
-    if (lowerLimit === undefined || upperLimit === undefined || ids === undefined) return false;
-
-    let value = undefined;
-    value = (ids.length > 1) ? myFunctions.valueOrDefault(ids.shift(), ids) : myFunctions._value(ids.shift())
-    // for this function to work, value, lowerLimit, and 
-    // upperLimit MUST be numeric....
-    if (!isNaN(value) && !isNaN(lowerLimit) && !isNaN(value)) {
-      return (parseFloat(lowerLimit) <= value && value <= parseFloat(upperLimit))
-    }
-    return false
-  },
-  /**
-   * Given a comma separated value of Conditions and values, returns a string of all the values that exist.
-   * separated by a comma or the optional separator
-   * 
-   * i.e. existingValues(exists("ID1"),displaytext,exists("ID2"),displaytext)
-   * 
-   * @param  {args}  the args should be condition1, VAL1, condition2, VAL2, (optional)sep=,
-   * 
-   */
-  existingValues: function (args) {
-    if (!args) return ""
-
-    let argArray = math.parse(args).args
-
-    let sep = ", "
-    if (argArray[argArray.length - 1].name == "sep") {
-      sep = argArray.pop().evaluate()
-    }
-    // we better have (id/value PAIRS)
-    argArray = argArray.reduce((prev, current, index, array) => {
-      // skip the ids...
-      if (index % 2 == 0) return prev
-
-      // see if the id exists, if so keep the value
-      if (array[index - 1].evaluate()) prev.push(math.valueOrDefault(current.evaluate(), current.evaluate()))
-
-      return prev
-    }, [])
-    return argArray.join(sep)
-  },
-  // if the value of id is a string
-  // return the string length, otherwise
-  // return -1
-  valueLength: function(id){
-    // if id is not passed in return FALSE
-    if (math.doesNotExist(id)) return false;
-    let element_value = math._value(id);
-    if (isString(element_value)){
-      return element_value.length
-    }
-    return -1;
-  },
-  dateCompare: function (month1, year1, month2, year2) {
-    if (
-      [month1, month2].some((m) => { let m1 = parseInt(m); m1 < 0 || m1 > 11 })
-    ) {
-      throw 'DateCompareError:months need to be from 0 (Jan) to 11 (Dec)'
-    }
-    if (
-      [year1, year2].some((yr) => isNaN(yr))
-    ) {
-      throw 'DateCompareError:years need to be numeric'
-    }
-
-    let date1 = (new Date(year1, month1)).getTime()
-    let date2 = (new Date(year2, month2)).getTime()
-    return (date1 < date2) ? -1 : (date1 == date2) ? 0 : 1
-  },
-  isSelected: function (id) {
-    // if the id doesnt exist, the ?.checked returns undefined.
-    // !!undefined == false.
-    return (!!document.getElementById(id)?.checked)
-  },
-  someSelected: function (...ids) {
-    return (ids.some(id => math.isSelected(id)))
-  },
-  noneSelected: function(...ids){
-    return (!ids.some(id => math.isSelected(id)))
-  },
-  // defaultValue accepts an Id and a value or a Id/Value
-  // If only 1 default value is given, first it looks it up
-  // if it does not exist assume it is a value...
-  // If 2 default values are given, look up the first, if it
-  // does not exist, return the second as a value...
-  valueOrDefault: function (x, ...defaultValue) {
-    let v = math._value(x)
-
-    let indx = 0;
-    while (v == null && defaultValue.length > indx) {
-      v = math._value(defaultValue[indx])
-      if (v == null) indx++
-    }
-    if (v == null) v = defaultValue[defaultValue.length - 1]
-    return (v)
-  },
-  selectionCount: function(x,countReset=false){
-    let [questionId,name] = x.split(':')
-    name = name ?? questionId
-
-    if (!math.exists(questionId)) return 0
-    let v = math._value(questionId)
-
-    // BUG FIX:  if the data-reset ("none of the above") is selected
-    let questionElement = document.getElementById(questionId)
-    if ( Array.isArray(v)  || Array.isArray(v[name]) ) {
-      v = Array.isArray(v)?v:v[name]
-      if (countReset){
-        return v.length;
-      }
-      // there is a chance that nothing is selected (v.length==0) in that case you will the 
-      // selector will find nothing.  Use the "?" because you cannot find the dataset on a null object.  
-      return questionElement.querySelector(`input[type="checkbox"][name="${name}"]:checked`)?.dataset["reset"]?0:v.length
-    }
-
-    // if we want object to return the number of keys
-    // Object.keys(v).length
-    // otherwise:
-    return 0;
-  },
-  // For a question in a loop, does the value of the response
-  // for ANY ITERATION equal a value from a given set. 
-  loopQuestionValueIsOneOf: function (id, ...values) {
-    // Loops append _n_n to the id, where n is an
-    // integer starting from 1...
-    for (let i = 1; ; i = i + 1) {
-      let tmp_qid = `${id}_${i}_${i}`
-      // the Id does not exist, we've gone through
-      // all potential question and have not found
-      // a value in the set of "acceptable" values...
-      if (math.doesNotExist(tmp_qid)) return false;
-      if (math.valueIsOneOf(tmp_qid, ...values)) return true
-    }
-  },
-  gridQuestionsValueIsOneOf: function (gridId, ...values) {
-    if (math.doesNotExist(gridId)) return false
-    let gridElement = document.getElementById(gridId)
-    if (! "grid" in gridElement.dataset) return false
-
-    values = values.map(v => v.toString())
-    let gridValues = math._value(gridId)
-    for (const gridQuestionId in gridValues) {
-      // even if there is only one value, force it into
-      // an array.  flatten it to make sure that it's a 1-d array
-      let test_values = [gridValues[gridQuestionId]].flat()
-      if (test_values.some(v => values.includes(v.toString()))) {
-        return true;
-      }
-
-    }
-    return false;
-  },
-  yearMonth: function (str) {
-    let isYM = /^(\d+)\-(\d+)$/.test(str)
-    if (isYM) {
-      return new YearMonth(str)
-    }
-    let value = math._value(str)
-    isYM = /^(\d+)\-(\d+)$/.test(value)
-    if (isYM) {
-      return new YearMonth(value)
-    }
-    return false;
-  },
-  YearMonth: YearMonth,
-}
-
-function getKeyedValue(x) {
-  let array = x.toString().split('.')
-  // convert null or undefined to undefined...
-  let obj = math._value(`${array.splice(0, 1)}`) ?? undefined
-  
-  return array.reduce((prev, curr) => {
-    if ( math.isUndefined(prev) ) return prev
-    return prev[curr] ?? undefined
-  }, obj)
-}
-
-// Tell mathjs about the YearMonth class
-math.typed.addType({
-  name: 'YearMonth',
-  test: function (x) {
-    return x && x.isYearMonth
-  }
-})
-
-// Tell math.js how to add a YearMonth with a number
-const add = math.typed('add', {
-  'YearMonth, number': function (dte, m) {
-    return dte.add(m)
-  },
-  'number, YearMonth': function (m, dte) {
-    return dte.add(m)
-  }
-})
-const subtract = math.typed('subtract', {
-  'YearMonth, number': function (dte, m) {
-    return dte.subtract(m)
-  },
-  'YearMonth, YearMonth': function (dte2, dte1) {
-    return dte2.subMonth(dte1)
-  }
-})
-
-myFunctions.add = add;
-myFunctions.subtract = subtract
-window.myFunctions = myFunctions;
-
-math.import({
-  myFunctions
-})
-
+// TODO: break this up into more tightly related files
 
 // The questionQueue is an Tree which contains
 // the question ids in the order they should be displayed.
-export const questionQueue = new Tree();
+export const questionQueue = new Tree(); // TODO: rename to questionTree for future clarity?
 
 export function isFirstQuestion() {
   return questionQueue.isEmpty() || questionQueue.isFirst();
@@ -367,42 +23,62 @@ export function isFirstQuestion() {
  * Single response (radio) input questions are stored as primitives.
  * Multi-selection (checkbox) input questions are stored as arrays.
  * @param {HTMLElement} form - the form element being evaluated.
- * @returns {boolean} - true if the key must be stored with the response (Object), false otherwise (primitive).
+ * @returns {number} - the number of response keys.
  */
-function isObjectStore(form) {
-  if (form.dataset?.grid === 'true') return true;
 
-  const responseInputs = Array.from(form.querySelectorAll("input, textarea, select")).reduce((acc, current) => {
-    if (current.type == "submit" || current.type == "hidden") return acc;
-    if (["radio", "checkbox"].includes(current.type)) {
-      acc[current.name] = true;
-    } else {
-      acc[current.id] = true;
+//TODO: test for grid questions
+function getNumResponseInputs(form) {
+  const responseInputs = new Set();
+
+  form.querySelectorAll("input, textarea, select").forEach((current) => {
+    if (current.type !== "submit" && current.type !== "hidden") {
+      if (["radio", "checkbox"].includes(current.type)) {
+        responseInputs.add(current.name);
+      } else {
+        responseInputs.add(current.id);
+      }
     }
-    return acc;
-  }, {});
+  });
 
-  return Object.keys(responseInputs).length !== 1;
+  // Cache the number of response keys for the form so it doesn't re-evaluate every keystroke.
+  const appState = getStateManager();
+  appState.setNumResponseInputs(form.id, responseInputs.size);
+  appState.clearOtherResponseInputEntries(form.id);
+  return responseInputs.size;
 }
 
-function setFormValue(form, value, id) {
-  if (value === "" || Array.isArray(value) && value.length === 0) {
+/**
+ * Update the state manager with the response value(s).
+ * @param {HTMLElement} form - the form element being evaluated (the active survey quesiton).
+ * @param {string} value - the response value.
+ * @param {string} id - the response id.
+ * @returns {void} - sets the response value in the state manager.
+ */
+
+function setResponsesInState(form, value, id) {
+  const appState = getStateManager();
+  const numResponses = appState?.getNumResponseInputs(form.id) || getNumResponseInputs(form);
+  
+  // Validate and sanitize inputs.
+  if (!id || id.trim() === "") return;
+
+  // Normalize value to undefined if it is an empty string or an empty array.
+  // This is necessary to ensure that the value is removed from the store.
+  if (value === "" || (Array.isArray(value) && value.length === 0)) {
     value = undefined;
   }
 
-  if (!id || id.trim() === "") return;
+  switch (numResponses) {
+    case 0:
+      break;
 
-  if (!isObjectStore(form)) {
-    form.value = value;
-  } else {
-    if (!form.value) {
-      form.value = {};
-    }
-
-    form.value[id] = value;
-    if (value == undefined) {
-      delete form.value[id]
-    }
+    default:
+      if (value === undefined || value === null) {
+        appState.removeResponseItem(form.id, id, numResponses);
+      } else {
+        appState.setResponse(form.id, id, numResponses, value);
+      }
+      break;
   }
 }
 
@@ -466,11 +142,11 @@ function exchangeValue(element, attrName, newAttrName) {
   // may have to do this for dates too.  <- yeah, had to!
   // Firefox and Safari for MacOS think <input type="month"> has type="text"...
   // so month selection calendar is not shown.
-  if ( (element.getAttribute("type") == "month" && /^\d{4}-\d{1,2}$/.test(attr)) || 
-       (element.getAttribute("type") == "date" && /^\d{4}-\d{1,2}-\d{1,2}$/.test(attr)) ){
+  if ( (element.getAttribute("type") === "month" && /^\d{4}-\d{1,2}$/.test(attr)) || 
+       (element.getAttribute("type") === "date" && /^\d{4}-\d{1,2}-\d{1,2}$/.test(attr)) ){
     
     // if leading zero for single digit month was stripped by the browser, add it back.
-    if (element.getAttribute("type") == "month" && /^\d{4}-\d$/.test(attr)) {
+    if (element.getAttribute("type") === "month" && /^\d{4}-\d$/.test(attr)) {
       attr = attr.replace(/-(\d)$/, '-0$1')
     }
     
@@ -491,14 +167,146 @@ function exchangeValue(element, attrName, newAttrName) {
         validationError(element, `Module Coding Error: ${element.id}:${attrName} ${previousResultsErrorMessage}`)
         return
       }
-      console.log('------------exchanged Vals-----------------')
-      console.log(`${element}, ${attrName}, ${newAttrName}, ${tmpVal}`)
       element.setAttribute(newAttrName, tmpVal);
     } else {
       element.setAttribute(newAttrName, attr);
     }
   }
   return element;
+}
+
+/**
+ * Replace the found argument with the form ID for accurate validation.
+ * Sometimes the input element ID doesn't match the form ID due to the markdown/DOM structure.
+ * Search for the parent form ID (which will match a key in state), and replace the date input ID for accurate validation.
+ * Relevant for evaluateCondition calls e.g. min=valueOrDefault("<Some_ID>","2020-03").
+ * @param {string} attribute - the attribute to resolve
+ * @returns {string} - the resolved attribute.
+ */
+// TODO: This logic will need updating when DOM structure changes.
+function resolveAttributeToParentID(attribute, appState) {
+  const decodedAttribute = decodeURIComponent(attribute);
+
+  // If item found in state, no further evaluation needed.
+  if (appState.findResponseValue(decodedAttribute)) {
+    return decodedAttribute;
+  }
+  
+  // If not found in state, search for the parent form ID.
+  const foundElement = document.getElementById(decodedAttribute);
+  if (!foundElement) return decodedAttribute;
+  
+  return foundElement.closest("form")?.id ?? decodedAttribute;
+}
+
+/**
+ * Resolve the entered attributes for the runtime evaluateCondition functions.
+ * @param {string} attribute - the attribute to resolve (e.g. valueLength("ID")).
+ * @returns {string} - the resolved value.
+ */
+
+const valueLengthRegex = /valueLength\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const doesNotExistRegex = /doesNotExist\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const existsRegex = /exists\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const equalsRegex = /equals\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const isNotDefinedRegex = /isNotDefined\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+
+const resolveRuntimeConditions = (attribute) => {
+  const attributeConditionString = decodeURIComponent(attribute);
+  const appState = getStateManager();
+
+  // Check if the attribute contains nested functions (multiple conditions to evaluate from the markdown).
+  function hasNestedFunctions(str) {
+    const firstIndex = str.indexOf('(');
+    if (firstIndex === -1) return false; // No '(' found
+    
+    const secondIndex = str.indexOf('(', firstIndex + 1);
+    return secondIndex !== -1;
+  }
+
+  // Only simple functions are evaluated here. If the attribute contains nested functions, return early.
+  // TODO: consider whether evaluateCondtion() might be a helpful optimization here.
+  if (hasNestedFunctions(attributeConditionString)) {
+    return null;
+  }
+
+  const resolveCondition = (regex, additionalConstraint = null) => {
+    const match = attributeConditionString.match(regex);
+    if (match && match[1]) {
+      const idToSearch = match[1];
+      if (idToSearch) {
+        const value = appState.findResponseValue(idToSearch);
+        if (typeof value === 'string' && value.length > 0 && (!additionalConstraint || !value.match(additionalConstraint))) {
+          return value;
+        }
+      }
+    }
+  }
+
+  const value = resolveCondition(valueLengthRegex, /\b\d{9}\b/) ||
+    resolveCondition(doesNotExistRegex) ||
+    resolveCondition(existsRegex) ||
+    resolveCondition(equalsRegex) ||
+    resolveCondition(isNotDefinedRegex)
+
+  if (value !== null) {
+    return value;
+  }
+
+  if (!['valueLength', 'doesNotExist', 'exists', 'equals', 'isNotDefined'].some(substring => attributeConditionString.includes(substring))) {
+    console.error(`Unhandled attribute type in ${attributeConditionString} (resolveRuntimeConditions)`);
+  }
+
+  console.warn(`TODO: confirm empty string response in (resolveRuntimeConditions): ${attributeConditionString}`);
+  
+  return '';
+}
+
+/**
+ * Evaluate the condition in the 'forid' attribute for runtime functions.
+ * ForID attributes are used to evaluate conditions at runtime and update the DOM accordingly.
+ * For questions where one response exists, we need to evaluate the parent ID (mismatch to the response ID).
+ * When multiple responses exist, we evaluate the response ID directly.
+ * @param {Array<Node>} forIDElementArray - the array of 'forid' elements to evaluate.
+ * @returns {void} - updates the DOM with the evaluated values.
+ */
+const handleForIDAttributes = (forIDElementArray) => {
+  const appState = getStateManager();
+
+  if (forIDElementArray.length === 1) {
+    const forIDElement = forIDElementArray[0];    
+    const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
+    const parentID = resolveAttributeToParentID(forid, appState);
+
+    const defaultValue = forIDElement.getAttribute("optional");
+    const updatedValue = math.valueOrDefault(parentID, defaultValue);
+    
+    forIDElement.textContent = updatedValue;
+    forIDElement.setAttribute('forid', parentID);
+
+    // Update the parent displayif attribute if it exists.
+    const outerSpan = forIDElement.closest(".displayif");
+    if (outerSpan) {
+      const parentDisplayIf = outerSpan.getAttribute('displayif').replace(forid, parentID);
+      outerSpan.setAttribute('displayif', parentDisplayIf)
+    }
+
+  } else {
+    forIDElementArray.forEach(element => {
+      const forid = decodeURIComponent(element.getAttribute("forid"));
+      const foundValue = appState.findResponseValue(forid);
+      toggleElementVisibility(element, foundValue);
+    });
+  }
+}
+
+const toggleElementVisibility = (element, textContent) => {
+  if (textContent) {
+    element.style.display = null;
+    element.textContent = textContent;
+  } else {
+    element.style.display = "none";
+  }
 }
 
 // TODO: Look here for Safari text input delay issue.
@@ -544,15 +352,15 @@ export function textboxinput(inputElement, validate = true) {
   }
 
   clearSelection(inputElement);
-  let value = handleXOR(inputElement);
-  let id = inputElement.id
-  value = value ? value : inputElement.value;
-  setFormValue(inputElement.form, value, id);
+  const id = inputElement.id
+  const value = handleXOR(inputElement) || inputElement.value;
+  setResponsesInState(inputElement.form, value, id);
 }
 
-// onInput/Change handler for radio/checkboxex
+// onInput/Change handler for radio/checkboxes
+// TODO: optimize this flow
 export function rbAndCbClick(event) {
-  let inputElement = event.target;
+  const inputElement = event.target;
   // when we programatically click, the input element is null.
   // however we call radioAndCheckboxUpdate directly..
   if (inputElement) {
@@ -562,43 +370,45 @@ export function rbAndCbClick(event) {
   }
 }
 
-//for when radio/checkboxes have input fields, only enable input fields when they are selected
+
+// If radio/checkboxes have input fields, only enable input fields when they are selected
+// Get all responses that have an input text box (can be number, date, etc., not radio/checkbox)
+// If the checkbox is not selected, disable it and clear the value.
+// Note: things that can go wrong: if a response has more than one text box.
 export function radioAndCheckboxClearTextInput(inputElement) {
-  // this fails when the element name is not the same as the question id...
-  //let parent = document.getElementById(inputElement.name);
-  let parent = inputElement.form
+  
+  const responses = [...inputElement.form.querySelectorAll(".response")].filter(response => {
+    const textBox = response.querySelector("input:not([type=radio]):not([type=checkbox])")
+    const checkbox = response.querySelector("input[type=checkbox],input[type=radio]");
+    return textBox && checkbox;
+  });
+  
+  responses.forEach(response => {
+    const textBox = response.querySelector("input:not([type=radio]):not([type=checkbox])")
+    const radioOrCheckbox = response.querySelector("input[type=radio],input[type=checkbox]")
 
-  // get all responses that have an input text box (can be number, date ..., not radio/checkbox)
-  let responses = [...parent.querySelectorAll(".response")]
-    .filter(resp => resp.querySelectorAll("input:not([type=radio]):not([type=checkbox])").length)
-    .filter(resp => resp.querySelectorAll("input[type=radio],input[type=checkbox]").length)
+    if (textBox && radioOrCheckbox && !radioOrCheckbox.checked) {
+      textBox.value = ""
+      const formID = inputElement.form.id;
+      const inputID = textBox.id;
 
-  // if the checkbox is selected, make sure the input box is enable
-  // if the checkbox is not selected, make disable it and clear the value...
-  // Note: things that can go wrong.. if a response has more than one text box.
-  responses.forEach(resp => {
-    let text_box = resp.querySelector("input:not([type=radio]):not([type=checkbox])")
-    let checkbox = resp.querySelector("input[type=radio],input[type=checkbox]")
-    //text_box.disabled = !checkbox.checked
-    if (!checkbox.checked) {
-      text_box.value = ""
-      delete inputElement.form.value[text_box.id]
+      if (formID && inputID) {
+        const appState = getStateManager();
+        appState.removeResponseItem(formID, inputID, appState.getNumResponseInputs(formID));
+      }
     }
-  })
+  });
 }
 
 export function radioAndCheckboxUpdate(inputElement) {
   if (!inputElement) return;
   clearSelection(inputElement);
 
-  let selectedValue = {};
+  let selectedValue;
+
   if (inputElement.type == "checkbox") {
     // get all checkboxes with the same name attribute...
-    selectedValue = Array.from(
-      inputElement.form.querySelectorAll(
-        `input[type = "checkbox"][name = ${inputElement.name}]`
-      )
-    )
+    selectedValue = Array.from(inputElement.form.querySelectorAll(`input[type = "checkbox"][name = ${inputElement.name}]`))
       .filter((x) => x.checked)
       .map((x) => x.value);
   } else {
@@ -606,63 +416,52 @@ export function radioAndCheckboxUpdate(inputElement) {
     selectedValue = inputElement.value;
   }
 
-  setFormValue(inputElement.form, selectedValue, inputElement.name);
+  setResponsesInState(inputElement.form, selectedValue, inputElement.name);
 }
 
 function clearSelection(inputElement) {
   if (!inputElement.form || !inputElement.name) return;
-  let sameName = [
-    ...inputElement.form.querySelectorAll(`input[name = ${inputElement.name}],input[name = ${inputElement.name}] + label > input`)
-  ].filter((x) => x.type != "hidden");
+  const sameNameEles = [...inputElement.form.querySelectorAll(`input[name = ${inputElement.name}],input[name = ${inputElement.name}] + label > input`)].filter((x) => x.type != "hidden");
+  if (!sameNameEles) return;
 
-  /* 
-  if this is a "none of the above", go through all elements with the same name
-  and mark them as "false" or clear the text values
-  */
+  const appState = getStateManager();
 
+   
+  // If this is a "none of the above", go through all elements with the same name and mark them as "false" or clear the text values.
   if (inputElement.dataset.reset) {
-    sameName.forEach((element) => {
+    sameNameEles.forEach((element) => {
 
       switch (element.type) {
         case "checkbox":
           element.checked = element == inputElement ? element.checked : false;
           break;
+
         case "radio":
           break;
+
         default:
           element.value = element == inputElement ? inputElement.value : "";
-          setFormValue(element.form, element.value, element.id);
+          setResponsesInState(element.form, element.value, element.id);
           if (element.nextElementSibling && element.nextElementSibling.children.length !== 0) element.nextElementSibling.children[0].innerText = "";
           element.form.classList.remove("invalid");
-          if (inputElement.form.value) {
-            delete inputElement.form.value[element.id];
-          }
+          appState.removeResponseItem(element.form.id, element.id, appState.getNumResponseInputs(element.form.id));
           break;
       }
-
-
     });
   } else {
-    // otherwise if this as another element with the same name and is marked as "none of the above"  clear that.
+    // otherwise if this as another element with the same name and is marked as "none of the above" clear that.
     // don't clear everything though because you are allowed to have multiple choices.
-    sameName.forEach((element) => {
+    sameNameEles.forEach((element) => {
       if (element.dataset.reset) {
-        //uncheck reset value
         element.checked = false
 
-        //removing speciically the reset value from the array of checkboxes checked
-        //removing from forms.value
+        //removing specifically the reset value from the array of checkboxes checked and removing from forms.value
         const key1 = element.name;
         const elementValue = element.value;
-        const vals = element.form?.value ?? {};
-        if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1])) {
-          let index = vals[key1].indexOf(elementValue)
-          if (index != -1) {
-            vals[key1].splice(index, 1)
-          }
-          if (vals[key1].length == 0) {
-            delete vals[key1]
-          }
+        const numKeys = appState.getNumResponseInputs(element.form.id);
+        const vals = appState.getItem(inputElement.form.id) ?? {};
+        if (vals.hasOwnProperty(key1) && Array.isArray(vals[key1]) && vals[key1].includes(elementValue)) {
+          appState.removeResponseItem(element.form.id, key1, numKeys, elementValue);
         }
       }
     });
@@ -673,45 +472,50 @@ export function handleXOR(inputElement) {
   if (!inputElement.hasAttribute("xor")) {
     return inputElement.value;
   }
+
   // if the user tabbed through the xor, Dont clear anything
   if (!["checkbox", "radio"].includes(inputElement.type) && inputElement.value.length == 0) {
     return null;
   }
-
-
-  let valueObj = {};
-  valueObj[inputElement.id] = inputElement.value;
-  let sibs = [...inputElement.parentElement.querySelectorAll("input")];
-  sibs = sibs.filter(
-    (x) =>
-      x.hasAttribute("xor") &&
-      x.getAttribute("xor") == inputElement.getAttribute("xor") &&
-      x.id != inputElement.id
-  );
-
-  sibs.forEach((x) => {
-    if (inputElement.form.value) {
-      delete inputElement.form.value[x.id]
-    }
-    if (["checkbox", "radio"].includes(x.type)) {
-      x.checked = x.dataset.reset ? false : x.checked;
-    } else {
-      x.value = "";
-      if (x.nextElementSibling.children.length !== 0 && x.nextElementSibling.children[0].tagName == "SPAN") {
-        if (x.nextElementSibling.children[0].innerText.length != 0) {
-          x.nextElementSibling.children[0].innerText = "";
-          x.classList.remove("invalid");
-          x.form.classList.remove('invalid');
-          x.nextElementSibling.remove();
-        }
-      }
-      valueObj[x.id] = x.value;
-    }
+  
+  const appState = getStateManager();
+  const siblings = getXORSiblings(inputElement);
+  siblings.forEach((sibling) => {
+    appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseInputs(inputElement.form.id));
+    resetSiblingDOMValues(sibling);
   });
-  return valueObj[inputElement.id];
+
+  return inputElement.value;
 }
 
-export function nextClick(norp, store) {
+function getXORSiblings(inputElement) {
+  return [...inputElement.parentElement.querySelectorAll("input")].filter(sibling => 
+    sibling.id !== inputElement.id &&
+    sibling.hasAttribute("xor") &&
+    sibling.getAttribute("xor") === inputElement.getAttribute("xor")
+  );
+}
+
+function resetSiblingDOMValues(sibling) {
+  if (["checkbox", "radio"].includes(sibling.type)) {
+    sibling.checked = sibling.dataset.reset ? false : sibling.checked;
+  } else {
+    sibling.value = "";
+    clearXORValidationMessage(sibling);
+  }
+}
+
+function clearXORValidationMessage(inputElement) {
+  const messageSpan = inputElement.nextElementSibling?.children[0];
+  if (messageSpan?.tagName === "SPAN" && messageSpan.innerText.length !== 0) {
+    messageSpan.innerText = "";
+    inputElement.classList.remove("invalid");
+    inputElement.form.classList.remove('invalid');
+    inputElement.nextElementSibling.remove();
+  }
+}
+
+export async function nextClick(norp) {
   // Because next button does not have ID, modal will pass-in ID of question
   // norp needs to be next button element
   if (typeof norp == "string") {
@@ -723,10 +527,10 @@ export function nextClick(norp, store) {
     validateInput(elm)
   });
 
-  showModal(norp, store);
+  await analyzeFormResponses(norp);
 }
 
-function setNumberOfQuestionsInModal(num, norp, store, soft) {
+function showUnansweredQuestionsModal(num, norp, soft) {
   const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
   
   const modalID = soft ? 'softModal' : 'hardModal';
@@ -746,7 +550,7 @@ function setNumberOfQuestionsInModal(num, norp, store, soft) {
     continueButton.removeEventListener("click", continueButton.clickHandler);
     //await the store operation on 'continue without answering' click for correct screen reader focus
     continueButton.clickHandler = async () => {
-      await nextPage(norp, store);
+      await nextPage(norp);
     };
     continueButton.addEventListener("click", continueButton.clickHandler);
   }
@@ -764,8 +568,7 @@ function setNumberOfQuestionsInModal(num, norp, store, soft) {
   });
 }
 
-// show modal function
-function showModal(norp, store) {
+async function analyzeFormResponses(norp) {
   if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
@@ -807,30 +610,11 @@ function showModal(norp, store) {
     }
 
     if (numBlankResponses > 0) {
-      setNumberOfQuestionsInModal(numBlankResponses, norp, store, norp.form.getAttribute("softedit") == "true");
+      showUnansweredQuestionsModal(numBlankResponses, norp, norp.form.getAttribute("softedit") == "true");
       return null;
     }
   }
-  nextPage(norp, store);
-}
-
-let tempObj = {};
-
-async function updateTree() {
-  if (moduleParams?.renderObj?.updateTree) {
-    moduleParams.renderObj.updateTree(moduleParams.questName, questionQueue)
-  }
-  updateTreeInLocalForage()
-}
-
-async function updateTreeInLocalForage() {
-  // We dont have questName yet, don't bother saving the tree yet...
-  if (!('questName' in moduleParams)) {
-    return
-  }
-
-  let questName = moduleParams.questName;
-  await localforage.setItem(questName + ".treeJSON", questionQueue.toVanillaObject());
+  await nextPage(norp);
 }
 
 function getNextQuestionId(currentFormElement) {
@@ -851,14 +635,15 @@ function getNextQuestionId(currentFormElement) {
   return nextQuestionNode.value;
 }
 
-function showLoadingIndicator() {
+// TODO: move these to a separate file
+export function showLoadingIndicator() {
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loadingIndicator';
     loadingIndicator.innerHTML = '<div class="spinner"></div>';
     document.body.appendChild(loadingIndicator);
 }
 
-function hideLoadingIndicator() {
+export function hideLoadingIndicator() {
   const loadingIndicator = document.getElementById('loadingIndicator');
   if (loadingIndicator) {
     document.body.removeChild(loadingIndicator);
@@ -866,27 +651,29 @@ function hideLoadingIndicator() {
 }
 
 // norp == next or previous button (which ever is clicked...)
-async function nextPage(norp, store) {
+async function nextPage(norp) {
   // The root is defined as null, so if the question is not the same as the
   // current value in the questionQueue. Add it.  Only the root should be effected.
   // NOTE: if the root has no children, add the current question to the queue
   // and call next().
 
-  let questionElement = norp.form;
+  const appState = getStateManager();
+  await appState.syncToStore();
+
+  const questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
     x.value = "true"
-    setFormValue(questionElement, x.value, x.id)
+    setResponsesInState(questionElement, x.value, x.id)
   });
 
   if (checkValid(questionElement) == false) {
     return null;
   }
+
   if (questionQueue.isEmpty()) {
     questionQueue.add(questionElement.id);
     questionQueue.next();
   }
-  let questName = moduleParams.questName;
-  tempObj[questionElement.id] = questionElement.value;
 
   // check if we need to add questions to the question queue
   checkForSkips(questionElement);
@@ -914,52 +701,9 @@ async function nextPage(norp, store) {
       nextElement = document.getElementById(nextQuestionId.value);
       nextElement = exitLoop(nextElement);
     } else {
-      console.log(
-        " ============= next element is not a question...  not sure what went wrong..."
-      );
+      console.error(" ============= next element is not a question...  not sure what went wrong...");
       console.trace();
     }
-  }
-
-  //Check if questionElement exists first so its not pushing undefineds
-  if (store) {
-    try {
-      // show a loading indicator for variables in delayedParameterArray (they take extra time to process)
-      if (moduleParams.delayedParameterArray.includes(nextElement.id)) showLoadingIndicator();
-
-      let formData = {};
-      formData[`${questName}.${questionElement.id}`] = questionElement.value;
-      await store(formData)
-    } catch (e) {
-      console.error("Store failed", e);
-    } finally {
-      hideLoadingIndicator();
-    }
-  } else {
-    let tmp = await localforage
-      .getItem(questName)
-      .then((allResponses) => {
-        // if their is not an object in LF create one that we will add later...
-        if (!allResponses) {
-          allResponses = {};
-        }
-        // set the value for the questionId...
-        allResponses[questionElement.id] = questionElement.value;
-        if (questionElement.value === undefined) {
-          delete allResponses[questionElement.id]
-        }
-        return allResponses;
-      })
-      .then((allResponses) => {
-        // allResposes really should be defined at this point. If it wasn't
-        // previously in LF, the previous block should have created it...
-        localforage.setItem(questName, allResponses, () => {
-          console.log(
-            "... Response stored in LF: " + questName,
-            JSON.stringify(allResponses)
-          );
-        });
-      });
   }
 
   //hide the current question
@@ -969,22 +713,6 @@ async function nextPage(norp, store) {
   window.scrollTo(0, 0);
 }
 
-export async function submitQuestionnaire(store, questName) {
-  if (store) {
-    let formData = {};
-    formData[`${questName}.COMPLETED`] = true;
-    formData[`${questName}.COMPLETED_TS`] = new Date();
-    try {
-      store(formData).then(() => {
-        location.reload();
-      });
-    } catch (e) {
-      console.log("Store failed", e);
-    }
-
-  }
-}
-
 function exitLoop(nextElement) {
   if (!nextElement) {
     console.error("nextElement is null or undefined");
@@ -992,15 +720,16 @@ function exitLoop(nextElement) {
   }
 
   if (nextElement.hasAttribute("firstquestion")) {
-    let loopMaxElement = document.getElementById(nextElement.getAttribute("loopmax"));
+    const loopMaxElement = document.getElementById(nextElement.getAttribute("loopmax"));
     if (!loopMaxElement) {
       console.error(`LoopMaxElement is null or undefined for ${nextElement.id}`);
       return nextElement;
     }
 
-    let loopMax = parseInt(loopMaxElement.value);
-    let firstQuestion = parseInt(nextElement.getAttribute("firstquestion"));
-    let loopIndex = parseInt(nextElement.getAttribute("loopindx"));
+    const appState = getStateManager();
+    const loopMax = appState.getItem(loopMaxElement.id);
+    const firstQuestion = parseInt(nextElement.getAttribute("firstquestion"));
+    const loopIndex = parseInt(nextElement.getAttribute("loopindx"));
 
     if (isNaN(loopMax) || isNaN(firstQuestion) || isNaN(loopIndex)) {
       console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextElement.id}: loopMax=${loopMax}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
@@ -1010,7 +739,7 @@ function exitLoop(nextElement) {
     if (math.evaluate(firstQuestion > loopMax)) {
       questionQueue.pop();
       questionQueue.add(`_CONTINUE${loopIndex}_DONE`);
-      let nextQuestionId = questionQueue.next().value;
+      const nextQuestionId = questionQueue.next().value;
       nextElement = document.getElementById(nextQuestionId.value);
     }
   }
@@ -1018,61 +747,90 @@ function exitLoop(nextElement) {
   return nextElement;
 }
 
+function removeExtraBRElements(rootElement) {
+  let consecutiveBrs = [];
+  
+  // Traverse the DOM tree to find all <br> elements
+  rootElement.querySelectorAll('br').forEach((br) => {
+    if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
+      consecutiveBrs.push(br);
+    } else {
+      if (consecutiveBrs.length > 3) {
+        // Remove all but the first two <br> elements
+        consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+      }
+      // Reset the array to start tracking a new sequence
+      consecutiveBrs = [br];
+    }
+  });
+
+  // Final check in case the last sequence of <br>s is at the end of the document
+  if (consecutiveBrs.length > 3) {
+    consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+  }
+}
+
 // Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
 
 export function displayQuestion(nextElement) {
+  // Fail gently in the renderer tool.
+  if (!nextElement && !moduleParams.renderObj.activate) return;
+  
+  const appState = getStateManager();
+  
   questionFocusSet = false;
 
-  [...nextElement.querySelectorAll("span[forid]")].map((x) => {
-    let defaultValue = x.getAttribute("optional")
-    x.innerHTML = math.valueOrDefault(decodeURIComponent(x.getAttribute("forid")), defaultValue)
-  });
+  // When the input ID isn't the quesiton ID (e.g. YYYY-MM input), find the parent question ID
+  const forIDElementArray = nextElement.querySelectorAll("span[forid]");
+  if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
 
-  Array.from(
-    nextElement.querySelectorAll("input[data-max-validation-dependency]")
-  ).map(
-    (x) =>
-      (x.max = document.getElementById(x.dataset.maxValidationDependency).value)
-  );
-  Array.from(
-    nextElement.querySelectorAll("input[data-min-validation-dependency]")
-  ).map(
-    (x) =>
-      (x.min = document.getElementById(x.dataset.minValidationDependency).value)
-  );
+  [...nextElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
+      (x.max = document.getElementById(x.dataset.maxValidationDependency).value)); // TODO: (rm document search)
+
+  [...nextElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) =>
+      (x.min = document.getElementById(x.dataset.minValidationDependency).value)); // TODO: (rm document search)
 
   // check all responses for next question
-  [...nextElement.querySelectorAll('[displayif]')].map((elm) => {
+  [...nextElement.querySelectorAll('[displayif]')].forEach((elm) => {
     let f = evaluateCondition(elm.getAttribute("displayif"));
     elm.style.display = f ? null : "none";
   });
 
   // check for displayif spans...
-  Array.from(nextElement.querySelectorAll("span[displayif],div[displayif]"))
-    .map(elm => {
-      let f = evaluateCondition(elm.getAttribute("displayif"));
-      elm.style.display = f ? null : "none";
-    });
-  Array.from(nextElement.querySelectorAll("span[data-encoded-expression]"))
-  .map(elm=>{
+  [...nextElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
+    const textContent = elm.textContent;
+    const isPlainText = textContent === elm.innerHTML;
+
+    if (elm.getAttribute('data-fallback') === null) {
+        elm.setAttribute('data-fallback', isPlainText ? textContent : '');
+    }
+
+    const displayIfAttribute = elm.getAttribute("displayif");
+    let f = evaluateCondition(displayIfAttribute);
+    if (f) {
+      elm.style.display = null;
+
+      let displayIfText = resolveRuntimeConditions(displayIfAttribute) ?? elm.getAttribute('data-fallback');
+      if (displayIfText) {
+        if (textContent.startsWith(',')) {
+          displayIfText = ', ' + displayIfText;
+        }
+        elm.textContent = displayIfText;
+      }
+    } else {
+      elm.style.display = "none";
+    }
+  });
+
+  [...nextElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
       let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
       elm.innerText=f;
-  })
-
-  //Sets the brs after non-displays to not show as well
-  nextElement.querySelectorAll(`[style*="display: none"]+br`).forEach((e) => {
-    e.style = "display: none"
-  })
-  
-  // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
-  nextElement.querySelectorAll("br").forEach((br) => {
-    br.setAttribute("aria-hidden", "true");
   });
 
   // ISSUE: 403
   // update {$e:}/{$u} and and {$} elements in grids when the user displays the question ...
-  Array.from(nextElement.querySelectorAll("[data-gridreplace]")).forEach((e) => {
+  [...nextElement.querySelectorAll("[data-gridreplace]")].forEach((e) => {
     if (e.dataset.gridreplacetype == "_val") {
       e.innerText = math._value(decodeURIComponent(e.dataset.gridreplace))
     } else {
@@ -1081,10 +839,8 @@ export function displayQuestion(nextElement) {
   });
   
   // Check if grid elements need to be shown. Elm is a <tr>. If f !== true, remove the row (elm) from the DOM.
-  Array.from(nextElement.querySelectorAll("[data-gridrow][data-displayif]")).forEach((elm) => {
+  [...nextElement.querySelectorAll("[data-gridrow][data-displayif]")].forEach((elm) => {
     const f = evaluateCondition(decodeURIComponent(elm.dataset.displayif));
-    console.log(`checking the datagrid for displayif... ${elm.dataset.questionId} ${f}`)
-
     if (f !== true) {
       elm.dataset.hidden = "true";
       elm.style.display = "none";
@@ -1095,7 +851,6 @@ export function displayQuestion(nextElement) {
   });
 
   //Replacing all default HTML form validations with datasets
-
   [...nextElement.querySelectorAll("input[required]")].forEach((element) => {
     if (element.hasAttribute("required")) {
       element.removeAttribute("required");
@@ -1106,16 +861,16 @@ export function displayQuestion(nextElement) {
   [...nextElement.querySelectorAll("input[min]")].forEach((element) => {
     exchangeValue(element, "min", "data-min");
   });
-  [...nextElement.querySelectorAll("input[max]")].forEach((element) =>
+  [...nextElement.querySelectorAll("input[max]")].forEach((element) => {
     exchangeValue(element, "max", "data-max")
-  );
+  });
   // supporting legacy code... dont use minval
   [...nextElement.querySelectorAll("input[minval]")].forEach((element) => {
     exchangeValue(element, "minval", "data-min");
   });
-  [...nextElement.querySelectorAll("input[maxval]")].forEach((element) =>
+  [...nextElement.querySelectorAll("input[maxval]")].forEach((element) => {
     exchangeValue(element, "maxval", "data-max")
-  );
+  });
 
   [...nextElement.querySelectorAll("input[data-min]")].forEach((element) =>
     exchangeValue(element, "data-min", "data-min")
@@ -1129,14 +884,15 @@ export function displayQuestion(nextElement) {
     exchangeValue(element, "data-min-date-uneval", "data-min-date");
     exchangeValue(element, "data-min-date-uneval", "min");
   });
+
   [...nextElement.querySelectorAll("input[data-max-date-uneval]")].forEach((element) => {
     exchangeValue(element, "data-max-date-uneval", "data-max-date");
     exchangeValue(element, "data-max-date-uneval", "max");
   });
+
   nextElement.querySelectorAll("[data-displaylist-args]").forEach(element => {
-    console.log(element)
     element.innerHTML = math.existingValues(element.dataset.displaylistArgs)
-  })
+  });
 
   // handle unsupported 'month' input type (Safari for MacOS and Firefox)
   const monthInputs = nextElement.querySelectorAll("input[type='month']");
@@ -1146,27 +902,33 @@ export function displayQuestion(nextElement) {
     });
   }
 
+  removeExtraBRElements(nextElement);
+
+  //Sets the brs after non-displays to not show as well
+  [...nextElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
+    e.style = "display: none"
+  });
+  
+  // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
+  [...nextElement.querySelectorAll("br")].forEach((br) => {
+    br.setAttribute("aria-hidden", "true");
+  });
+
   //move to the next question...
   nextElement.classList.add("active");
 
   // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
   // The tabindex leads to a negative user experience in VoiceOver (macOS).
   if (moduleParams.isWindowsEnvironment) {
-    nextElement.querySelectorAll("div.response").forEach((responseElement) => {
+    [...nextElement.querySelectorAll("div.response")].forEach((responseElement) => {
       responseElement.setAttribute("tabindex", "0");
     });
   }
 
-  // FINALLY...  update the tree in localForage...
-  // First let's try NOT waiting for the function to return.
-  updateTree();
-
-  questionQueue.ptree();
-
   // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
   if (moduleParams.renderObj?.activate) manageAccessibleQuestionInit(nextElement.querySelector('fieldset') || nextElement);
 
-  return nextElement;
+  appState.setActiveQuestionState(nextElement.id);
 }
 
 // Initialize the question text and focus management for screen readers.
@@ -1314,24 +1076,23 @@ function isMonthInputSupported() {
   return input.type === 'month';
 }
 
-export async function previousClicked(norp, store) {
+export async function previousClicked(norp) {
   // get the previousElement...
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) == "_CONTINUE") {
     pv = questionQueue.previous();
   }
-  let prevElement = document.getElementById(pv.value.value);
+
+  const previousElementID = pv.value.value;
+
+  const appState = getStateManager();
+  await appState.syncToStore();
+  
+  let prevElement = document.getElementById(previousElementID);
   norp.form.classList.remove("active");
+
+  restoreResponses(appState.getSurveyState(), previousElementID);
   displayQuestion(prevElement)
-
-  if (store) {
-    console.log("setting... ", moduleParams.questName, "=== UNDEFINED")
-    let formData = {};
-    formData[`${moduleParams.questName}.${norp.form.id}`] = undefined;
-    store(formData);
-  } else removeQuestion(moduleParams.questName, norp.form.id);
-
-  updateTree();
 
   return prevElement;
 }
@@ -1449,93 +1210,107 @@ export function getSelectedResponses(questionElement) {
   return [...radiosAndCheckboxes, ...inputFields, ...hiddenInputs];
 }
 
-export function evaluateCondition(txt) {
+// RegExp to segment text conditions passed in as a string with '[', '(', ')', ',', and ']'. https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
+const evaluateConditionRegex = /[\(\),]/g;
 
-  txt = decodeURIComponent(txt)
-  console.log("evaluateCondition: ===>", txt)
+/**
+ * Try to evaluate using mathjs. Use fallback evaluation in the catch block.
+ * math.evaluate(<string>) is a built-in mathjs func to evaluate string as mathematical expression.
+ * @param {string} evalString - The string condition (markdown) to evaluate.
+ * @returns {any}- The result of the evaluation.
+ */
 
-  // try to evaluate using mathjs...
-  // if we fail, fall back to old evaluation...
+// TODO: loops: break out of a loop early to avoid unnecessary calculations (currently, all conditions are evaluated for every possible loop iteration).
+export function evaluateCondition(evalString) {
+  evalString = decodeURIComponent(evalString);
+
   try {
-    let v = math.evaluate(txt)
-    console.log(`${txt} ==> ${v}`)
-    return v
+    return math.evaluate(evalString)
   } catch (err) {
-    console.log("--- falling back to old evaluation ---")
+    console.log('Using custom evaluation for:', evalString);
+    
+    let displayIfStack = [];
+    let lastMatchIndex = 0;
 
-    //refactored to displayIf from parse
-    function replaceValue(x) {
-      if (typeof x === "string") {
-        let element = document.getElementById(x);
-        if (element != null) {
-          if (element.dataset.grid && (element.type === "radio" || element.type === "checkbox")) {
-            //for displayif conditions with grid elements
-            x = element.checked ? 1 : 0;
-          }
-          else {
-            let tmpVal = x;
-            x = document.getElementById(x).value;
-            if (typeof x == "object" && Array.isArray(x) != true) {
-              x = x[tmpVal];
-            }
-          }
-
-        } else {
-          //look up by name
-          let temp1 = [...document.getElementsByName(x)].filter(
-            (y) => y.checked
-          )[0];
-          x = temp1 ? temp1.value : x;
-          // ***** if it's neither... look in the previous module *****
-          if (!temp1) {
-            // ISSUE 383: when moduleParams.previousResults[x] is 0.  It is FALSE and you 
-            // dont replace the key with the value.
-            x = moduleParams.previousResults.hasOwnProperty(x) ? moduleParams.previousResults[x] : x;
-          }
-        }
-      }
-      return x;
-
+    // split the displayif string into a stack of strings and operators
+    for (const match of evalString.matchAll(evaluateConditionRegex)) {
+      displayIfStack.push(evalString.slice(lastMatchIndex, match.index)); 
+      displayIfStack.push(match[0]);
+      lastMatchIndex = match.index + 1;
     }
-    //https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
-    var re = /[\(\),]/g;
-    var stack = [];
-    var lastMatch = 0;
-    for (const match of txt.matchAll(re)) {
-      stack.push(match.input.substr(lastMatch, match.index - lastMatch));
-      stack.push(match.input.charAt(match.index));
-      lastMatch = match.index + 1;
-    }
-    // remove all blanks...
-    stack = stack.filter((x) => x != "");
 
-    while (stack.indexOf(")") > 0) {
-      let callEnd = stack.indexOf(")");
-      if (
-        stack[callEnd - 4] == "(" &&
-        stack[callEnd - 2] == "," &&
-        stack[callEnd - 5] in knownFunctions
-      ) {
-        // it might hurt performance, but for debugging
-        // expliciting setting the variables are helpful...
-        let fun = stack[callEnd - 5];
-        let arg1 = stack[callEnd - 3];
-        // arg1 one should be a id or a boolean...
-        // either from a element in the document or
-        // from the currently undefined last module...
-        arg1 = replaceValue(arg1);
-        let arg2 = stack[callEnd - 1];
-        arg2 = replaceValue(arg2);
-        let tmpValue = knownFunctions[fun](arg1, arg2);
-        // replace from callEnd-5 to callEnd with  the results...
-        // splice start at callEnd-5, remove 6, add the calculated value...
-        stack.splice(callEnd - 5, 6, tmpValue);
+    // remove all blanks
+    displayIfStack = displayIfStack.filter((x) => x != "");
+
+    const appState = getStateManager();
+
+    // Process the stack
+    while (displayIfStack.indexOf(")") > 0) {
+      const stackEnd = displayIfStack.indexOf(")");
+
+      if (isValidFunctionSyntax(displayIfStack, stackEnd)) {
+        const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd, appState);
+        const functionResult = knownFunctions[func](arg1, arg2, appState);
+        console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2, 'RESULT', functionResult); // Temp for debugging
+
+        // Replace from stackEnd-5 to stackEnd with the results. Splice and replace the function call with the result.
+        displayIfStack.splice(stackEnd - 5, 6, functionResult);
+
+        // TODO: look at ways to short-circuit the evaluation of 'or' functions when one evaluates to true and loops beyond the loop index.
+
       } else {
-        throw { Message: "Bad Displayif Function: " + txt, Stack: stack };
+        throw { Message: "Bad Displayif Function: " + evalString, Stack: displayIfStack };
       }
     }
-    return stack[0];
+
+    return displayIfStack[0];
   }
 }
-window.evaluateCondition = evaluateCondition
+
+// Test the string-based function syntax for a valid function call (converting markdown function strings to function calls).
+const isValidFunctionSyntax = (stack, stackEnd) => {
+  return stack[stackEnd - 4] === "(" &&
+    stack[stackEnd - 2] === "," &&
+    stack[stackEnd - 5] in knownFunctions
+}
+
+// func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
+function getFunctionArgsFromStack(stack, callEnd, appState) {
+  const func = stack[callEnd - 5];
+  
+  let arg1 = stack[callEnd - 3];
+  arg1 = evaluateArg(arg1, appState);
+
+  let arg2 = stack[callEnd - 1];
+  arg2 = evaluateArg(arg2, appState);
+
+  return { func, arg1, arg2 };
+}
+
+/**
+ * Evaluate the individual args embedded in conditions.
+ * Return early for: undefined, hardcoded numbers and booleans (they get evaluated in mathjs), and known loop markers.
+ * @param {string} arg - The argument to evaluate.
+ * @param {*} appState - The application state.
+ * @returns 
+ */
+
+function evaluateArg(arg, appState) {
+
+  if (arg === null || arg === 'undefined') return arg;
+  else if (typeof arg === 'number' || parseInt(arg, 10) || parseFloat(arg)) return arg;
+  else if (['true', true, 'false', false].includes(arg)) return arg;
+  else if (arg === '#loop') return arg;
+
+  // Search for values in the surveyState. This search covers responses and 'previousResults' (passed in at startup).
+  const foundValue = appState.findResponseValue(arg);
+  if (foundValue) {
+    return foundValue;
+  } else {
+    console.log('RETURNING (default) empty string for:', arg); // Temp for debugging
+    return '';
+  }
+}
+
+// TODO: get rid of Window dependency
 window.questionQueue = questionQueue
