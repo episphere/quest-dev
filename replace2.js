@@ -12,6 +12,7 @@ export let transform = function () { /* init */ };
 transform.rbAndCbClick = rbAndCbClick;
 
 transform.render = async (obj, divID, previousResults = {}) => {
+  console.log('CONFIRMING QUESTION SEPARATOR BRANCH');
 
   // Set the global moduleParams object with data needed for different parts of the app.
   setModuleParams(obj, divID, previousResults);

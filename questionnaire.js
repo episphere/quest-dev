@@ -5,9 +5,6 @@ import { translate } from "./common.js";
 import { math } from './customMathJSImplementation.js';
 import { restoreResponses } from "./restoreResponses.js";
 import { getStateManager } from "./stateManager.js";
-import { math } from './customMathJSImplementation.js';
-import { restoreResponses } from "./restoreResponses.js";
-import { getStateManager } from "./stateManager.js";
 export const moduleParams = {};
 
 // TODO: break this up into more tightly related files
@@ -513,42 +510,42 @@ function clearXORValidationMessage(inputElement) {
   }
 }
   
-  const appState = getStateManager();
-  const siblings = getXORSiblings(inputElement);
-  siblings.forEach((sibling) => {
-    appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseInputs(inputElement.form.id));
-    resetSiblingDOMValues(sibling);
-  });
+//   const appState = getStateManager();
+//   const siblings = getXORSiblings(inputElement);
+//   siblings.forEach((sibling) => {
+//     appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseInputs(inputElement.form.id));
+//     resetSiblingDOMValues(sibling);
+//   });
 
-  return inputElement.value;
-}
+//   return inputElement.value;
+// }
 
-function getXORSiblings(inputElement) {
-  return [...inputElement.parentElement.querySelectorAll("input")].filter(sibling => 
-    sibling.id !== inputElement.id &&
-    sibling.hasAttribute("xor") &&
-    sibling.getAttribute("xor") === inputElement.getAttribute("xor")
-  );
-}
+// function getXORSiblings(inputElement) {
+//   return [...inputElement.parentElement.querySelectorAll("input")].filter(sibling => 
+//     sibling.id !== inputElement.id &&
+//     sibling.hasAttribute("xor") &&
+//     sibling.getAttribute("xor") === inputElement.getAttribute("xor")
+//   );
+// }
 
-function resetSiblingDOMValues(sibling) {
-  if (["checkbox", "radio"].includes(sibling.type)) {
-    sibling.checked = sibling.dataset.reset ? false : sibling.checked;
-  } else {
-    sibling.value = "";
-    clearXORValidationMessage(sibling);
-  }
-}
+// function resetSiblingDOMValues(sibling) {
+//   if (["checkbox", "radio"].includes(sibling.type)) {
+//     sibling.checked = sibling.dataset.reset ? false : sibling.checked;
+//   } else {
+//     sibling.value = "";
+//     clearXORValidationMessage(sibling);
+//   }
+// }
 
-function clearXORValidationMessage(inputElement) {
-  const messageSpan = inputElement.nextElementSibling?.children[0];
-  if (messageSpan?.tagName === "SPAN" && messageSpan.innerText.length !== 0) {
-    messageSpan.innerText = "";
-    inputElement.classList.remove("invalid");
-    inputElement.form.classList.remove('invalid');
-    inputElement.nextElementSibling.remove();
-  }
-}
+// function clearXORValidationMessage(inputElement) {
+//   const messageSpan = inputElement.nextElementSibling?.children[0];
+//   if (messageSpan?.tagName === "SPAN" && messageSpan.innerText.length !== 0) {
+//     messageSpan.innerText = "";
+//     inputElement.classList.remove("invalid");
+//     inputElement.form.classList.remove('invalid');
+//     inputElement.nextElementSibling.remove();
+//   }
+// }
 
 export async function nextClick(norp) {
   // Because next button does not have ID, modal will pass-in ID of question
@@ -912,11 +909,6 @@ export function displayQuestion(questionElement) {
     } else {
       delete elm.dataset.hidden;
       elm.style.display = "";
-      elm.dataset.hidden = "true";
-      elm.style.display = "none";
-    } else {
-      delete elm.dataset.hidden;
-      elm.style.display = "";
     }
   });
 
@@ -939,8 +931,7 @@ export function displayQuestion(questionElement) {
     exchangeValue(element, "minval", "data-min");
   });
   [...questionElement.querySelectorAll("input[maxval]")].forEach((element) => {
-    exchangeValue(element, "maxval", "data-max")
-  });
+    exchangeValue(element, "maxval", "data-max");
   });
 
   [...questionElement.querySelectorAll("input[data-min]")].forEach((element) =>
@@ -962,8 +953,7 @@ export function displayQuestion(questionElement) {
   });
 
   questionElement.querySelectorAll("[data-displaylist-args]").forEach(element => {
-    element.innerHTML = math.existingValues(element.dataset.displaylistArgs)
-  });
+    element.innerHTML = math.existingValues(element.dataset.displaylistArgs);
   });
 
   // handle unsupported 'month' input type (Safari for MacOS and Firefox)

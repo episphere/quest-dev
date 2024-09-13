@@ -58,7 +58,11 @@ export class QuestionProcessor {
       return placeholder;
     });
 
+    // TODO: consider unrolling after user has input the response that determines number of loops.
+    // This would lighten the initial load considerably. Would need to handle insertions to the array.
+    // Would also need to handle removing generated loop eles on back button click and/or change of the trigger response.
     // Current loop process unrolls all possible responses to n=loopMax (25).
+    //markdown = markdown.replace(/<\/loop>/g, "</loop>\n[END_OF_LOOP] placeholder");
     markdown = unrollLoops(markdown, this.i18n.language);
 
     // Now we have the contents unpacked and the grid placeholders embedded:
@@ -1179,6 +1183,11 @@ function ordinal(a, lang) {
     let loopRegex = /<loop max=(\d+)\s*>(.*?)<\/loop>/gm;
     txt = txt.replace(/(?:\r\n|\r|\n)/g, "\xa9");
     let res = [...txt.matchAll(loopRegex)].map(function (x, indx) {
+      // console.log('X:', x);
+      // console.log('X0:', x[0]);
+      // console.log('X1:', x[1]);
+      // console.log('X2:', x[2]);
+      // console.log('INDX:', indx);
       return { cnt: x[1], txt: x[2], indx: indx + 1, orig: x[0] };
     });
   
@@ -1199,12 +1208,11 @@ function ordinal(a, lang) {
         label: disIfID[0],
         id: disIfID[1],
       }));
-      disIfIDs = disIfIDs.map((x) => x.id);
-      let newIds = ids.map((x) => x.id);
+      disIfIDs.map((x) => x.id);
+      ids.map((x) => x.id);
   
       // find all ids defined within the loop,
-      // note: textboxes are an outlier that needs
-      //       to be fixed.
+      // note: textboxes are an outlier that needs to be fixed.
       let idsInLoop = Array.from(x.txt.matchAll(/\|[\w\s=]*id=(\w+)|___\|\s*(\w+)|textbox:\s*(\w+)/g)).map(x => {
         return x[1] ? x[1] : (x[2] ? x[2] : x[3])
       })
@@ -1217,12 +1225,9 @@ function ordinal(a, lang) {
       for (let loopIndx = 1; loopIndx <= x.cnt; loopIndx++) {
         let currentText = x.txt;
         // replace all instances of the question ids with id_#
-        ids.map(
-          (id) =>
-          (currentText = currentText.replace(
+        ids.map((id) => (currentText = currentText.replace(
             new RegExp("\\b" + id.id + "\\b(?!\#)", "g"),
-            `${id.id}_${loopIndx}_${loopIndx}`
-          ))
+            `${id.id}_${loopIndx}_${loopIndx}`))
         );
         //replace all idsInLoop in the loop with {$id_$loopIndx}
         idsInLoop.forEach(id => {
@@ -1231,27 +1236,25 @@ function ordinal(a, lang) {
   
         //replace all user-named combo and radio boxes
         currentText = currentText.replaceAll(rb_cb_regex,(all,g1)=>all.replace(g1,`${g1}_${loopIndx}`))
-  
         currentText = currentText.replace(/\{##\}/g, `${ordinal(loopIndx, language)}`)
   
-        ids.map(
-          (id) => (currentText = currentText.replace(/#loop/g, "" + loopIndx))
-        );
-  
+        ids.map(() => (currentText = currentText.replace(/#loop/g, "" + loopIndx)));
   
         // replace  _\d_\d#prev with _{$loopIndex-1}
         // we do it twice to match a previous bug..
         currentText = currentText.replace(/_\d+_\d+#prev/g, `_${loopIndx - 1}_${loopIndx - 1}`)
         loopText = loopText + "\n" + currentText;
       }
-      loopText +=
-        "[_CONTINUE" + x.indx + "_DONE" + ",displayif=setFalse(-1,#loop)]";
+
+      loopText += "[_CONTINUE" + x.indx + "_DONE" + ",displayif=setFalse(-1,#loop)]";
+      loopText += "[END_OF_LOOP] placeholder";
       return loopText;
     });
   
     for (let loopIndx = 0; loopIndx < cleanedText.length; loopIndx++) {
-      txt = txt.replace(res[loopIndx].orig, cleanedText[loopIndx]);
+      txt = txt.replace(res[loopIndx].orig, cleanedText[loopIndx].replace('</loop>', '[END_OF_LOOP]'));
     }
+
     txt = txt.replace(/\xa9/g, "\n");
   
     return txt;
