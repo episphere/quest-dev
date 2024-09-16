@@ -297,13 +297,12 @@ export const customMathJSFunctions = {
     let responseValue = this._value(questionId);
 
     if (Array.isArray(responseValue) || Array.isArray(responseValue[name])) {
+      console.error('TODO: (selectionCount) remove DOM access and use stateManager', x, countReset);
       responseValue = Array.isArray(responseValue) ? responseValue : responseValue[name]
 
       if (countReset){
         return responseValue.length;
       }
-
-      console.warn('TODO: (selectionCount) remove DOM access and use stateManager', x);
 
       // BUG FIX:  if the data-reset ("none of the above") is selected
       let questionElement = document.getElementById(questionId)

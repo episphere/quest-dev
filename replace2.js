@@ -102,6 +102,9 @@ function getActiveQuestionID(questionsArray) {
     currentQuestionID = questionsArray[0].questionID;
     questionQueue.add(currentQuestionID);
     questionQueue.next();
+  } else if (currentQuestionID.startsWith('_CONTINUE')) {
+    questionQueue.pop();
+    currentQuestionID = questionQueue.currentNode.value;
   }
   
   return currentQuestionID;

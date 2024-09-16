@@ -5,8 +5,8 @@ import { getStateManager } from "./stateManager.js";
 
 // TODO: all document level access can be scoped down to the moduleParams.questDiv level
 
-// // Debounced version of handleOtherTextInputKeyPress
-// const debouncedHandleOtherTextInputKeyPress = debounce(handleOtherTextInputKeyPress, 200);
+// Debounced version of handleInputEvent
+const debouncedHandleInputEvent = debounce(handleInputEvent, 250);
 
 // Add event listeners to the div element (questContainer) -> delegate events to the parent div.
 // Note: 'focusout' is used instead of 'blur' because 'blur' does not bubble to the parent div.
@@ -15,7 +15,7 @@ export function addEventListeners() {
   moduleParams.questDiv.addEventListener('change', handleChangeEvent);
   moduleParams.questDiv.addEventListener('keydown', handleKeydownEvent);
   moduleParams.questDiv.addEventListener('keyup', handleKeyupEvent);
-  moduleParams.questDiv.addEventListener('input', handleInputEvent);
+  moduleParams.questDiv.addEventListener('input', debouncedHandleInputEvent);
   moduleParams.questDiv.addEventListener('focusout', handleBlurFocusoutEvent);
   moduleParams.questDiv.addEventListener('submit', handleSubmitEvent);
 
@@ -147,12 +147,15 @@ function handleBlurFocusoutEvent(event) {
 }
 
 function handleInputEvent(event) {
+  console.log('handleInputEvent', event);
   const target = event.target;
   
   if (target.matches('input[type="text"], textarea')) {
     const label = target.closest('label');
     if (label) {
-      const radioCB = label.querySelector(`#${label.htmlFor}`) || label.querySelector('input[type="radio"], input[type="checkbox"]');
+      console.log('label', label);
+      const radioCB = moduleParams.questDiv.querySelector(`#${label.htmlFor}`) || label.querySelector('input[type="radio"], input[type="checkbox"]');
+      console.log('radioCB', radioCB);
       if (radioCB && (radioCB.type === 'radio' || radioCB.type === 'checkbox')) {
         // Check or uncheck the radio or checkbox based on the text input length.
         target.value.length > 0 ? radioCB.checked = true : radioCB.checked = false;
@@ -161,12 +164,6 @@ function handleInputEvent(event) {
         textboxinput(target);
       }
     }
-
-    // // Handle "Other" text inputs
-    // const responseContainer = target.closest('.response');
-    // if (responseContainer) {
-    //   debouncedHandleOtherTextInputKeyPress(event);
-    // }
   }
 }
 
@@ -197,21 +194,6 @@ function closeModalAndFocusQuestion(event) {
     }
   }
 }
-
-// // Function to handle "Other" text input key press
-// function handleOtherTextInputKeyPress(event) {
-//   const responseTarget = event.target.closest('.response');
-//   const checkboxOrRadioEle = responseTarget?.querySelector('input[type="checkbox"], input[type="radio"]');
-
-//   if (checkboxOrRadioEle) {
-//     const inputValue = event.target.value?.trim();
-//     const isChecked = checkboxOrRadioEle.checked;
-//     // If the input value is removed, uncheck the checkbox/radio
-//     if (!inputValue && isChecked) {
-//       checkboxOrRadioEle.checked = false;
-//     }
-//   }
-// }
 
 // Custom Accessible handling for up/down arrow keys.
 // This ensures focus doesn't trap accessible navigation in lists that have 'Other' text inputs.
@@ -498,18 +480,18 @@ function resetChildren(target) {
   }
 }
 
-// // Debounce the input event to prevent multiple rapid-fire events.
-// function debounce(func, wait) {
-//   let timeout;
-//   return function execute(...args) {
-//       const later = () => {
-//           clearTimeout(timeout);
-//           func(...args);
-//       };
-//       clearTimeout(timeout);
-//       timeout = setTimeout(later, wait);
-//   };
-// }
+// Debounce the input event to prevent multiple rapid-fire events.
+function debounce(func, wait) {
+  let timeout;
+  return function execute(...args) {
+      const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+  };
+}
 
 function addSubmitSurveyListener() {
   moduleParams.questDiv.querySelector('#submitModalButton').onclick = async () => {

@@ -655,8 +655,9 @@ async function analyzeFormResponses(norp) {
  */
 function getNextQuestionId() {
   let nextQuestionNode = questionQueue.next();
-  
+
   if (nextQuestionNode.done) {
+    console.log('NEXT QUESTION NODE (done)', nextQuestionNode.done);
     const appState = getStateManager();
     const questionProcessor = appState.getQuestionProcessor();
     const nextSequentialQuestionEle = questionProcessor.findQuestion(undefined);
@@ -690,8 +691,8 @@ export function hideLoadingIndicator() {
 async function nextPage(norp) {
   const questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
+    console.log('HIDDEN ELEMENT (setResponsesInState)', x);
     x.value = "true"
-    setResponsesInState(questionElement, x.value, x.id)
     setResponsesInState(questionElement, x.value, x.id)
   });
 
@@ -714,8 +715,11 @@ async function nextPage(norp) {
   checkForSkips(questionElement);
 
   let nextQuestionId = getNextQuestionId();  
+  console.log('NEXT QUESTION ID', nextQuestionId);
   let nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
+  console.log('NEXT QUESTION ELE', nextQuestionEle);
   nextQuestionEle = exitLoop(nextQuestionEle);
+  console.log('NEXT QUESTION ELE (after exitLoop)', nextQuestionEle);
 
   // before we add the next question to the queue...
   // check for the displayif status...
@@ -728,6 +732,7 @@ async function nextPage(norp) {
 
       let nextQuestionId = nextQuestionEle.dataset.nodisplay_skip;
       if (nextQuestionEle.dataset.nodisplay_skip) {
+        console.log('NEXT QUESTION ID (nodisplay_skip (after))', nextQuestionId);
         questionQueue.add(nextQuestionEle.dataset.nodisplay_skip);
       }
 
@@ -740,6 +745,8 @@ async function nextPage(norp) {
     }
   }
 
+  console.log('NEXT QUESTION ELE (after displayif check / while loop)', nextQuestionEle);
+
   swapVisibleQuestion(nextQuestionEle);
 }
 
@@ -747,32 +754,37 @@ function exitLoop(nextQuestionEle) {
   if (!nextQuestionEle || !nextQuestionEle.hasAttribute("firstquestion")) {
     return nextQuestionEle;
   }
+  
+  const appState = getStateManager();
+  const questionProcessor = appState.getQuestionProcessor();
+  const loopData = questionProcessor.getLoopData(nextQuestionEle.id);
+  const loopMaxResponse = loopData?.loopMaxResponse;
 
-  const loopMaxElement = nextQuestionEle.closest(`#${nextQuestionEle.getAttribute("loopmax")}`);
-  if (!loopMaxElement) {
-    console.error(`LoopMaxElement is null or undefined for ${nextQuestionEle.id}`);
+  if (!loopMaxResponse) {
+    console.error(`LoopData is null or undefined for ${nextQuestionEle.id}`);
     return nextQuestionEle;
   }
 
-  const appState = getStateManager();
-  const loopMax = appState.getItem(loopMaxElement.id);
   const firstQuestion = parseInt(nextQuestionEle.getAttribute("firstquestion"));
   const loopIndex = parseInt(nextQuestionEle.getAttribute("loopindx"));
 
-  if (isNaN(loopMax) || isNaN(firstQuestion) || isNaN(loopIndex)) {
-    console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextQuestionEle.id}: loopMax=${loopMax}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
+  console.log('LOOP MAX RESPONSE', loopMaxResponse);
+  console.log('FIRST QUESTION', firstQuestion);
+  console.log('LOOP INDEX (TODO: test this)', loopIndex);
+
+  if (isNaN(loopMaxResponse) || isNaN(firstQuestion) || isNaN(loopIndex)) {
+    console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextQuestionEle.id}: loopMax=${loopMaxResponse}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
     return nextQuestionEle;
   }
 
-  if (math.evaluate(firstQuestion > loopMax)) {
+  if (math.evaluate(firstQuestion > loopMaxResponse)) {
+    nextQuestionEle = questionProcessor.findEndOfLoop();
+
     questionQueue.pop();
-    questionQueue.add(`_CONTINUE${loopIndex}_DONE`);
-    const nextQuestionId = questionQueue.next().value.value;
-    const questionProcessor = appState.getQuestionProcessor();
-    console.log9('TODO: TEST THIS (exitLoop)', nextQuestionId);
-    nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
-    // TODO: handle this with questionProcessor
-    //nextQuestionEle = document.getElementById(nextQuestionId.value);
+    questionQueue.add(nextQuestionEle.id);
+    questionQueue.next();
+
+    nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionEle.id);
   }
   
   return nextQuestionEle;
@@ -787,7 +799,11 @@ function exitLoop(nextQuestionEle) {
  * @param {string} questionHTMLString - The HTML string of the question to be swapped in.
  */
 export function swapVisibleQuestion(questionEle) {
-  console.log('SWAP VISIBLE QUESTION:', questionEle);
+  if (!questionEle) {
+    console.error(`swapVisibleQuestion: questionEle is null or undefined.`);
+    return;
+  }
+
   const questDiv = moduleParams.questDiv;
 
   const existingQuestionEle = questDiv.querySelector('.question');
@@ -803,8 +819,6 @@ export function swapVisibleQuestion(questionEle) {
 
   // Ensure the question is appended to the active DOM before calling displayQuestion for accessibility.
   displayQuestion(questionEle);
-  //questionEle.scrollIntoView({ behavior: 'smooth' });
-  //window.scrollTo({top: 0, left: 0, behavior: 'smooth'});
 
   return questionEle;
 }
@@ -995,21 +1009,21 @@ export function displayQuestion(questionElement) {
   }
 }
 
+// Scroll higher on tablets and computers to show the site header.
+// Focus specifically on the quest div (questions and resopnses) for smaller screens to minimize scrolling.
 function handleUserScrollLocation() {
-  const rootElement = document.getElementById('root') || moduleParams.questDiv.parentElement || moduleParams.questDiv;
-  if (!isRootElementInViewport(rootElement)) {
-    rootElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  let rootElement;
+  if (isMobileDevice()) {
+    rootElement = document.getElementById('root') || moduleParams.questDiv.parentElement || moduleParams.questDiv;
+  } else {
+    rootElement = document.documentElement;
   }
+
+  rootElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function isRootElementInViewport(rootElement) {
-  const rect = rootElement.getBoundingClientRect();
-  const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-  const windowWidth = window.innerWidth || document.documentElement.clientWidth;
-  const inVerticalView = rect.top >= 0 && rect.bottom <= windowHeight;
-  const inHorizontalView = rect.left >= 0 && rect.right <= windowWidth;
-
-  return inVerticalView && inHorizontalView;
+function isMobileDevice() {
+  return window.matchMedia('(max-width: 767px)').matches;
 }
 
 // Initialize the question text and focus management for screen readers.

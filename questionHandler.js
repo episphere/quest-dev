@@ -1,6 +1,7 @@
-import { moduleParams } from './questionnaire.js';
+import { evaluateCondition, moduleParams } from './questionnaire.js';
 import { parseGrid } from './buildGrid.js';
 import { translate } from './common.js';
+import { getStateManager } from './stateManager.js';
 
 const questionSeparatorRegex = /\[([A-Z_][A-Z0-9_#]*[?!]?)(?:\|([^,|\]]+)\|?)?(,.*?)?\](.*?)(?=$|\[[A-Z_]|<form)/gs;
 const gridReplaceRegex = /\|grid(\!|\?)*\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|/g;
@@ -8,7 +9,6 @@ const idWithLoopSuffixRegex = /^([a-zA-Z0-9_]+?)(_?\d+_\d+)?$/;
 const valueOrDefaultRegex = /valueOrDefault\(["']([a-zA-Z0-9_]+?)(_?\d+_\d+)?["'](.*)\)/g;
 const elementIdRegex = /id=([^\s]+)/;
 const embeddedHTMLQuestionIDRegex = /id="([^"]+)"/;
-
 
 export class QuestionProcessor {
   constructor(markdown, precalculated_values, i18n) {
@@ -20,6 +20,7 @@ export class QuestionProcessor {
           submit: i18n.submitSurveyButton
       };
       this.precalculated_values = precalculated_values;   // Pre-calculated form values (e.g. user name and current date)
+      this.loopDataArr = [];                              // Array of loop data. Responsive to user input.
       this.gridQuestionsArr = [];                         // Array of grid question IDs, used for processing someSelected and noneSelected conditionals.
       this.questions = this.splitIntoQuestions(markdown); // Split and prepare questions
       this.processedQuestions = new Map();                // Cache of processed form elements
@@ -131,15 +132,33 @@ export class QuestionProcessor {
    * @param {string} htmlString - The HTML string to convert.
    * @param {boolean} isFirstQuestion - boolean to determine if this is the first question. If true, remove the 'back' button.
    * @param {boolean} isLastQuestion - boolean to determine if this is the last question. If true, remove the 'next' button.
+   * @param {number} index - The index of the question in the this.questions array.
    * @returns {HTMLElement} - The HTML question element (a form with response options).
    */
-  convertHTMLStringToEle(htmlString, isFirstQuestion, isLastQuestion) {
+  convertHTMLStringToEle(htmlString, isFirstQuestion, isLastQuestion, index) {
     const template = document.createElement('template');
     template.innerHTML = htmlString.trim();
 
-    // The rest of this function is legacy DOM manipulation. Caution on refactoring.
     const newQuestionEle = template.content.firstChild;
 
+    // Add the loop data to the loopDataArr to support the exitLoop function.
+    if (newQuestionEle.hasAttribute("loopmax") && newQuestionEle.hasAttribute("firstquestion") && newQuestionEle.getAttribute("firstquestion") == '1') {
+      const appState = getStateManager();
+      const loopMaxID = newQuestionEle.getAttribute("loopmax");
+      const loopMaxResponse = parseInt(appState.findResponseValue(loopMaxID), 10);
+      const questionIDMatch = newQuestionEle.id.match(idWithLoopSuffixRegex);
+      const loopFirstQuestionID = questionIDMatch?.[1] || '';
+
+      this.loopDataArr.push({
+        locationIndex: index,
+        loopMax: 25,
+        loopMaxQuestionID: loopMaxID,
+        loopMaxResponse: loopMaxResponse,
+        loopFirstQuestionID: loopFirstQuestionID,
+      });
+    }
+
+    // The rest of this function is legacy DOM manipulation. Caution on refactoring.
     // handle data-hidden elements
     [...newQuestionEle.querySelectorAll("[data-hidden]")].forEach((x) => {
       x.style.display = "none";
@@ -153,11 +172,11 @@ export class QuestionProcessor {
 
     [...newQuestionEle.querySelectorAll("[data-confirm]")].forEach((element) => {
       if (!newQuestionEle.querySelector(`#${element.dataset.confirm}`)) {
-        console.error('TODO: TEST (previously used document access): confirm element not found:', element.dataset.confirm);
+        console.warn('TODO: TEST (this previously used document access): confirm element not found:', element.dataset.confirm);
         delete element.dataset.confirm
       }
       const otherElement = newQuestionEle.querySelector(`#${element.dataset.confirm}`);
-      console.warn('TODO: TEST (previously used document access): confirm element found:', otherElement);
+      console.warn('TODO: TEST (this previously used document access): confirm element found:', otherElement);
       otherElement.dataset.conformationFor = element.id;
     });
 
@@ -188,6 +207,9 @@ export class QuestionProcessor {
   findQuestion(questionID, isInitialLoad = false) {
     if (!questionID) {
       return this.getNextSequentialQuestion();
+
+    } else if (questionID.startsWith('_CONTINUE')) {
+      return this.findNextIterationFirstQuestion(questionID);
     }
 
     const index = this.questions.findIndex(question => question.questionID.startsWith(questionID));
@@ -261,13 +283,6 @@ export class QuestionProcessor {
   //     }
   // }
 
-  processAllQuestions() {
-      this.questions.forEach((_, index) => {
-          return this.processQuestion(index);
-      });
-      this.isProcessingComplete = true;
-  }
-
   /**
    * Process a single question's markdown, add it to the cache, and return the HTML element.
    * @param {number} index - The index of the question to process from the this.questions array.
@@ -282,21 +297,34 @@ export class QuestionProcessor {
     const questionObj = this.questions[index];
     const isFirstQuestion = index === 0;
     const isLastQuestion = index === this.questions.length - 1;
-    
+
     let questionElement;
 
     if (questionObj.formElement) {
-      questionElement = this.convertHTMLStringToEle(questionObj.formElement, isFirstQuestion, isLastQuestion);
+      questionElement = this.convertHTMLStringToEle(questionObj.formElement, isFirstQuestion, isLastQuestion, index);
     } else {
       const processedHTMLString = this.convertToHTMLString(questionObj);
-      questionElement = this.convertHTMLStringToEle(processedHTMLString, isFirstQuestion, isLastQuestion);
+      questionElement = this.convertHTMLStringToEle(processedHTMLString, isFirstQuestion, isLastQuestion, index);
     }
 
     this.processedQuestions.set(index, questionElement);
     return questionElement;
   }
 
+  processAllQuestions(startIndex = 0, stopIndex = this.questions.length) {
+    console.log('PROCESS ALL QUESTIONS:', startIndex, stopIndex);
+    for (let i = startIndex; i < stopIndex; i++) {
+      this.processQuestion(i);
+    }
+
+    this.isProcessingComplete = true;
+  }
+
   manageActiveQuestionClass(questionToLoad, questionToUnload) {
+    if (!questionToLoad) {
+      console.error('Error, manageActiveQuestionClass (no question to load):', questionToLoad, questionToUnload);
+      return null;
+    }
     console.log('MANAGE ACTIVE QUESTION CLASS:', questionToLoad, questionToUnload);
     if (questionToUnload) {
       questionToUnload.classList.remove('active');
@@ -327,6 +355,68 @@ export class QuestionProcessor {
 
     console.error(`Error, findGridInputElement (element not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
+  }
+
+  // Find the closest loop data prior to the current question index
+  // If not found, user may be returning to the survey mid-loop. Process all questions up to the current index,
+  // which will populate the loopDataArr with the correct loop data. Then try again.
+  getLoopData() {
+    const findLoopIndex = () => {
+      return this.loopDataArr.findIndex((loop) => loop.locationIndex <= this.currentQuestionIndex);
+    };
+
+    let loopIndex = findLoopIndex();
+    if (loopIndex === -1) {
+      this.processAllQuestions(0, this.currentQuestionIndex);
+      loopIndex = findLoopIndex();
+    }
+
+    return this.loopDataArr[loopIndex] || this.loopDataArr[this.loopDataArr.length - 1] || null;
+  }
+
+  findNextIterationFirstQuestion(questionID) {
+
+    const loopIndexRegex = /_(\d+)_(\d+)$/;
+    const loopIndexMatch = questionID.match(loopIndexRegex);
+    if (!loopIndexMatch && loopIndexMatch[1] && loopIndexMatch[2]) {
+      console.error(`Error, findQuestion (loop index not found): ${moduleParams.questName}, question: ${questionID}`);
+      return null;
+    }
+
+    const loopIterationIndex = loopIndexMatch[1];
+    const nextLoopIterationIndex = parseInt(loopIterationIndex, 10) + 1;
+
+    const loopData = this.getLoopData();
+    if (!loopData) {
+      console.error(`Error, findQuestion (loop data not found): ${moduleParams.questName}, question: ${questionID}`);
+      return null;
+    }
+
+    // If the next index is greater than the loopMaxResponse (or loopMax as a fallback), exit the loop.
+    if (nextLoopIterationIndex > loopData.loopMaxResponse || nextLoopIterationIndex > loopData.loopMax) {
+      return this.findEndOfLoop();
+
+      // Else, find the first question for the next loop iteration.
+    } else {
+      const nextIterationFirstQuestionID = `${loopData.loopFirstQuestionID}_${nextLoopIterationIndex}_${nextLoopIterationIndex}`;
+      console.log('TODO: TEST (is questionQueue managed correctly) NEXT ITERATION START ID:', nextIterationFirstQuestionID);
+
+      return this.findQuestion(nextIterationFirstQuestionID);
+    }
+  }
+
+  findEndOfLoop() {
+    const endOfLoopIndex = this.questions.findIndex((question, index) => {
+      return question.questionID === 'END_OF_LOOP' && index > this.currentQuestionIndex;
+    });
+
+    if (endOfLoopIndex === -1) {
+      console.error(`Error, findEndOfLoop (no end of loop found): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+      return null;
+    }
+
+    // End of loop found. It is a placeholder, so increment to access the first question after the loop.
+    return this.processQuestion(endOfLoopIndex + 1);
   }
 
   replaceDateTags(content) {
@@ -764,14 +854,36 @@ export class QuestionProcessor {
 
       // Handle not converted and not yet calculated min and max values
       const minMaxValueTest = (value) => { return value && !value.startsWith('valueOr') && !value.includes('isDefined') && value !== '0' ? value : ''; }
-      const min = minMaxValueTest(optionObj.min);
-      const max = minMaxValueTest(optionObj.max);
+      // Evaluate min and max, ensuring they are valid numbers or get evaluated if they aren't.
+      const evaluateMinMax = (value) => {
+        let result = minMaxValueTest(value);
+        if (result && isNaN(result)) {
+          result = evaluateCondition(result);
+          if (isNaN(result)) result = '';  // Reset if still not a number after evaluation
+        }
+        return result;
+      };
+
+      // Process min and max values
+      let min = evaluateMinMax(optionObj.min);
+      let max = evaluateMinMax(optionObj.max);
 
       // Build the description text
-      const descriptionText = `This field accepts numbers. Please enter a whole number ${min && max ? 'between ' + min + ' and ' + max : ''}.`;
-      
-      // Add placeholder and aria-describedby
-      const placeholder = min ? `placeholder="${i18n.example}: ${min}"` : (max ? `placeholder="${i18n.example}: ${max}"` : `placeholder=${i18n.enterValue}`);
+      const descriptionText = `This field accepts numbers. Please enter a whole number ${min && max ? `between ${min} and ${max}` : ''}.`;
+      const defaultPlaceholder = `placeholder="${moduleParams.i18n.enterValue}"`;
+
+      // Use default placeholder when min to max range is a large distribution, e.g. max weight (999) and max age (125).
+      // Same for min == 0. Show default placeholder for those cases.
+      let placeholder;
+      if (max && max > 100) {
+        placeholder = defaultPlaceholder;
+      } else if (min && max) {
+        const avgValue = Math.floor((parseInt(min, 10) + parseInt(max, 10)) / 2);
+        placeholder = `placeholder="${moduleParams.i18n.example}: ${avgValue}"`;
+      } else {
+        placeholder = defaultPlaceholder;
+      }
+
       options += ` ${placeholder} aria-describedby="${elementId}-desc"`;
 
       //onkeypress forces whole numbers
