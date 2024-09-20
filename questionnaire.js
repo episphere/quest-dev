@@ -177,9 +177,11 @@ function exchangeValue(element, attrName, newAttrName) {
  * @param {string} attribute - the attribute to resolve
  * @returns {string} - the resolved attribute.
  */
-// TODO: This logic will need updating when DOM structure changes.
+
 function resolveAttributeToParentID(attribute, appState) {
+  console.log('resolveAttributeToParentID', attribute)
   const decodedAttribute = decodeURIComponent(attribute);
+  console.log('decodedAttribute', decodedAttribute);
 
   // If item found in state, no further evaluation needed.
   if (appState.findResponseValue(decodedAttribute)) {
@@ -187,10 +189,19 @@ function resolveAttributeToParentID(attribute, appState) {
   }
   
   // If not found in state, search for the parent form ID.
-  const foundElement = document.getElementById(decodedAttribute);
-  if (!foundElement) return decodedAttribute;
+  console.warn('TODO: resolve document access in resolveAttributeToParentID')
   
-  return foundElement.closest("form")?.id ?? decodedAttribute;
+  const questionProcessor = appState.getQuestionProcessor();
+  const foundFormID = questionProcessor.findRelatedFormID(decodedAttribute);
+  console.log('decodedAttribute:', decodedAttribute);
+  console.log('foundFormID:', foundFormID);
+  return foundFormID ?? decodedAttribute;
+  
+  //const foundElement = document.getElementById(decodedAttribute);
+  
+  //if (!foundElement) return decodedAttribute;
+  
+  //return foundElement.closest("form")?.id ?? decodedAttribute;
 }
 
 /**
@@ -265,12 +276,14 @@ const resolveRuntimeConditions = (attribute) => {
  * @returns {void} - updates the DOM with the evaluated values.
  */
 const handleForIDAttributes = (forIDElementArray) => {
+  console.log('HANDLE FORID ATTRIBUTES', forIDElementArray);
   const appState = getStateManager();
 
   if (forIDElementArray.length === 1) {
     const forIDElement = forIDElementArray[0];    
     const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
     const parentID = resolveAttributeToParentID(forid, appState);
+    console.log('PARENT ID', parentID);
 
     const defaultValue = forIDElement.getAttribute("optional");
     const updatedValue = math.valueOrDefault(parentID, defaultValue);
@@ -303,7 +316,6 @@ const toggleElementVisibility = (element, textContent) => {
   }
 }
 
-// TODO: Look here for Safari text input delay issue.
 export function textboxinput(inputElement, validate = true) {
 
   let evalBool = "";
@@ -352,7 +364,6 @@ export function textboxinput(inputElement, validate = true) {
 }
 
 // onInput/Change handler for radio/checkboxes
-// TODO: optimize this flow
 export function rbAndCbClick(event) {
   const inputElement = event.target;
   // when we programatically click, the input element is null.
@@ -509,49 +520,13 @@ function clearXORValidationMessage(inputElement) {
     inputElement.nextElementSibling.remove();
   }
 }
-  
-//   const appState = getStateManager();
-//   const siblings = getXORSiblings(inputElement);
-//   siblings.forEach((sibling) => {
-//     appState.removeResponseItem(inputElement.form.id, sibling.id, appState.getNumResponseInputs(inputElement.form.id));
-//     resetSiblingDOMValues(sibling);
-//   });
-
-//   return inputElement.value;
-// }
-
-// function getXORSiblings(inputElement) {
-//   return [...inputElement.parentElement.querySelectorAll("input")].filter(sibling => 
-//     sibling.id !== inputElement.id &&
-//     sibling.hasAttribute("xor") &&
-//     sibling.getAttribute("xor") === inputElement.getAttribute("xor")
-//   );
-// }
-
-// function resetSiblingDOMValues(sibling) {
-//   if (["checkbox", "radio"].includes(sibling.type)) {
-//     sibling.checked = sibling.dataset.reset ? false : sibling.checked;
-//   } else {
-//     sibling.value = "";
-//     clearXORValidationMessage(sibling);
-//   }
-// }
-
-// function clearXORValidationMessage(inputElement) {
-//   const messageSpan = inputElement.nextElementSibling?.children[0];
-//   if (messageSpan?.tagName === "SPAN" && messageSpan.innerText.length !== 0) {
-//     messageSpan.innerText = "";
-//     inputElement.classList.remove("invalid");
-//     inputElement.form.classList.remove('invalid');
-//     inputElement.nextElementSibling.remove();
-//   }
-// }
 
 export async function nextClick(norp) {
   // Because next button does not have ID, modal will pass-in ID of question
   // norp needs to be next button element
   if (typeof norp == "string") {
-    norp = document.getElementById(norp).querySelector(".next");
+    console.warn('TYPE OF - NORP is string', typeof norp);
+    norp = moduleParams.questDiv.querySelector(`#${norp} .next`)
   }
 
   // check that each required element is set...
@@ -651,16 +626,16 @@ async function analyzeFormResponses(norp) {
 
 /**
  * Get the next question from the questionQueue if it exists. Otherwise get the next sequential question from the markdown.
- * @returns {string} - the ID of the next question.
+ * @returns {string} - the ID of the next question to load.
  */
 function getNextQuestionId() {
   let nextQuestionNode = questionQueue.next();
 
   if (nextQuestionNode.done) {
-    console.log('NEXT QUESTION NODE (done)', nextQuestionNode.done);
     const appState = getStateManager();
     const questionProcessor = appState.getQuestionProcessor();
     const nextSequentialQuestionEle = questionProcessor.findQuestion(undefined);
+
     questionQueue.add(nextSequentialQuestionEle.id);
     nextQuestionNode = questionQueue.next();
   }
@@ -691,6 +666,8 @@ export function hideLoadingIndicator() {
 async function nextPage(norp) {
   const questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
+    // NOTE: these are grid elements that aren't shown due to displayifs and previous response evaluations (grid questions)
+    // See: MRE survey: "On the days that you did these household or shopping activities, ..."
     console.log('HIDDEN ELEMENT (setResponsesInState)', x);
     x.value = "true"
     setResponsesInState(questionElement, x.value, x.id)
@@ -706,7 +683,6 @@ async function nextPage(norp) {
 
 
   if (questionQueue.isEmpty()) {
-    console.log('QUESTION QUEUE IS EMPTY');
     questionQueue.add(questionElement.id);
     questionQueue.next();
   }
@@ -715,9 +691,7 @@ async function nextPage(norp) {
   checkForSkips(questionElement);
 
   let nextQuestionId = getNextQuestionId();  
-  console.log('NEXT QUESTION ID', nextQuestionId);
   let nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
-  console.log('NEXT QUESTION ELE', nextQuestionEle);
   nextQuestionEle = exitLoop(nextQuestionEle);
   console.log('NEXT QUESTION ELE (after exitLoop)', nextQuestionEle);
 
@@ -850,6 +824,7 @@ function removeExtraBRElements(rootElement) {
 let questionFocusSet;
 
 export function displayQuestion(questionElement) {
+
   // Fail gently in the renderer tool.
   if (!questionElement && !moduleParams.renderObj.activate) return;
   
@@ -1166,9 +1141,12 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNo
 // Browsers that do not support 'month' use 'text' input type fallback.
 // So input.type === 'month' -> true when supported and false otherwise.
 function isMonthInputSupported() {
-  const input = document.createElement('input');
+  let input = document.createElement('input');
   input.setAttribute('type', 'month');
-  return input.type === 'month';
+  const isSupported = input.type === 'month';
+
+  input = null;
+  return isSupported;
 }
 
 export async function previousClicked() {
@@ -1302,8 +1280,6 @@ export function getSelectedResponses(questionElement) {
 }
 
 // RegExp to segment text conditions passed in as a string with '[', '(', ')', ',', and ']'. https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
-// TODO: test updated regexp
-//const evaluateConditionRegex = /[\(\),]/g;
 const evaluateConditionRegex = /[(),]/g;
 
 /**
@@ -1313,7 +1289,6 @@ const evaluateConditionRegex = /[(),]/g;
  * @returns {any}- The result of the evaluation.
  */
 
-// TODO: loops: break out of a loop early to avoid unnecessary calculations (currently, all conditions are evaluated for every possible loop iteration).
 export function evaluateCondition(evalString) {
   evalString = decodeURIComponent(evalString);
 
@@ -1348,8 +1323,6 @@ export function evaluateCondition(evalString) {
 
         // Replace from stackEnd-5 to stackEnd with the results. Splice and replace the function call with the result.
         displayIfStack.splice(stackEnd - 5, 6, functionResult);
-
-        // TODO: look at ways to short-circuit the evaluation of 'or' functions when one evaluates to true and loops beyond the loop index.
 
       } else {
         throw { Message: "Bad Displayif Function: " + evalString, Stack: displayIfStack };
@@ -1404,6 +1377,3 @@ function evaluateArg(arg, appState) {
     return '';
   }
 }
-
-// TODO: get rid of Window dependency
-//window.questionQueue = questionQueue

@@ -3,8 +3,6 @@ import { clearValidationError } from "./validate.js";
 import { nextClick, previousClicked } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
 
-// TODO: all document level access can be scoped down to the moduleParams.questDiv level
-
 // Debounced version of handleInputEvent
 const debouncedHandleInputEvent = debounce(handleInputEvent, 250);
 
@@ -147,15 +145,12 @@ function handleBlurFocusoutEvent(event) {
 }
 
 function handleInputEvent(event) {
-  console.log('handleInputEvent', event);
   const target = event.target;
   
   if (target.matches('input[type="text"], textarea')) {
     const label = target.closest('label');
     if (label) {
-      console.log('label', label);
       const radioCB = moduleParams.questDiv.querySelector(`#${label.htmlFor}`) || label.querySelector('input[type="radio"], input[type="checkbox"]');
-      console.log('radioCB', radioCB);
       if (radioCB && (radioCB.type === 'radio' || radioCB.type === 'checkbox')) {
         // Check or uncheck the radio or checkbox based on the text input length.
         target.value.length > 0 ? radioCB.checked = true : radioCB.checked = false;

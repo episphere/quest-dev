@@ -11,6 +11,7 @@ import es from "./i18n/es.js";
 export let transform = function () { /* init */ };
 transform.rbAndCbClick = rbAndCbClick;
 
+// TODO: wrap with error handling.
 transform.render = async (obj, divID, previousResults = {}) => {
   console.log('CONFIRMING QUESTION SEPARATOR BRANCH');
 
@@ -28,9 +29,6 @@ transform.render = async (obj, divID, previousResults = {}) => {
   appState.loadInitialSurveyState(retrievedData);
   const initialUserData = appState.getSurveyState();
   const questionProcessor = appState.getQuestionProcessor();
-
-  // Offload the full survey processing to a worker thread while handling the active question in the main thread.
-  processQuestionsInBackground(questionProcessor);
 
   // Load the question queue from the tree JSON.
   loadQuestionQueue(initialUserData?.treeJSON);
@@ -58,6 +56,10 @@ transform.render = async (obj, divID, previousResults = {}) => {
 
   // Add the event listeners to the parent div.
   addEventListeners();
+
+  // Offload the full survey processing to a worker thread while handling the active question in the main thread.
+  //TODO: set up the worker and test.
+  //processQuestionsInBackground(questionProcessor);
 
   return true;
 };
@@ -119,7 +121,6 @@ function getActiveQuestionID(questionsArray) {
  * @returns {void} - this manages the DOM on survey startup.
  */
 
-// TODO: consider combining processQuestion into findQuestion.
 function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initialUserData) {
   if (!activeQuestionID) return;
 
@@ -175,34 +176,40 @@ function isFirefoxBrowser() {
 
 // TODO: implement this functionality in the worker
 function processQuestionsInBackground(questionProcessor) {
-  const worker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
+  questionProcessor.processAllQuestions(); // Process all questions inline
 
-  worker.postMessage({
-    command: 'processQuestions',
-    data: {
-      questions: questionProcessor.questions,
-      questName: questionProcessor.questName,
-      precalculatedValues: questionProcessor.precalculated_values,
-      i18n: questionProcessor.i18n
-    }
-  });
-
-  worker.onmessage = (event) => {
-    if (event.data.command === 'processComplete') {
-      questionProcessor.isProcessingComplete = true;
-      const processedQuestionsHTML = questionProcessor.processAllQuestions(); // Process all questions inline
-      console.log('Background processing complete:', processedQuestionsHTML);
-    }
-  };
-
-  worker.onerror = (error) => {
-    console.error('Error in transformMarkdownWorker:', error);
-    // Fallback to inline processing if the worker fails
-    const processedQuestionsHTML = questionProcessor.processAllQuestions(); // Process all questions inline
-    console.log('Fallback processing complete:', processedQuestionsHTML);
-  };
 }
+// TODO: implement this
+//   const worker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
 
+//   worker.postMessage({
+//     command: 'processQuestions',
+//     data: {
+//       questions: questionProcessor.questions,
+//       questName: questionProcessor.questName,
+//       precalculatedValues: questionProcessor.precalculated_values,
+//       i18n: questionProcessor.i18n
+//     }
+//   });
+
+//   worker.onmessage = (event) => {
+//     if (event.data.command === 'processComplete') {
+//       questionProcessor.isProcessingComplete = true;
+//       const processedQuestionsHTML = questionProcessor.processAllQuestions(); // Process all questions inline
+//       console.log('Background processing complete:', processedQuestionsHTML);
+//     }
+//   };
+
+//   worker.onerror = (error) => {
+//     console.error('Error in transformMarkdownWorker:', error);
+//     // Fallback to inline processing if the worker fails
+//     const processedQuestionsHTML = questionProcessor.processAllQuestions(); // Process all questions inline
+//     console.log('Fallback processing complete:', processedQuestionsHTML);
+//   };
+// }
+
+
+// OLD CODE
 // // Initialize the worker.
     // const transformMarkdownWorker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
     // transformMarkdownWorker.postMessage({ command: 'initialize' });
@@ -225,7 +232,6 @@ function processQuestionsInBackground(questionProcessor) {
     //         reject(new Error(`Worker initialization failed: ${error.message}`));
     //     };
     // });
-
     // // If the worker fails to initialize, fallback to inline processing.
     // try {
     //     await workerReadyPromise;

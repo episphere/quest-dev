@@ -53,15 +53,15 @@ export class YearMonth {
 export const customMathJSFunctions = {
   exists: function (x) {
     if (x == null || x === '') return false;
+    
+    if (typeof x === 'number') return true;
 
     if (x.toString().includes('.')) {
+      console.warn('EXISTS - X toString INCLUDES .', x);
       return !math.isUndefined(this.getKeyedValue(x));
     }
-
-    if (typeof x === 'number') return true;
     
     const existingResponse = this.appState.findResponseValue(x);
-
     switch (typeof existingResponse) {
       case 'object':
         return Array.isArray(existingResponse) ? existingResponse.length > 0 : Object.keys(existingResponse).length > 0;
@@ -93,7 +93,6 @@ export const customMathJSFunctions = {
     return ids.every(id => this.exists(id))
   },
 
-  // TODO: remove this in favor of appState.findResponseValue()
   getKeyedValue: function(x) {
     console.warn('TODO: GET KEYED VALUE', x);
     const array = x.toString().split('.');
@@ -110,13 +109,13 @@ export const customMathJSFunctions = {
   },
 
   _value: function (x) {
+    // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
+    if (typeof x === 'number') return x;
+
     if (!this.exists(x)) return null
 
     if (x.toString().includes('.')) return this.getKeyedValue(x);
     
-    // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
-    if (typeof x === 'number') return x;
-
     return this.appState.findResponseValue(x);
   },
 
@@ -316,6 +315,8 @@ export const customMathJSFunctions = {
     // otherwise:
     return 0;
   },
+
+  // TODO: remove if unused
   // // For a question in a loop, does the value of the response
   // // for ANY ITERATION equal a value from a given set. 
   // loopQuestionValueIsOneOf: function (id, ...values) {
@@ -333,7 +334,7 @@ export const customMathJSFunctions = {
   // gridQuestionsValueIsOneOf: function (gridId, ...values) {
   //   if (this.doesNotExist(gridId)) return false
   //   console.warn('TODO: (gridQuestionsValueIsOneOf) remove DOM access and use stateManager', gridId, ...values);
-  //   let gridElement = document.getElementById(gridId) // TODO: rm DOM access, use stateManager
+  //   let gridElement = document.getElementById(gridId)
   //   if (! "grid" in gridElement.dataset) return false
 
   //   values = values.map(v => v.toString())
@@ -350,12 +351,12 @@ export const customMathJSFunctions = {
   //   return false;
   // },
   yearMonth: function (str) {
-    let isYM = /^(\d+)\-(\d+)$/.test(str)
+    let isYM = /^(\d+)-(\d+)$/.test(str)
     if (isYM) {
       return new YearMonth(str)
     }
     let value = this._value(str)
-    isYM = /^(\d+)\-(\d+)$/.test(value)
+    isYM = /^(\d+)-(\d+)$/.test(value)
     if (isYM) {
       return new YearMonth(value)
     }

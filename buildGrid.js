@@ -1,37 +1,3 @@
-import { getButtonDiv } from './questButtons.js';
-
-//NOTE: This function is not used in the current implementation
-export function firstFun(event) {
-  event.preventDefault();
-}
-
-//NOTE: This function is not used in the current implementation
-export function toggle_grid(event) {
-  event.preventDefault();
-  let element = event.target;
-  let id_regex = /(^.*?)(_sm)?(_\d+$)/;
-  let tmp = element.id.match(id_regex);
-  // tmp MUST match!!!
-  if (!tmp) {
-    console.error("ERROR in [grid] toggle_grid!!!  Bad element id!\n", element);
-    return;
-  }
-  let otherid = tmp[2] ? tmp[1] + tmp[3] : tmp[1] + "_sm" + tmp[3];
-  let otherElement = document.getElementById(otherid);
-  otherElement.checked = element.checked;
-
-  element.form.value[otherElement.name] = element.form.value[element.name];
-
-  const isElementSmall = element.dataset.isSmallGridCell === "1";
-  const isOtherElementSmall = otherElement.dataset.isSmallGridCell === "1";
-  if (isElementSmall) {
-    delete element.form.value[element.name];
-  }
-  if (isOtherElementSmall) {
-    delete element.form.value[otherElement.name];
-  }
-}
-
 function grid_replace_piped_variables(txt){
   txt = txt.replace(/\{\$([ue]:)?([^}]+)}/g, (all, type, varid) => {
     return `<span data-gridreplacetype=${type == "e:" ? "eval" : "_val"} data-gridreplace=${encodeURIComponent(varid)}></span>`
@@ -53,7 +19,7 @@ function grid_text_displayif(original_text){
 }
 
 // Builds the HTML Table for a grid question (radio-selectable multi-option fields).
-function buildHtmlTable(grid_obj, button_text_obj){
+function buildHtmlTable(grid_obj, gridButtonDiv) {
   // is there a hard/soft edit?
   let gridPrompt = "hardedit='false' softedit='false'";
   if (grid_obj.prompt) {
@@ -68,11 +34,6 @@ function buildHtmlTable(grid_obj, button_text_obj){
   // replace displayif and piped variables...
   let shared_text = grid_text_displayif(grid_obj.shared_text)
   shared_text = grid_replace_piped_variables(shared_text)  
-  
-  // const questionIDRegex = /id="([^"]+)"/;
-  // const match = grid_obj.args.match(questionIDRegex);
-  // const questionID = match ? match[1] : '';
-  // [${ questionID }] | GRID |
   
   // Begin form and set up accessibility description.
   // Ask the main question, then begin the table structure (this semantic HTML helps screen readers).
@@ -117,9 +78,8 @@ function buildHtmlTable(grid_obj, button_text_obj){
     grid_html += `</tr>`;
   });
 
-  grid_html+=`</tbody></table>${getButtonDiv(button_text_obj, true)}</form>`;
+  grid_html += `</tbody></table>${gridButtonDiv}</form>`;
   
-  //console.log('GRID HTML', grid_html);
   return grid_html;
 }
 
@@ -127,8 +87,8 @@ function buildHtmlTable(grid_obj, button_text_obj){
 // the regex for a grid is /\|grid\|([^|]*?)\|([^|]*?)\|([^|]*?)\|
 // you  can use the /g and then pass it to the function one at a time...
 export function parseGrid(text, ...args) {
-  //console.log('PARSE GRID', text, args);
-  const button_text_obj = args.pop();
+  const gridButtonDiv = args.pop();
+  //const button_text_obj = args.pop();
   let grid_obj = {};
   //  look for key elements of the text
   // |grid|id=xxx|shared_text|questions|response|
@@ -186,6 +146,5 @@ export function parseGrid(text, ...args) {
     }
   }
 
-  // TODO: work in Progress. This builds the grid HTML
-  return buildHtmlTable(grid_obj, button_text_obj);
+  return buildHtmlTable(grid_obj, gridButtonDiv);
 }

@@ -1,4 +1,4 @@
-import { evaluateCondition, moduleParams } from './questionnaire.js';
+import { evaluateCondition, hideLoadingIndicator, moduleParams, showLoadingIndicator } from './questionnaire.js';
 import { parseGrid } from './buildGrid.js';
 import { translate } from './common.js';
 import { getStateManager } from './stateManager.js';
@@ -9,6 +9,8 @@ const idWithLoopSuffixRegex = /^([a-zA-Z0-9_]+?)(_?\d+_\d+)?$/;
 const valueOrDefaultRegex = /valueOrDefault\(["']([a-zA-Z0-9_]+?)(_?\d+_\d+)?["'](.*)\)/g;
 const elementIdRegex = /id=([^\s]+)/;
 const embeddedHTMLQuestionIDRegex = /id="([^"]+)"/;
+const displayIfRegex = /displayif\s*=\s*.*/;
+const endMatchRegex = /end\s*=\s*(.*)?/;
 
 export class QuestionProcessor {
   constructor(markdown, precalculated_values, i18n) {
@@ -37,7 +39,7 @@ export class QuestionProcessor {
   }
 
   removeMarkdownComments(markdown) {
-    return markdown.replace(/^\s*\/\/.*$/gm, '');
+    return markdown.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '');
   }
 
   splitIntoQuestions(markdown) {
@@ -52,8 +54,9 @@ export class QuestionProcessor {
 
     // Replace grids with placeholders and store grid content for later processing
     let gridPlaceholders = [];
+    const gridButtonDiv = this.getButtonDiv(true)
     markdown = markdown.replace(gridReplaceRegex, (...args) => {
-      const gridContent = parseGrid(...args, this.buttonTextObj);
+      const gridContent = parseGrid(...args, gridButtonDiv);
       const placeholder = `<<GRID_PLACEHOLDER_${gridPlaceholders.length}>>`;
       gridPlaceholders.push(gridContent);
       return placeholder;
@@ -78,9 +81,9 @@ export class QuestionProcessor {
         questionsArr.push({
           fullMatch: match[0],
           questionID: match[1],
-          options: match[2] || '',
-          args: match[3] || '',
-          content: questionContent,
+          questOpts: match[2] || '',
+          questArgs: match[3] || '',
+          questText: questionContent,
           formElement: null
         });
       // Else, handle the question content plus the grid placeholders, which are at the end of the parsed array
@@ -101,9 +104,9 @@ export class QuestionProcessor {
             questionsArr.push({
               fullMatch: match[0],
               questionID: questionID,
-              options: null,
-              args: null,
-              content: null,
+              questOpts: null,
+              questArgs: null,
+              questText: null,
               formElement: gridContent
             });
 
@@ -112,9 +115,9 @@ export class QuestionProcessor {
             questionsArr.push({
               fullMatch: match[0],
               questionID: match[1],
-              options: match[2] || '',
-              args: match[3] || '',
-              content: arrayItem.trim(),
+              questOpts: match[2] || '',
+              questArgs: match[3] || '',
+              questText: arrayItem.trim(),
               formElement: null
             });
           }
@@ -150,11 +153,11 @@ export class QuestionProcessor {
       const loopFirstQuestionID = questionIDMatch?.[1] || '';
 
       this.loopDataArr.push({
-        locationIndex: index,
-        loopMax: 25,
-        loopMaxQuestionID: loopMaxID,
-        loopMaxResponse: loopMaxResponse,
-        loopFirstQuestionID: loopFirstQuestionID,
+        locationIndex: index,                     // Position in the questions array
+        loopMax: 25,                              // Default max response iterations: 25
+        loopMaxQuestionID: loopMaxID,             // The questionID that determines the number of iterations
+        loopMaxResponse: loopMaxResponse,         // The user's response to the loopMax question
+        loopFirstQuestionID: loopFirstQuestionID, // The first questionID marker (first question in in the loop)
       });
     }
 
@@ -209,23 +212,24 @@ export class QuestionProcessor {
       return this.getNextSequentialQuestion();
 
     } else if (questionID.startsWith('_CONTINUE')) {
-      return this.findNextIterationFirstQuestion(questionID);
-    }
+      return this.findStartOfNextLoop(questionID);
 
-    const index = this.questions.findIndex(question => question.questionID.startsWith(questionID));
-    if (index !== -1) {
-      this.currentQuestionIndex = index;
-      const foundQuestion = this.processQuestion(index);
+    } else {
+      const index = this.questions.findIndex(question => question.questionID.startsWith(questionID));
+      if (index !== -1) {
+        this.currentQuestionIndex = index;
+        const foundQuestion = this.processQuestion(index);
 
-      if (isInitialLoad) {
-        return this.manageActiveQuestionClass(foundQuestion, null);
+        if (isInitialLoad) {
+          return this.manageActiveQuestionClass(foundQuestion, null);
+        }
+
+        return foundQuestion;
       }
 
-      return foundQuestion;
+      console.error(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
+      return null;
     }
-
-    console.error(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
-    return null;
   }
 
   getNextSequentialQuestion() {
@@ -290,6 +294,8 @@ export class QuestionProcessor {
    */
 
   processQuestion(index) {
+    if (index < 0) return null;
+
     if (this.processedQuestions.has(index)) {
       return this.processedQuestions.get(index);
     }
@@ -308,12 +314,13 @@ export class QuestionProcessor {
     }
 
     this.processedQuestions.set(index, questionElement);
+
     return questionElement;
   }
 
   processAllQuestions(startIndex = 0, stopIndex = this.questions.length) {
-    console.log('PROCESS ALL QUESTIONS:', startIndex, stopIndex);
     for (let i = startIndex; i < stopIndex; i++) {
+      console.log('PROCESSING QUESTION:', i);
       this.processQuestion(i);
     }
 
@@ -325,7 +332,7 @@ export class QuestionProcessor {
       console.error('Error, manageActiveQuestionClass (no question to load):', questionToLoad, questionToUnload);
       return null;
     }
-    console.log('MANAGE ACTIVE QUESTION CLASS:', questionToLoad, questionToUnload);
+
     if (questionToUnload) {
       questionToUnload.classList.remove('active');
     }
@@ -334,7 +341,6 @@ export class QuestionProcessor {
     return questionToLoad;
   }
 
-  // Search the gridQuestionsArr for the elementID, then return the value of the input element.
   /**
    * Handle someSelected and noneSelected conditionals for grid questions.
    * Search the grid questions for the elementID (the specific radio or checkbox input element).
@@ -361,21 +367,83 @@ export class QuestionProcessor {
   // If not found, user may be returning to the survey mid-loop. Process all questions up to the current index,
   // which will populate the loopDataArr with the correct loop data. Then try again.
   getLoopData() {
-    const findLoopIndex = () => {
-      return this.loopDataArr.findIndex((loop) => loop.locationIndex <= this.currentQuestionIndex);
-    };
+    const findNearestLoopIndex = () => {
+      let nearestIndex = -1;
+      for (const loopData of this.loopDataArr) {
+        if (loopData.locationIndex <= this.currentQuestionIndex) {
+          if (loopData.locationIndex > nearestIndex) {
+            nearestIndex = loopData.locationIndex;
+          }
+        }
+      }
 
-    let loopIndex = findLoopIndex();
+      return nearestIndex;
+    }
+
+    let loopIndex = findNearestLoopIndex();
     if (loopIndex === -1) {
+      showLoadingIndicator(); // TODO: this is not working
       this.processAllQuestions(0, this.currentQuestionIndex);
-      loopIndex = findLoopIndex();
+      hideLoadingIndicator();
+      
+      loopIndex = findNearestLoopIndex();
     }
 
     return this.loopDataArr[loopIndex] || this.loopDataArr[this.loopDataArr.length - 1] || null;
   }
 
-  findNextIterationFirstQuestion(questionID) {
+  /**
+   * If the loopMaxResponse changes, update the loopDataArr with the new value.
+   * This is a rare case where a user changes their response to a loopMax question.
+   * Find the loopData object that matches the loopMaxQuestionID and update the loopMaxResponse.
+   * This a is relatively inexpesive (but necessary) check because loopDataArr is small (length === number of loops in the survey).
+   * Process:
+   *   - Check whether the questionID is a loopMax question.
+   *   - In the typical case: a response is NOT associate with a loopMax value. Return early.
+   *   - If the loopMax questionID is a match, update the loopData object with the new response.
+   * @param {string} questionID - The questionID to check. Only questionIDs that determine the number of loop iterations result in further processing.
+   * @param {string} response - The user's response to the loopMax question.
+   * @returns {void} - The loopDataArr is up-to-date with new response values for future loop execution.
+   */
 
+  checkLoopMaxData(questionID, response) {
+    if (!questionID || !response) {
+      console.error(`Error, updateLoopData (missing parameters): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}, response: ${response}`);
+      return;
+    }    
+
+    // If no match found, return early, continue normal survey operation. This is the typical case.
+    const questionIDMatch = this.loopDataArr.find(loopData => loopData.loopMaxQuestionID === questionID);
+    if (!questionIDMatch) {
+      return;
+    }
+
+    // If the loopMax questionID is found, update the loopData object with the new response.
+    const loopDataIndex = this.loopDataArr.findIndex(loopData => loopData.loopMaxQuestionID === questionID);
+    if (loopDataIndex === -1) {
+      console.error(`Error, updateLoopData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
+      return;
+    }
+
+    // update the loopData object with the new response
+    const updatedLoopMaxResponse = parseInt(response, 10);
+    if (isNaN(updatedLoopMaxResponse)) {
+      console.error(`Error, updateLoopData (invalid response): ${moduleParams.questName}, response: ${response}`);
+      return;
+    }
+
+    this.loopDataArr[loopDataIndex].loopMaxResponse = updatedLoopMaxResponse;
+  }
+
+  /**
+   * Find the loop's jump target based on survey conditionals, which is either:
+   * (1) The beginning of the next loop iteration, or
+   * (2) The end of the loop sequence.
+   * @param {string} questionID - The questionID to find the next iteration of the loop.
+   * @returns {HTMLElement} - The found jump target in HTML element format, prepared for DOM insertion.
+   */
+
+  findStartOfNextLoop(questionID) {
     const loopIndexRegex = /_(\d+)_(\d+)$/;
     const loopIndexMatch = questionID.match(loopIndexRegex);
     if (!loopIndexMatch && loopIndexMatch[1] && loopIndexMatch[2]) {
@@ -419,14 +487,38 @@ export class QuestionProcessor {
     return this.processQuestion(endOfLoopIndex + 1);
   }
 
+  /**
+   * For some input elements, the input ID and the form ID are different.
+   * This is a legacy case, where we need to continue supporting existing surveys.
+   * Process: Search questions for the elementID. If found, return the parent formID.
+   * This supports 'forid' replacement and displayif conditionals.
+   * @param {string} elementID - The ID of the input element to find.
+   * @returns {string} - The ID of the input element's form, required for evaluating some conditionals, or null if not found.
+  */
+  findRelatedFormID(elementID) {
+    console.log('FIND RELATED FORM ID');
+    for (const questionID of this.questions) {
+      const questionElement = this.findQuestion(questionID);
+      if (questionElement) {
+        console.log('QUESTION ELEMENT (findRelatedFormID):', questionElement.id);
+        const foundElement = questionElement.querySelector(`#${elementID}`);
+        if (foundElement) {
+          console.error(`TODO: (verify) FOUND ELEMENT: ${elementID}, PARENT FORM: ${questionElement.id}`);
+          return questionElement.id;
+        }
+      }
+    }
+
+    console.error(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
+    return null;
+  }
+
   replaceDateTags(content) {
     const replacements = [
         [/#currentMonthStr/g, this.i18n.months[this.precalculated_values.current_month_str]],
         [/#currentMonth/g, this.precalculated_values.current_month],
         [/#currentYear/g, this.precalculated_values.current_year],
-        [/#today(\s*[+\-]\s*\d+)?/g, this.replaceTodayTag.bind(this)],
-        [/#YNP/g, this.generateYesNoPrefer.bind(this)],
-        [/#YN/g, this.generateYesNo.bind(this)]
+        [/#today(\s*[+-]\s*\d+)?/g, this.replaceTodayTag.bind(this)],
     ];
 
     replacements.forEach(([regex, replacement]) => {
@@ -437,19 +529,15 @@ export class QuestionProcessor {
   }
 
   convertToHTMLString(question, i18n = this.i18n, precalculated_values = this.precalculated_values) {
-    this.currentQuestion = question;
-    let { questionID, options, args, content } = question;
-    let questText = content;
-    let questOpts = options;
-    let questArgs = args;
-    let questID = questionID;
+    let { questionID, questOpts, questArgs, questText } = question;
 
     questText = this.replaceDateTags(questText);
+
     questText = questText
-      //TODO: look here for the old version if spacing is off
       .replaceAll("\u001f", "\n")
       .replace(/(?:\r\n|\r|\n)/g, "<br>")
       .replace(/\[_#\]/g, "");
+
     let counter = 1;
     questText = questText.replace(/\[\]/g, function () {
       let t = "[" + counter.toString() + "]";
@@ -458,32 +546,33 @@ export class QuestionProcessor {
     });
 
     //handle options for question
-    questOpts = questOpts ? questOpts : "";
-    questOpts = questOpts.replaceAll(/(min|max)-count\s*=\s*(\d+)/g,'data-$1-count=$2')
-
-    // handle displayif on the question...
-    // if questArgs is undefined set it to blank.
-    questArgs = questArgs ? questArgs : "";
-
-    // make sure that this is a "displayif"
-    const displayifMatch = questArgs.match(/displayif\s*=\s*.*/);
-    const endMatch = questArgs.match(/end\s*=\s*(.*)?/);
-    // if so, remove the comma and go.  if not, set questArgs to blank...
-    if (displayifMatch) {
-      questArgs = displayifMatch[0];
-      questArgs = `displayif=${encodeURIComponent(displayifMatch[0].slice(displayifMatch[0].indexOf('=') + 1))}`
-    } else if (endMatch) {
-      questArgs = endMatch[0];
-    } else {
-      questArgs = "";
+    questOpts = questOpts || '';
+    if (questOpts) {
+      questOpts = questOpts.replaceAll(/(min|max)-count\s*=\s*(\d+)/g,'data-$1-count=$2')
     }
-
+ 
+    // handle displayif on the question. If questArgs is undefined set it to blank.
+    questArgs = questArgs || '';
+    let endMatch;
+    if (questArgs) {
+      const displayifMatch = questArgs.match(displayIfRegex);
+      endMatch = questArgs.match(endMatchRegex);
+      // if so, remove the comma and go.  if not, set questArgs to blank...
+      if (displayifMatch) {
+        questArgs = displayifMatch[0];
+        questArgs = `displayif=${encodeURIComponent(displayifMatch[0].slice(displayifMatch[0].indexOf('=') + 1))}`
+      } else if (endMatch) {
+        questArgs = endMatch[0];
+      } else {
+        questArgs = "";
+      }
+    }
+    
     let target = "";
-
-    let hardBool = questID.endsWith("!");
-    let softBool = questID.endsWith("?");
+    let hardBool = questionID.endsWith("!");
+    let softBool = questionID.endsWith("?");
     if (hardBool || softBool) {
-      questID = questID.slice(0, -1);
+      questionID = questionID.slice(0, -1);
       if (hardBool) {
         target = "data-target='#hardModal'";
       } else {
@@ -505,6 +594,7 @@ export class QuestionProcessor {
       } else {
         optional = `optional='${encodeURIComponent(optional)}'`;
       }
+
       return `<span forId='${forId}' ${optional}>${forId}</span>`;
     }
 
@@ -516,6 +606,7 @@ export class QuestionProcessor {
 
     //adding displayif with nested questions. nested display if uses !| to |!
     questText = questText.replace(/!\|(displayif=.+?)\|(.*?)\|!/g, fDisplayIf);
+
     function fDisplayIf(containsGroup, condition, text) {
       text = text.replace(/\|(?:__\|){2,}(?:([^|<]+[^|]+)\|)?/g, fNum);
       text = text.replace(/\|popup\|([^|]+)\|(?:([^|]+)\|)?([^|]+)\|/g, fPopover);
@@ -540,7 +631,7 @@ export class QuestionProcessor {
       // text = text.replace(/\|tel\|(?:([^\|\<]+[^\|]+)\|)?/g, fPhone);
       // text = text.replace(/\|SSN\|(?:([^\|\<]+[^\|]+)\|)?/g, fSSN);
       // text = text.replace(/\|state\|(?:([^\|\<]+[^\|]+)\|)?/g, fState);
-      // text = text.replace(/\((\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio);
+      // //text = text.replace(/\((\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio);
       // text = text.replace(/\[(\d*)(\*)?(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g, fCheck);
       // text = text.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
       // text = text.replace(/\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?\s*(.*?)/g, fText);
@@ -554,9 +645,8 @@ export class QuestionProcessor {
 
     //replace |popup|buttonText|Title|text| with a popover
     questText = questText.replace(
-      /\|popup\|([^|]+)\|(?:([^|]+)\|)?([^|]+)\|/g,
-      fPopover
-    );
+      /\|popup\|([^|]+)\|(?:([^|]+)\|)?([^|]+)\|/g, fPopover);
+
     function fPopover(fullmatch, buttonText, title, popText) {
       title = title ? title : "";
       popText = popText.replace(/"/g, "&quot;")
@@ -572,7 +662,7 @@ export class QuestionProcessor {
     // replace |@| with an email input
     questText = questText.replace(/\|@\|(?:([^\|\<]+[^\|]+)\|)?/g, fEmail);
     function fEmail(fullmatch, opts) {
-      const { options, elementId } = guaranteeIdSet(opts, "email");
+      const { options } = guaranteeIdSet(opts, "email");
       return `<input type='email' ${options} placeholder="user@example.com"></input>`;
     }
 
@@ -609,10 +699,10 @@ export class QuestionProcessor {
     function fMonth(fullmatch, opts) {
       const type = fullmatch.match(/[^|]+/);
       const { options, elementId } = guaranteeIdSet(opts, type);
-      const questIDPrefix = questID.match(idWithLoopSuffixRegex)[1];
+      const questionIDPrefix = questionID.match(idWithLoopSuffixRegex)[1];
 
       const updatedOptions = options.replace(valueOrDefaultRegex, (_, prefix, suffix, rest) => {
-        return `valueOrDefault("${questIDPrefix}${suffix}"${rest})`;
+        return `valueOrDefault("${questionIDPrefix}${suffix}"${rest})`;
       });
 
       const optionObj = paramSplit(updatedOptions);
@@ -640,30 +730,35 @@ export class QuestionProcessor {
 
     questText = questText.replace(/\|tel\|(?:([^\|\<]+[^\|]+)\|)?/g, fPhone);
     function fPhone(fullmatch, opts) {
-      const { options, elementId } = guaranteeIdSet(opts, "tel");
+      const { options } = guaranteeIdSet(opts, "tel");
       return `<input type='tel' ${options} pattern="[0-9]{3}-?[0-9]{3}-?[0-9]{4}" maxlength="12" placeholder='###-###-####'></input>`;
     }
 
     // replace |SSN| with SSN input
     questText = questText.replace(/\|SSN\|(?:([^\|\<]+[^\|]+)\|)?/g, fSSN);
     function fSSN(fullmatch, opts) {
-      const { options, elementId } = guaranteeIdSet(opts, "SSN");
+      const { options } = guaranteeIdSet(opts, "SSN");
       return `<input type='text' ${options} id="SSN" class="SSN" inputmode="numeric" maxlength="11" pattern="[0-9]{3}-?[0-9]{2}-?[0-9]{4}"   placeholder="_ _ _-_ _-_ _ _ _"></input>`;
     }
-
-
 
     // replace |SSNsm| with SSN input
     questText = questText.replace(/\|SSNsm\|(?:([^\|\<]+[^\|]+)\|)?/g, fSSNsm);
     function fSSNsm(fullmatch, opts) {
-      const { options, elementId } = guaranteeIdSet(opts, "SSNsm");
+      const { options } = guaranteeIdSet(opts, "SSNsm");
       return `<input type='text' ${options} class="SSNsm" inputmode="numeric" maxlength="4" pattern='[0-9]{4}'placeholder="_ _ _ _"></input>`;
+    }
+
+    // replace |zip| with text input
+    questText = questText.replace(/\|zip\|(?:([^\|\<]+[^\|]+)\|)?/g, fzip);
+    function fzip(fullmatch, opts) {
+      const { options, elementId } = guaranteeIdSet(opts, "zip");
+      return `<input type='text' ${options} id=${elementId} class="zipcode" pattern="^[0-9]{5}(?:-[0-9]{4})?$"   placeholder="_ _ _ _ _"></input>`;
     }
 
     // replace |state| with state dropdown
     questText = questText.replace(/\|state\|(?:([^\|\<]+[^\|]+)\|)?/g, fState);
     function fState(fullmatch, opts) {
-      const { options, elementId } = guaranteeIdSet(opts, "state");
+      const { options } = guaranteeIdSet(opts, "state");
       return `<select ${options}>
         <option value='' disabled selected>${i18n.chooseState}: </option>
         <option value='AL'>Alabama</option>
@@ -727,7 +822,7 @@ export class QuestionProcessor {
 
       let elementId = options.match(elementIdRegex);
       if (!elementId) {
-        elementId = `${questID}_${inputType}`;
+        elementId = `${questionID}_${inputType}`;
         options = `${options} id=${elementId}`;
       } else {
         elementId = elementId[1];
@@ -742,9 +837,9 @@ export class QuestionProcessor {
     );
 
     //regex to test if there are input as a part of radio or checkboxes
-    let radioCheckboxAndInput = false;
+    //let radioCheckboxAndInput = false;
     if (questText.match(/(\[|\()(\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?(\)|\])\s*(.*?\|_.*?\|)/g)) {
-      radioCheckboxAndInput = true;
+      //radioCheckboxAndInput = true;
       questOpts = questOpts + " radioCheckboxAndInput";
     }
 
@@ -761,8 +856,8 @@ export class QuestionProcessor {
     // similar to string.replace
     function handleButton(match) {
       let value = match[1];
-      let radioElementName = !!match[2] ? match[2] : questID;
-      let labelID = !!match[3] ? match[3] : `${radioElementName}_${value}_label`;
+      let radioElementName = match[2] ? match[2] : questionID;
+      let labelID = match[3] ? match[3] : `${radioElementName}_${value}_label`;
 
       // finds real end
       let cnt = 0;
@@ -779,20 +874,34 @@ export class QuestionProcessor {
       // need to have the displayif=... in the variable display_if otherwise if
       // you have displayif={displayif} displayif will be false if empty.
       let radioButtonMetaData = match.input.substring(match.index, end);
-      let display_if = !!match[4] ? radioButtonMetaData.substring(radioButtonMetaData.indexOf(match[4]), radioButtonMetaData.length - 1).trim() : "";
-      display_if = (!!display_if) ? `displayif=${encodeURIComponent(display_if)}` : ""
+      let display_if = match[4] ? radioButtonMetaData.substring(radioButtonMetaData.indexOf(match[4]), radioButtonMetaData.length - 1).trim() : "";
+      display_if = (display_if) ? `displayif=${encodeURIComponent(display_if)}` : ""
       let label_end = match.input.substring(end).search(/\n|(?:<br>|$)/) + end;
       let label = match.input.substring(end, label_end);
       let replacement = `<div class='response' ${display_if}><input type='radio' name='${radioElementName}' value='${value}' id='${radioElementName}_${value}'></input><label id='${labelID}' for='${radioElementName}_${value}'>${label}</label></div>`;
 
       return match.input.substring(0, match.index) + replacement + match.input.substring(label_end);
     }
-
+    /*
+      \((\d+)       Required: (value
+      (?:\:(\w+))?  an optional :name for the input
+      (?:\|(\w+))?  an optional |label
+      (?:,displayif=([^)]*))?  an optional display if.. up to the first close parenthesis
+      (\s*\))     Required: close paren with optional space in front.
+    */
     let buttonRegex = /\((\d+)(?:\:(\w+))?(?:\|(\w+))?(?:,displayif=([^)]*))?(\s*\))/;
-    for (let match = questText.match(buttonRegex); !!match; match = questText.match(buttonRegex)) {
+    for (let match = questText.match(buttonRegex); match; match = questText.match(buttonRegex)) {
       questText = handleButton(match);
     }
 
+    // replace [XX] with checkbox
+    // The "displayif" is reading beyond the end of the pattern ( displayif=.... )
+    // let cbRegEx = new RegExp(''
+    //   + /\[(d*)(\*)?(?:\:(\w+))?/.source              // (digits with a potential * and :name
+    //   + /(?:\|(\w+))?/.source                         // an optional id for the label
+    //   + /(?:,(displayif=.+?\))?)?/.source             // an optional displayif
+    //   + /\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/         // go to the end of the line or next [
+    // )
     questText = questText.replace(
       /\[(\d*)(\*)?(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif\s*=\s*.+?\)\s*)?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g,
       fCheck
@@ -807,7 +916,7 @@ export class QuestionProcessor {
       }
       let elVar = "";
       if (name == undefined) {
-        elVar = questID;
+        elVar = questionID;
       } else {
         elVar = name;
       }
@@ -830,16 +939,14 @@ export class QuestionProcessor {
 
     // TODO: General: format for number input boxes needs adjustment for screen readers (description text first or aria description)
     // replace |__|__|  with a number box...
-    questText = questText.replace(
-      /\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g,
-      fNum
-    );
+    questText = questText.replace(/\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g, fNum);
+
     function fNum(fullmatch, opts) {
       const value = questText.startsWith('<br>') ? questText.split('<br>')[0] : '';
       // make sure that the element id is set...
       let { options, elementId } = guaranteeIdSet(opts, "num");
       
-      options = options.replaceAll('\"', "\'");
+      options = options.replaceAll('"', "'");
       //instead of replacing max and min with data-min and data-max, they need to be added, as the up down buttons are needed for input type number
       let optionObj = paramSplit(options)
 
@@ -887,41 +994,33 @@ export class QuestionProcessor {
       options += ` ${placeholder} aria-describedby="${elementId}-desc"`;
 
       //onkeypress forces whole numbers
-      return `<input type='number' aria-label='${value}' step='any' onkeypress='return (event.charCode == 8 || event.charCode == 0 || event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57' name='${questID}' ${options}>
+      return `<input type='number' aria-label='${value}' step='any' onkeypress='return (event.charCode == 8 || event.charCode == 0 || event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57' name='${questionID}' ${options}>
               <div id="${elementId}-desc" class="sr-only">${descriptionText}</div><br>`;
     }
 
     // replace |__| or [text box:xxx] with an input box...
     questText = questText.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
     function fTextBox(fullmatch, options) {
-      let id = options ? options : `${questID}_text`;
-      return `|__|id=${id} name=${questID}|`;
+      let id = options ? options : `${questionID}_text`;
+      return `|__|id=${id} name=${questionID}|`;
     }
 
-
-    questText = questText.replace(
-      /(.*)?\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?(.*)?/g,
-      fText
-    );
-
+    questText = questText.replace(/(.*)?\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?(.*)?/g, fText);
     function fText(fullmatch, value1, opts, value2) {
-      let { options, elementId } = guaranteeIdSet(opts, "txt");
+      let { options } = guaranteeIdSet(opts, "txt");
       options = options.replaceAll(/(min|max)len\s*=\s*(\d+)/g,'data-$1len=$2')
-      // if value1 or 2 contains an apostrophe, convert it to
-      // and html entity.  This may need to be preformed in other parts
-      // the code. As it turns out.  This causes a problem.  Only change the values in the aria-label.
-      // if you have (1) xx |__| text with  ' in it.
-      // then the apostrophe is put in the aria-label screwing up the rendering 
+      
+      const ariaLabel = i18n.enterValue;
+      const inputElement = `<input type='text' aria-label='${ariaLabel}' name='${questionID}' ${options}></input>`;
+      
+      if (value1 && value1.includes('div')) {
+        return `${value1}${inputElement}${value2 || ''}`;
+      }
 
-      // this is really ugly..  What is going on here?
-      // TODO: refactor, test, and remove this console.warn
-      //if (value1 && value1.includes('div')) console.warn('fText:', value1, opts, value2);
-      if (value1 && value1.includes('div')) return `${value1}<input type='text' aria-label='${value1.split('>').pop().replace(/'/g, "&apos;")}'name='${questID}' ${options}></input>${value2}`
-      if (value1 && value2) return `<span>${value1}</span><input type='text' aria-label='${value1.replace(/'/g, "&apos;")} ${value2.replace(/'/g, "&apos;")}' name='${questID}' ${options}></input><span>${value2}</span>`;
-      if (value1) return `<span>${value1}</span><input type='text' aria-label='${value1.replace(/'/g, "&apos;")}' name='${questID}' ${options}></input>`;
-      if (value2) return `<input type='text' aria-label='${value2.replace(/'/g, "&apos;")}' name='${questID}' ${options}></input><span>${value2}</span>`;
+      const span1 = value1 ? `<span>${value1}</span>` : '';
+      const span2 = value2 ? `<span>${value2}</span>` : '';
 
-      return `<input type='text' aria-label='${questText.split('<br>')[0]}' name='${questID}' ${options}></input>`;
+      return `${span1}${inputElement}${span2}`;
     }
 
     // replace |___| with a textarea...
@@ -929,7 +1028,7 @@ export class QuestionProcessor {
     function fTextArea(x1, y1, z1) {
       let elId = "";
       if (z1 == undefined) {
-        elId = questID + "_ta";
+        elId = questionID + "_ta";
       } else {
         elId = z1;
       }
@@ -945,16 +1044,16 @@ export class QuestionProcessor {
         <label id="yesNoDontKnowLabel" class="sr-only">Select "Yes," "No," or "Prefer not to answer" to answer the question.</label>
         <ul>
           <li class='response'>
-            <input type='radio' id="${questID}_1" name="${questID}" value="yes">
-            <label for='${questID}_1'>${i18n.yes}</label>
+            <input type='radio' id="${questionID}_1" name="${questionID}" value="yes">
+            <label for='${questionID}_1'>${i18n.yes}</label>
           </li>
           <li class='response'>
-            <input type='radio' id="${questID}_0" name="${questID}" value="no">
-            <label for='${questID}_0'>${i18n.no}</label>
+            <input type='radio' id="${questionID}_0" name="${questionID}" value="no">
+            <label for='${questionID}_0'>${i18n.no}</label>
           </li>
           <li class='response'>
-            <input type='radio' id="${questID}_99" name="${questID}" value="prefer not to answer">
-            <label for='${questID}_99'>${i18n.preferNotToAnswer}</label>
+            <input type='radio' id="${questionID}_99" name="${questionID}" value="prefer not to answer">
+            <label for='${questionID}_99'>${i18n.preferNotToAnswer}</label>
           </li>
         </ul>
       </div>
@@ -969,12 +1068,12 @@ export class QuestionProcessor {
         <div id="yesNoLabel" class="sr-only">Select "Yes" or "No" to answer the question.</div>
         <ul>
           <li class='response'>
-            <input type='radio' id="${questID}_1" name="${questID}" value="yes">
-            <label for='${questID}_1'>${i18n.yes}</label>
+            <input type='radio' id="${questionID}_1" name="${questionID}" value="yes">
+            <label for='${questionID}_1'>${i18n.yes}</label>
           </li>
           <li class='response'>
-            <input type='radio' id="${questID}_0" name="${questID}" value="no">
-            <label for='${questID}_0'>${i18n.no}</label>
+            <input type='radio' id="${questionID}_0" name="${questionID}" value="no">
+            <label for='${questionID}_0'>${i18n.no}</label>
           </li>
         </ul>
       </div>
@@ -1004,7 +1103,7 @@ export class QuestionProcessor {
       // look for cbName [v:name], otherwise use the question id.
       let name = cbArgs.match(/name=['"]?(\w+)['"]?/);
       if (!name) {
-        name = cbName ? `name="${cbName}"` : `name="${questID}"`;
+        name = cbName ? `name="${cbName}"` : `name="${questionID}"`;
       }
 
       let id = cbArgs.match(/id=['"]?(\w+)/);
@@ -1014,7 +1113,7 @@ export class QuestionProcessor {
       if (id) {
         id = id[1];
       } else {
-        id = cbName ? cbName : `${questID}_${cbValue}`;
+        id = cbName ? cbName : `${questionID}_${cbValue}`;
         forceId = `id=${id}`;
       }
 
@@ -1025,12 +1124,11 @@ export class QuestionProcessor {
     }
     // SAME thing but this time with a textarea...
 
-
     //displayif with just texts
     // the : changes the standard span to a div.
-    questText = questText.replace(/\|displayif=(.+?)(:)?\|(.*?)\|/g, fDisplayIf);
-    function fDisplayIf(containsGroup, condition, nl, text) {
-      condition = condition.replaceAll('\"', "\'");
+    questText = questText.replace(/\|displayif=(.+?)(:)?\|(.*?)\|/g, fDisplayIfSpanToDiv);
+    function fDisplayIfSpanToDiv(containsGroup, condition, nl, text) {
+      condition = condition.replaceAll('"', "'");
       let tag = (nl) ? "div" : "span"
       return `<${tag} class='displayif' displayif="${condition}">${text}</${tag}>`;
     }
@@ -1050,16 +1148,16 @@ export class QuestionProcessor {
     );
     function fHidden(containsGroup, ifArgs, skipTo) {
       ifArgs = ifArgs == undefined ? "" : ` if=${encodeURIComponent(ifArgs)}`;
-      return `<input type='hidden'${ifArgs} id='${questID}_skipto_${skipTo}' name='${questID}' skipTo=${skipTo} checked>`;
+      return `<input type='hidden'${ifArgs} id='${questionID}_skipto_${skipTo}' name='${questionID}' skipTo=${skipTo} checked>`;
     }
 
     // replace next question  < #NR -> > with hidden...
     questText = questText.replace(
       /<\s*#NR\s*->\s*([A-Z_][A-Z0-9_#]*)\s*>/g,
       "<input type='hidden' class='noresponse' id='" +
-      questID +
+      questionID +
       "_NR' name='" +
-      questID +
+      questionID +
       "' skipTo=$1 checked>"
     );
 
@@ -1076,115 +1174,21 @@ export class QuestionProcessor {
 
     // handle the back/next/reset buttons
     const hasInputfield = questText.includes('input');
-    const questButtonsDiv = this.getButtonDiv(hasInputfield, questID, endMatch, target);
+    const questButtonsDiv = this.getButtonDiv(hasInputfield, questionID, endMatch, target);
     
-    let rv = `
-      <form class='question' id='${questID}' ${questOpts} ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
+    return `
+      <form class='question' id='${questionID}' ${questOpts} ${questArgs} novalidate hardEdit='${hardBool}' softEdit='${softBool}'>
         <fieldset>
           ${questText}
         </fieldset>
         ${questButtonsDiv}
         <div class="spacePadding"></div>
-      </form>`;
-    
-    this.currentQuestion = null;
-
-    return rv;
+      </form>
+    `;
   }
-
-  processInputs(content) {
-    const inputReplacements = [
-      { regex: /\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g, handler: this.handleNumberInput.bind(this) },
-      { regex: /\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?\s*(.*?)/g, handler: this.handleTextInput.bind(this) },
-      { regex: /\|___\|((\w+)\|)?/g, handler: this.handleTextArea.bind(this) },
-      { regex: /\|@\|(?:([^\|\<]+[^\|]+)\|)?/g, handler: this.handleEmailInput.bind(this) },
-      { regex: /\|date\|(?:([^\|\<]+[^\|]+)\|)?/g, handler: this.handleDateInput.bind(this) },
-      { regex: /\|tel\|(?:([^\|\<]+[^\|]+)\|)?/g, handler: this.handlePhoneInput.bind(this) },
-      { regex: /\|SSN\|(?:([^\|\<]+[^\|]+)\|)?/g, handler: this.handleSSNInput.bind(this) },
-      { regex: /\|state\|(?:([^\|\<]+[^\|]+)\|)?/g, handler: this.handleStateDropdown.bind(this) },
-      { regex: /\((\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, handler: this.handleRadioButton.bind(this) },
-      { regex: /\[(\d*)(\*)?(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g, handler: this.handleCheckbox.bind(this) }
-    ];
-
-    inputReplacements.forEach(({ regex, handler }) => {
-      content = content.replace(regex, handler);
-    });
-
-    return content;
-  }
-
-  handleNumberInput(match, opts) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "num");
-    return `<input type='number' aria-label='${elementId}' step='any' name='${elementId}' ${options}><br>`;
-  }
-
-  handleTextInput(match, opts, label) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "txt");
-    return `<input type='text' aria-label='${label || elementId}' name='${elementId}' ${options}>`;
-  }
-
-  handleTextArea(match, fullMatch, id) {
-    const elementId = id || `${this.currentQuestion.questionID}_ta`;
-    return `<textarea id='${elementId}' name='${elementId}' aria-label='Enter your response'></textarea>`;
-  }
-
-  handleEmailInput(match, opts) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "email");
-    return `<input type='email' ${options} placeholder="user@example.com">`;
-  }
-
-  handleDateInput(match, opts) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "date");
-    return `<input type='date' ${options} aria-label='Select date'>`;
-  }
-
-  handlePhoneInput(match, opts) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "tel");
-    return `<input type='tel' ${options} pattern="[0-9]{3}-?[0-9]{3}-?[0-9]{4}" maxlength="12" placeholder='###-###-####'>`;
-  }
-
-  handleSSNInput(match, opts) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "SSN");
-    return `<input type='text' ${options} class="SSN" inputmode="numeric" maxlength="11" pattern="[0-9]{3}-?[0-9]{2}-?[0-9]{4}" placeholder="_ _ _-_ _-_ _ _ _">`;
-  }
-
-  handleStateDropdown(match, opts) {
-    const { options, elementId } = this.guaranteeIdSet(opts, "state");
-    const states = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
-    const stateOptions = states.map(state => `<option value='${state}'>${state}</option>`).join('');
-    return `<select ${options}><option value='' disabled selected>${this.i18n.chooseState}: </option>${stateOptions}</select>`;
-  }
-
-  handleRadioAndCheckbox(content) {
-    const buttonRegex = /\((\d+)(?:\:(\w+))?(?:\|(\w+))?(?:,displayif=([^)]*))?(\s*\))/;
-    while (content.match(buttonRegex)) {
-        content = content.replace(buttonRegex, this.handleRadioButton.bind(this));
-  }
-
-  content = content.replace(
-      /\[(\d*)(\*)?(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif\s*=\s*.+?\)\s*)?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g,
-      this.handleCheckbox.bind(this)
-  );
-
-  return content;
-  }
-
-  // guaranteeIdSet(options, inputType = "inp") {
-  //   if (options == undefined) {
-  //     options = "";
-  //   }
-  //   options = options.trim();
-  //   let elementId = options.match(/id=([^\s]+)/);
-  //   if (!elementId) {
-  //     elementId = `${this.currentQuestion.questionID}_${inputType}`;
-  //     options = `${options} id=${elementId}`;
-  //   } else {
-  //     elementId = elementId[1];
-  //   }
-  //   return { options: options, elementId: elementId };
-  // }
 
   replaceTodayTag(match, offset) {
+    // If no (+/- offset), we want today.
     if (!offset || offset.trim().length == 0) {
       return this.precalculated_values.quest_format_date;
     }
@@ -1198,37 +1202,12 @@ export class QuestionProcessor {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
 
-  generateYesNoPrefer(questionID) {
-    return `
-      <div role="radiogroup" aria-labelledby="${questionID}_ynp_label">
-        <label id="${questionID}_ynp_label" class="sr-only">Select "Yes," "No," or "Prefer not to answer" to answer the question.</label>
-        <ul>
-          <li class='response'><input type='radio' id="${questionID}_1" name="${questionID}" value="yes"><label for='${questionID}_1'>${this.i18n.yes}</label></li>
-          <li class='response'><input type='radio' id="${questionID}_0" name="${questionID}" value="no"><label for='${questionID}_0'>${this.i18n.no}</label></li>
-          <li class='response'><input type='radio' id="${questionID}_99" name="${questionID}" value="prefer not to answer"><label for='${questionID}_99'>${this.i18n.preferNotToAnswer}</label></li>
-        </ul>
-      </div>
-    `;
-  }
-
-  generateYesNo(questionID) {
-      return `
-      <div role="radiogroup" aria-labelledby="${questionID}_yn_label">
-          <div id="${questionID}_yn_label" class="sr-only">Select "Yes" or "No" to answer the question.</div>
-          <ul>
-          <li class='response'><input type='radio' id="${questionID}_1" name="${questionID}" value="yes"><label for='${questionID}_1'>${this.i18n.yes}</label></li>
-          <li class='response'><input type='radio' id="${questionID}_0" name="${questionID}" value="no"><label for='${questionID}_0'>${this.i18n.no}</label></li>
-          </ul>
-      </div>
-      `;
-  }
-
-  getButtonDiv(hasInputField, questID, endMatch, target) {
+  getButtonDiv(hasInputField, questionID, endMatch, target) {
     const nextButton = endMatch
         ? ""
         : `<button type='submit' class='next w-100' ${target} aria-label='Next question' data-click-type='next'>${this.buttonTextObj.next}</button>`;
     
-    const resetButton = (questID === 'END')
+    const resetButton = (questionID === 'END')
         ? `<button type='submit' class='reset' id='submitButton' aria-label='Submit your survey' data-click-type='submitSurvey'>${this.buttonTextObj.submit}</button>`
         : hasInputField
             ? `<button type='submit' class='reset w-100' aria-label='Reset this answer' data-click-type='reset'>${this.buttonTextObj.reset}</button>`
@@ -1236,24 +1215,27 @@ export class QuestionProcessor {
 
     const prevButton = (endMatch && endMatch[1]) === "noback"
         ? ""
-        : (questID === 'END')
+        : (questionID === 'END')
             ? `<button type='submit' class='previous w-100' id='lastBackButton' aria-label='Back to the previous section' data-click-type='previous'>${this.buttonTextObj.back}</button>`
             : `<button type='submit' class='previous w-100' aria-label='Back to the previous question' data-click-type='previous'>${this.buttonTextObj.back}</button>`;
 
+    // Note: buttons are ordered horizontally on larger screens: (1) back, (2) reset, (3) next, and vertically on smaller screens: (1) next, (2) reset, (3) back.
+    // The below HTML structure enhances tab order for accessibility, always tabbing to the 'next' button first, then reset, then back.
     return `
         <div class="py-0">
             <div class="row d-flex flex-column flex-md-row">
-                <div class="col-md-3 col-sm-12 order-1 order-md-3">
+                <div class="col-md-3 col-sm-12 order-md-3">
                     ${nextButton}
                 </div>
                 <div class="col-md-6 col-sm-12 order-2">
                     ${resetButton}
                 </div>
-                <div class="col-md-3 col-sm-12 order-3 order-md-1">
+                <div class="col-md-3 col-sm-12 order-md-1">
                     ${prevButton}
                 </div>
             </div>
-        </div>`;
+        </div>
+    `;
   }
 }
 
@@ -1295,11 +1277,6 @@ function ordinal(a, lang) {
     let loopRegex = /<loop max=(\d+)\s*>(.*?)<\/loop>/gm;
     txt = txt.replace(/(?:\r\n|\r|\n)/g, "\xa9");
     let res = [...txt.matchAll(loopRegex)].map(function (x, indx) {
-      // console.log('X:', x);
-      // console.log('X0:', x[0]);
-      // console.log('X1:', x[1]);
-      // console.log('X2:', x[2]);
-      // console.log('INDX:', indx);
       return { cnt: x[1], txt: x[2], indx: indx + 1, orig: x[0] };
     });
   

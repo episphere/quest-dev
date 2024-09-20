@@ -1,7 +1,7 @@
 import { moduleParams } from './questionnaire.js';
 import { initializeCustomMathJSFunctions, math } from './customMathJSImplementation.js';
 import { initializeStateManager } from './stateManager.js';
-import { QuestionProcessor } from './questionHandler.js';
+import { QuestionProcessor } from './questionProcessor.js';
 import { getStateManager } from './stateManager.js';
 
 /**
@@ -47,6 +47,9 @@ async function fetchAndProcessResources() {
     try {
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
             moduleParams.renderObj?.retrieve && !moduleParams.renderObj?.surveyDataPrefetch ? moduleParams.renderObj.retrieve() : Promise.resolve(),
+            // TODO: Remove the hardcoded paths and use the basePath from the moduleParams.
+            // moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
+            // moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
             moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
             moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
         ]);

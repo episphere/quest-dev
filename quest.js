@@ -13,11 +13,7 @@ HTMLTableRowElement.prototype.insertHead = function(html){
   return cell
 }
 
-// Used to retain settings in the 'Settings' tab.
-const questLF = await localforage.createInstance({
-  name:"questParams",
-  storeName:"params"
-})
+
 
 async function fetchModule(url){
   let response = await fetch(url)
@@ -28,7 +24,11 @@ async function fetchModule(url){
 }
 
 async function startUp() {
-
+  // Used to retain settings in the 'Settings' tab.
+  const questLF = await localforage.createInstance({
+    name: "questParams",
+    storeName: "params"
+  });
 
   let searchParams = new URLSearchParams(location.search)
   if (location.hash.split('&').includes('run') || searchParams.has('run')) {
@@ -59,7 +59,7 @@ async function startUp() {
   document.getElementById("json_input").innerText=JSON.stringify(prevRes,null,3);
 
   var ta = document.getElementById("ta");
-  ta.onkeyup = (ev) => {
+  ta.onkeyup = () => {
     transform.tout((previousResults) => {
       transform.render(
         {
