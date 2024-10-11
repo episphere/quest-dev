@@ -132,12 +132,22 @@ input[type="checkbox"]:checked + label {
   padding-top: 5px;
   padding-bottom: 5px;
   margin-top: 10px;
+  outline: none;
 }
 
 .next:hover,
+.reset:hover,
 .previous:hover {
   background-color: rgb(55, 133, 203);
   border: solid 3px rgb(55, 133, 203);
+}
+
+.next:focus,
+.previous:focus,
+.reset:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(50, 122, 187, 0.5);
+  border-color: rgb(255, 255, 255);
 }
 
 form {

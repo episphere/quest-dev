@@ -236,10 +236,10 @@ function validate_text(inputElement) {
         clearValidationError(inputElement)
     }
 
-    let checkConfirmation = "confirm" in inputElement.dataset || "conformationFor" in inputElement.dataset;
+    let checkConfirmation = "confirm" in inputElement.dataset || "confirmationFor" in inputElement.dataset;
 
     if (checkConfirmation){
-        let otherId = inputElement.dataset.confirm ?? inputElement.dataset.conformationFor
+        let otherId = inputElement.dataset.confirm ?? inputElement.dataset.confirmationFor
         let otherElement = document.getElementById(otherId)
 
         if (otherElement.value != inputElement.value) {

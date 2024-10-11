@@ -22,7 +22,7 @@ export async function initSurvey(contents) {
     const stateManager = getStateManager();
     stateManager.setQuestionProcessor(questionProcessor);
 
-    return moduleParams.renderObj?.activate
+    return !moduleParams.renderObj?.isRenderer
         ? await fetchAndProcessResources()
         : null;
 }
@@ -45,13 +45,15 @@ async function fetchAndProcessResources() {
     }
     
     try {
+        const shouldFetchStylesheets = moduleParams.renderObj?.url && moduleParams.renderObj?.activate;
+
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
             moduleParams.renderObj?.retrieve && !moduleParams.renderObj?.surveyDataPrefetch ? moduleParams.renderObj.retrieve() : Promise.resolve(),
             // TODO: Remove the hardcoded paths and use the basePath from the moduleParams.
-            // moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-            // moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
-            moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-            moduleParams.renderObj?.url && moduleParams.renderObj?.activate ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
+            // shouldFetchStylesheets ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
+            // shouldFetchStylesheets ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
+            shouldFetchStylesheets ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
+            shouldFetchStylesheets ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
         ]);
 
         // retrievedData is the prefetched user data, the result of the retrieve function, or null (for the renderer or when no retrieve function is provided).
@@ -59,7 +61,7 @@ async function fetchAndProcessResources() {
         const retrievedData = moduleParams.renderObj?.surveyDataPrefetch || unwrapData(retrieveFunctionResponse?.data);
 
         // Add the stylesheets to the document.
-        if (moduleParams.renderObj?.url && moduleParams.renderObj?.activate) {
+        if (shouldFetchStylesheets) {
             [cssActiveLogic, cssStyle1].forEach((css) => {
                 const cssTextBlob = new Blob([css], { type: 'text/css' });
                 const stylesheetLinkElement = document.createElement('link');

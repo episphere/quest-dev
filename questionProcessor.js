@@ -22,6 +22,7 @@ export class QuestionProcessor {
           submit: i18n.submitSurveyButton
       };
       this.precalculated_values = precalculated_values;   // Pre-calculated form values (e.g. user name and current date)
+      this.lastBatchProcessedQuestionIndex = 0;           // Track the last batch preprocessed question.
       this.loopDataArr = [];                              // Array of loop data. Responsive to user input.
       this.gridQuestionsArr = [];                         // Array of grid question IDs, used for processing someSelected and noneSelected conditionals.
       this.questions = this.splitIntoQuestions(markdown); // Split and prepare questions
@@ -66,7 +67,6 @@ export class QuestionProcessor {
     // This would lighten the initial load considerably. Would need to handle insertions to the array.
     // Would also need to handle removing generated loop eles on back button click and/or change of the trigger response.
     // Current loop process unrolls all possible responses to n=loopMax (25).
-    //markdown = markdown.replace(/<\/loop>/g, "</loop>\n[END_OF_LOOP] placeholder");
     markdown = unrollLoops(markdown, this.i18n.language);
 
     // Now we have the contents unpacked and the grid placeholders embedded:
@@ -125,7 +125,6 @@ export class QuestionProcessor {
       }
     }
     
-    console.log('QuestionsArr:', questionsArr);
     return questionsArr;
   }
   
@@ -180,7 +179,7 @@ export class QuestionProcessor {
       }
       const otherElement = newQuestionEle.querySelector(`#${element.dataset.confirm}`);
       console.warn('TODO: TEST (this previously used document access): confirm element found:', otherElement);
-      otherElement.dataset.conformationFor = element.id;
+      otherElement.dataset.confirmationFor = element.id;
     });
 
     // enable all popovers...
@@ -200,95 +199,186 @@ export class QuestionProcessor {
   }
 
   /**
-   * Find a question from this.questions.
-   * If no questionID is provided, return the next sequential question.
-   * @param {string || undefined} questionID - The questionID to find, or undefined to get the next sequential question.
-   * @param {boolean} isInitialLoad - If true, this is part of the startup routine. Set the question active.
-   * @returns {HTMLElement} - The HTML element of the found question.
+   * Manage the currentQuestionIndex value, which acts as a pointer for question navigation.
+   * @param {string} updateType 
+   * @param {number|null} value - optional, 
    */
+  setCurrentQuestionIndex(updateType, value) {
+    if (typeof updateType !== 'string') {
+      console.error('Error (setCurrentQuestionIndex). updateType must be a string')
+    }
+    
+    switch(updateType) {
+      case 'increment':
+        this.currentQuestionIndex++;
+        break;
 
-  findQuestion(questionID, isInitialLoad = false) {
-    if (!questionID) {
-      return this.getNextSequentialQuestion();
-
-    } else if (questionID.startsWith('_CONTINUE')) {
-      return this.findStartOfNextLoop(questionID);
-
-    } else {
-      const index = this.questions.findIndex(question => question.questionID.startsWith(questionID));
-      if (index !== -1) {
-        this.currentQuestionIndex = index;
-        const foundQuestion = this.processQuestion(index);
-
-        if (isInitialLoad) {
-          return this.manageActiveQuestionClass(foundQuestion, null);
+      case 'decrement':
+        this.currentQuestionIndex--;
+        break;
+      
+      case 'update':
+        if (typeof value !== 'number') {
+          console.error('Error (setCurrentQuestionIndex). value must be a number for update operations.')
         }
+        this.currentQuestionIndex = value;
+        break;
 
-        return foundQuestion;
-      }
-
-      console.error(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
-      return null;
+      default:
+        console.error('Error (setCurrentQuestionIndex): unhandled updateType', updateType, value);
     }
   }
 
-  getNextSequentialQuestion() {
+  /**
+   * Find a question by questionID from the this.questions array.
+   * @param {string || undefined} questionID - The questionID to find.
+   * @returns {object} - { question: The HTML element of the found question, index: the index of the found question }
+   */
+
+  findQuestion(questionID) {
+    if (!questionID) {
+      console.error('Error, findQuestion (no questionID provided):', questionID); 
+    }
+
+    let index;
+
+    if (questionID.startsWith('_CONTINUE')) {
+      return this.findStartOfNextLoopIteration(questionID);
+    } else if (questionID === 'END') {
+      index = this.questions.length - 1;
+    } else {
+      index = this.questions.findIndex(question => question.questionID.startsWith(questionID));
+    }
+
+    if (index !== -1) {
+      const foundQuestion = this.processQuestion(index);
+      if (!foundQuestion) {
+        console.error('Error: (findQuestion): question not found at index', index)
+      }
+
+      return { question: foundQuestion, index: index };
+    }
+
+    console.error(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
+    return { question: null, index: -1 };
+  }
+
+  /**
+   * Load the initial question when a user starts or returns to a survey.
+   * Find the question, set the currentQuestionIndex, and manage the active question class.
+   * @param {string} questionID - The questionID to load.
+   * @returns {HTMLElement} - The HTML element of the loaded question.
+   */
+
+  loadInitialQuestionOnStartup(questionID) {
+    if (this.questions.length === 0) {
+      console.error('Error during initialization (loadInitialQuestion): no questions found', this.questions);
+      return null;
+    }
+
+    const { question, index } = this.findQuestion(questionID);
+    if (!question) {
+      console.error('Error during initialization (loadInitialQuestion): question not found', questionID);
+      return null;
+    }
+
+    this.setCurrentQuestionIndex('update', index);
+
+    return this.manageActiveQuestionClass(question, null);
+  }
+
+  /**
+   * Get the next sequential questionID from the this.questions array.
+   * Used whenever a response doesn't have an associated jump target.
+   * Check the currentQuestionIndex, increment it, and return the next questionID.
+   * @returns {string} - The ID of the next question to load.
+   */
+
+  getNextSequentialQuestionID() {
     if (this.currentQuestionIndex + 1 < this.questions.length) {
-      const previousQuestion = this.processQuestion(this.currentQuestionIndex - 1);
+      
+      this.setCurrentQuestionIndex('increment')
 
-      this.currentQuestionIndex++;
-      const currentQuestion = this.processQuestion(this.currentQuestionIndex);
-
-      return this.manageActiveQuestionClass(currentQuestion, previousQuestion);
+      const nextQuestion = this.processQuestion(this.currentQuestionIndex);
+      return nextQuestion.id;
     }
 
     console.error(`Error, getNextSequentialQuestion (no next question to load): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
     return null;
   }
 
-  loadPreviousQuestion(previousQuestionID) {
-    if (this.currentQuestionIndex > 0) {
-        const questionToUnload = this.getCurrentQuestion();
-        const questionToLoad = this.findQuestion(previousQuestionID);
-        this.manageActiveQuestionClass(questionToLoad, questionToUnload);
+  /**
+   * Load the previous question. Note: this is not necessarily the previous array index due to jumps and loops.
+   * Find the previous question, set the currentQuestionIndex, and manage the active question class.
+   * @param {string} previousQuestionID - The questionID to load.
+   * @returns {HTMLElement} - The HTML element of the loaded question.
+   */
 
-        return questionToLoad;
+  loadPreviousQuestion(previousQuestionID) {
+    if (this.currentQuestionIndex <= 0) {
+      console.error(`Error, loadPreviousQuestion (Unhandled case: no previous question to load): ${moduleParams.questName}, question: ${previousQuestionID}`);
+      return null;
     }
 
-    console.error(`Error, loadPreviousQuestion (no previous question to load): ${moduleParams.questName}, question: ${previousQuestionID}`);
-    return null;
+    const questionToUnload = this.getCurrentQuestion();
+    const { question, index } = this.findQuestion(previousQuestionID);
+
+    this.setCurrentQuestionIndex('update', index);
+
+    this.manageActiveQuestionClass(question, questionToUnload);
+
+    return question;
   }
+
+  /**
+   * Load the next question in the survey. Note: this is not necessarily the next array index due to jumps and loops.
+   * Find the next question, set the currentQuestionIndex, and manage the active question class.
+   * @param {string} questionID - The questionID to load.
+   * @returns {HTMLElement} - The HTML element of the loaded question.
+   */
 
   loadNextQuestion(questionID) {
-    if (this.currentQuestionIndex + 1 <= this.questions.length) {
-      const questionToUnload = this.getCurrentQuestion();
-      const questionToLoad = this.findQuestion(questionID);
-      this.manageActiveQuestionClass(questionToLoad, questionToUnload);
-      
-      return questionToLoad;
+    if (this.currentQuestionIndex + 1 > this.questions.length) {
+      console.error(`Error, loadNextQuestion (unhandled case: at end of survey): ${moduleParams.questName}, question: ${questionID}, index: ${this.currentQuestionIndex}, length: ${this.questions.length}`);
+      return null;
     }
 
-    console.error(`Error, loadNextQuestion (unhandled case): ${moduleParams.questName}, question: ${questionID}, index: ${this.currentQuestionIndex}, length: ${this.questions.length}`);
-    return null;
+    const questionToUnload = this.getCurrentQuestion();
+    const { question, index } = this.findQuestion(questionID);
+
+    this.setCurrentQuestionIndex('update', index);
+
+    this.manageActiveQuestionClass(question, questionToUnload);
+    
+    return question;
   }
+
+  /**
+   * Get the current question from the this.questions array.
+   * Useful for managing the active question class on 'next' and 'back' button clicks, and for processing the current question.
+   * @returns {HTMLElement} - The HTML element of the current question.
+   */
 
   getCurrentQuestion() {
-    if (this.currentQuestionIndex < this.questions.length) {
-        return this.processQuestion(this.currentQuestionIndex);
+    if (this.currentQuestionIndex > this.questions.length || this.currentQuestionIndex < 0) {
+      console.error(`Error, getCurrentQuestion (index out of range): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+      return null;
     }
 
-    console.error(`Error, getCurrentQuestion (no current question to load): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
-    return null;
+    return this.processQuestion(this.currentQuestionIndex);
   }
 
-  // preloadNextQuestions(count = 3) {
-  //     for (let i = 1; i <= count && this.currentQuestionIndex + i < this.questions.length; i++) {
-  //         this.processQuestion(this.currentQuestionIndex + i);
-  //     }
-  // }
+  getAllProcessedQuestions() {
+    return this.processedQuestions;
+  }
 
   /**
    * Process a single question's markdown, add it to the cache, and return the HTML element.
+   * First, search the cache for the question. If found, it has already been processed. Return early.
+   * Note about the questions array:
+   *  - Grid questions are pre-parsed as HTML strings, directly to the .formElement property in the quesitons array.
+   *  - All other questions are processed as a regex match with ID, opts, args, and text properties (raw text).
+   *  - So, grid questions only have one step here, while all other questions have two steps.
    * @param {number} index - The index of the question to process from the this.questions array.
    * @returns {HTMLElement} - The HTML element of the processed question.
    */
@@ -318,14 +408,40 @@ export class QuestionProcessor {
     return questionElement;
   }
 
+  /**
+   * Process all questions in the survey. This is a batch process that can be used to pre-process all questions.
+   * It runs in two instances:
+   * (1) on survey startup (or return to survey), it preprocesses batches of the survey, and
+   * (2) when the user returns to the survey mid-loop, it preprocesses all questions up to the current question to obtain the loop data for navigation.
+   * Questions take ~1-2ms to process depending on complexity and device, so small batches don't impact performance significantly.
+   * @param {number} startIndex - The index of the first question to process.
+   * @param {number} stopIndex - The index of the last question to process.
+   * @returns {void} - The processed questions are added to the cache.
+   */
+
   processAllQuestions(startIndex = 0, stopIndex = this.questions.length) {
-    for (let i = startIndex; i < stopIndex; i++) {
-      console.log('PROCESSING QUESTION:', i);
+    if (this.isProcessingComplete) return;
+
+    const startingPoint = Math.max(this.lastBatchProcessedQuestionIndex, startIndex, 0);
+    const stoppingPoint = Math.min(stopIndex, this.questions.length);
+
+    for (let i = startingPoint; i < stoppingPoint; i++) {
       this.processQuestion(i);
     }
 
-    this.isProcessingComplete = true;
+    if (stoppingPoint === this.questions.length) {
+      this.isProcessingComplete = true;
+    }
+
+    this.lastBatchProcessedQuestionIndex = stoppingPoint;
   }
+
+  /**
+   * Manage the question with the .active class attached. This is used for question visibility (legacy).
+   * @param {HTMLElement} questionToLoad - The question to load.
+   * @param {HTMLElement} questionToUnload - The question to unload.
+   * @returns {HTMLElement} - The question to load with the .active class appended.
+   */
 
   manageActiveQuestionClass(questionToLoad, questionToUnload) {
     if (!questionToLoad) {
@@ -342,17 +458,18 @@ export class QuestionProcessor {
   }
 
   /**
-   * Handle someSelected and noneSelected conditionals for grid questions.
+   * Handle 'someSelected' and 'noneSelected' conditionals for grid questions.
    * Search the grid questions for the elementID (the specific radio or checkbox input element).
    * Return the value of the input element for comparison to the user's input.
    * @param {string} elementID - The ID of the radio or checkbox input element to find.
    * @returns {string} - The value of the input element, or null if not found.
    */
+
   findGridRadioCheckboxEle(elementID) {
     for (const questionID of this.gridQuestionsArr) {
-      const questionElement = this.findQuestion(questionID);
-      if (questionElement) {
-        const radioOrCheckbox = questionElement.querySelector(`#${elementID}`);
+      const { question } = this.findQuestion(questionID);
+      if (question) {
+        const radioOrCheckbox = question.querySelector(`#${elementID}`);
         if (radioOrCheckbox) {
           return radioOrCheckbox?.value || null;
         }
@@ -363,33 +480,39 @@ export class QuestionProcessor {
     return null;
   }
 
-  // Find the closest loop data prior to the current question index
-  // If not found, user may be returning to the survey mid-loop. Process all questions up to the current index,
-  // which will populate the loopDataArr with the correct loop data. Then try again.
+  /**
+   * Find the closest loop data prior to the current question index.
+   * If not found, user may be returning to the survey mid-loop. Process all questions up to the current index,
+   * which will populate the loopDataArr with the correct loop data. Then try again.
+   * @returns {object} - The loop data object for the current loop. { locationIndex, loopMax, loopMaxQuestionID, loopMaxResponse, loopFirstQuestionID }
+   */
+
   getLoopData() {
     const findNearestLoopIndex = () => {
-      let nearestIndex = -1;
+      let nearestLocationIndex = -1;
       for (const loopData of this.loopDataArr) {
         if (loopData.locationIndex <= this.currentQuestionIndex) {
-          if (loopData.locationIndex > nearestIndex) {
-            nearestIndex = loopData.locationIndex;
+          if (loopData.locationIndex > nearestLocationIndex) {
+            nearestLocationIndex = loopData.locationIndex;
           }
         }
       }
 
-      return nearestIndex;
+      return nearestLocationIndex;
     }
 
-    let loopIndex = findNearestLoopIndex();
-    if (loopIndex === -1) {
-      showLoadingIndicator(); // TODO: this is not working
+    let loopStartLocationIndex = findNearestLoopIndex();
+    if (loopStartLocationIndex === -1) {
       this.processAllQuestions(0, this.currentQuestionIndex);
-      hideLoadingIndicator();
       
-      loopIndex = findNearestLoopIndex();
+      loopStartLocationIndex = findNearestLoopIndex();
     }
 
-    return this.loopDataArr[loopIndex] || this.loopDataArr[this.loopDataArr.length - 1] || null;
+    // Find the loop data object where locationIndex matches the loopStartLocationIndex
+    const loopData = this.loopDataArr.find(data => data.locationIndex === loopStartLocationIndex);
+
+    // Return the matching object or fallback
+    return loopData || this.loopDataArr[this.loopDataArr.length - 1] || null;
   }
 
   /**
@@ -407,28 +530,24 @@ export class QuestionProcessor {
    */
 
   checkLoopMaxData(questionID, response) {
-    if (!questionID || !response) {
-      console.error(`Error, updateLoopData (missing parameters): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}, response: ${response}`);
-      return;
-    }    
+    // Some questions are prompt-only (no responses). Return early.
+    if (!questionID || !response) return;
 
     // If no match found, return early, continue normal survey operation. This is the typical case.
     const questionIDMatch = this.loopDataArr.find(loopData => loopData.loopMaxQuestionID === questionID);
-    if (!questionIDMatch) {
-      return;
-    }
+    if (!questionIDMatch) return;
 
     // If the loopMax questionID is found, update the loopData object with the new response.
     const loopDataIndex = this.loopDataArr.findIndex(loopData => loopData.loopMaxQuestionID === questionID);
     if (loopDataIndex === -1) {
-      console.error(`Error, updateLoopData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
+      console.error(`Error, checkLoopMaxData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
       return;
     }
 
     // update the loopData object with the new response
     const updatedLoopMaxResponse = parseInt(response, 10);
     if (isNaN(updatedLoopMaxResponse)) {
-      console.error(`Error, updateLoopData (invalid response): ${moduleParams.questName}, response: ${response}`);
+      console.error(`Error, checkLoopMaxData (invalid response): ${moduleParams.questName}, response: ${response}`);
       return;
     }
 
@@ -440,10 +559,10 @@ export class QuestionProcessor {
    * (1) The beginning of the next loop iteration, or
    * (2) The end of the loop sequence.
    * @param {string} questionID - The questionID to find the next iteration of the loop.
-   * @returns {HTMLElement} - The found jump target in HTML element format, prepared for DOM insertion.
+   * @returns {object} - { question: The found jump target in HTML element format, prepared for DOM insertion, index: the quesiton's index }
    */
 
-  findStartOfNextLoop(questionID) {
+  findStartOfNextLoopIteration(questionID) {
     const loopIndexRegex = /_(\d+)_(\d+)$/;
     const loopIndexMatch = questionID.match(loopIndexRegex);
     if (!loopIndexMatch && loopIndexMatch[1] && loopIndexMatch[2]) {
@@ -464,14 +583,18 @@ export class QuestionProcessor {
     if (nextLoopIterationIndex > loopData.loopMaxResponse || nextLoopIterationIndex > loopData.loopMax) {
       return this.findEndOfLoop();
 
-      // Else, find the first question for the next loop iteration.
+    // Else, find the first question for the next loop iteration.
     } else {
       const nextIterationFirstQuestionID = `${loopData.loopFirstQuestionID}_${nextLoopIterationIndex}_${nextLoopIterationIndex}`;
-      console.log('TODO: TEST (is questionQueue managed correctly) NEXT ITERATION START ID:', nextIterationFirstQuestionID);
-
+      console.log('TODO: TEST (questionQueue management) NEXT ITERATION START ID:', nextIterationFirstQuestionID);
       return this.findQuestion(nextIterationFirstQuestionID);
     }
   }
+
+  /**
+   * Find the end of the loop sequence. This is a placeholder questionID 'END_OF_LOOP' that marks the end of the loop as a jump target.
+   * @returns {object} - { question: The found jump target in HTML element format, prepared for DOM insertion, index: the quesiton's index }
+   */
 
   findEndOfLoop() {
     const endOfLoopIndex = this.questions.findIndex((question, index) => {
@@ -480,11 +603,11 @@ export class QuestionProcessor {
 
     if (endOfLoopIndex === -1) {
       console.error(`Error, findEndOfLoop (no end of loop found): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
-      return null;
+      return { question: null, index: -1 }
     }
 
-    // End of loop found. It is a placeholder, so increment to access the first question after the loop.
-    return this.processQuestion(endOfLoopIndex + 1);
+    // End of loop found. This element is a placeholder, so increment to access the first question after the loop.
+    return { question: this.processQuestion(endOfLoopIndex + 1), index: endOfLoopIndex + 1 };
   }
 
   /**
@@ -495,16 +618,15 @@ export class QuestionProcessor {
    * @param {string} elementID - The ID of the input element to find.
    * @returns {string} - The ID of the input element's form, required for evaluating some conditionals, or null if not found.
   */
+
   findRelatedFormID(elementID) {
-    console.log('FIND RELATED FORM ID');
-    for (const questionID of this.questions) {
-      const questionElement = this.findQuestion(questionID);
-      if (questionElement) {
-        console.log('QUESTION ELEMENT (findRelatedFormID):', questionElement.id);
-        const foundElement = questionElement.querySelector(`#${elementID}`);
+    for (const questionInList of this.questions) {
+      const questionID = questionInList.questionID;
+      const { question } = this.findQuestion(questionID);
+      if (question) {
+        const foundElement = question.querySelector(`#${elementID}`);
         if (foundElement) {
-          console.error(`TODO: (verify) FOUND ELEMENT: ${elementID}, PARENT FORM: ${questionElement.id}`);
-          return questionElement.id;
+          return question.id;
         }
       }
     }
@@ -512,6 +634,8 @@ export class QuestionProcessor {
     console.error(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
   }
+
+  // TODO: consider moving the parsing functions to a separate file for better organization.
 
   replaceDateTags(content) {
     const replacements = [
@@ -615,30 +739,14 @@ export class QuestionProcessor {
       text = text.replace(/\|tel\|(?:([^|<]+[^|]+)\|)?/g, fPhone);
       text = text.replace(/\|SSN\|(?:([^|<]+[^|]+)\|)?/g, fSSN);
       text = text.replace(/\|state\|(?:([^|<]+[^|]+)\|)?/g, fState);
-      //text = text.replace(/\((\d*)(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio);
+      //text = text.replace(/\((\d*)(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio); // TODO: rm if unused
       text = text.replace(/\[(\d*)(\*)?(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g, fCheck);
       text = text.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
       text = text.replace(/\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?\s*(.*?)/g, fText);
       text = text.replace(/\|___\|((\w+)\|)?/g, fTextArea);
       text = text.replace(/\|time\|(?:([^|<]+[^|]+)\|)?/g, fTime);
-      text = text.replace(/#YNP/g, translate('yesNoPrefer')); //check
-      text = questText.replace(/#YN/g, translate('yesNo')); //check
-
-      // text = text.replace(/\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g, fNum);
-      // text = text.replace(/\|popup\|([^|]+)\|(?:([^|]+)\|)?([^|]+)\|/g, fPopover);
-      // text = text.replace(/\|@\|(?:([^\|\<]+[^\|]+)\|)?/g, fEmail);
-      // text = text.replace(/\|date\|(?:([^\|\<]+[^\|]+)\|)?/g, fDate);
-      // text = text.replace(/\|tel\|(?:([^\|\<]+[^\|]+)\|)?/g, fPhone);
-      // text = text.replace(/\|SSN\|(?:([^\|\<]+[^\|]+)\|)?/g, fSSN);
-      // text = text.replace(/\|state\|(?:([^\|\<]+[^\|]+)\|)?/g, fState);
-      // //text = text.replace(/\((\d*)(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio);
-      // text = text.replace(/\[(\d*)(\*)?(?:\:(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g, fCheck);
-      // text = text.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
-      // text = text.replace(/\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?\s*(.*?)/g, fText);
-      // text = text.replace(/\|___\|((\w+)\|)?/g, fTextArea);
-      // text = text.replace(/\|time\|(?:([^\|\<]+[^\|]+)\|)?/g, fTime);
-      // text = text.replace(/#YNP/g, translate('yesNoPrefer')); //check
-      // text = questText.replace(/#YN/g, translate('yesNo')); //check
+      text = text.replace(/#YNP/g, translate('yesNoPrefer'));
+      text = questText.replace(/#YN/g, translate('yesNo'));
 
       return `<span class='displayif' ${condition}>${text}</span>`;
     }
@@ -670,7 +778,8 @@ export class QuestionProcessor {
     questText = questText.replace(/\|date\|(?:([^\|\<]+[^\|]+)\|)?/g, fDate);
     questText = questText.replace(/\|month\|(?:([^\|]+)\|)?/g, fMonth);
 
-    // TODO: does this have the same DOM ID / input ID mismatch issue as month inputs (resolved in fMonth)? If yes, refactor to combine and use the fMonth approach.
+    // TODO: does this have the same DOM ID / input ID mismatch issue as month inputs (resolved in fMonth)?
+    // If yes, refactor to combine and use the fMonth approach.
     function fDate(fullmatch, opts) {
       let type = fullmatch.match(/[^|]+/);
       let { options, elementId } = guaranteeIdSet(opts, type);
@@ -1061,7 +1170,6 @@ export class QuestionProcessor {
     );
 
     // replace #YN with Yes No input: `(1) Yes, (0) No`
-
     questText = questText.replace(
       /#YN/g,
       `<div role="radiogroup" aria-labelledby="yesNoLabel">
@@ -1254,97 +1362,130 @@ let reduceObj = (obj) => {
 
 function ordinal(a, lang) {
   
-    if (Number.isInteger(a)) {
-      if (lang === "es") {
-        return `${a}o`;
-      }
-      else {
-        switch (a % 10) {
-          case 1: return ((a % 100) == 11 ? `${a}th` : `${a}st`);
-          case 2: return ((a % 100) == 12 ? `${a}th` : `${a}nd`);
-          case 3: return ((a % 100) == 13 ? `${a}th` : `${a}rd`);
-          default: return (`${a}th`)
-        } 
-      }
+  if (Number.isInteger(a)) {
+    if (lang === "es") {
+      return `${a}o`;
     }
-    
-    return "";
+    else {
+      switch (a % 10) {
+        case 1: return ((a % 100) == 11 ? `${a}th` : `${a}st`);
+        case 2: return ((a % 100) == 12 ? `${a}th` : `${a}nd`);
+        case 3: return ((a % 100) == 13 ? `${a}th` : `${a}rd`);
+        default: return (`${a}th`)
+      } 
+    }
   }
   
-  function unrollLoops(txt, language) {
-    // all the questions in the loops...
-    // each element in res is a loop in the questionnaire...
-    let loopRegex = /<loop max=(\d+)\s*>(.*?)<\/loop>/gm;
-    txt = txt.replace(/(?:\r\n|\r|\n)/g, "\xa9");
-    let res = [...txt.matchAll(loopRegex)].map(function (x, indx) {
-      return { cnt: x[1], txt: x[2], indx: indx + 1, orig: x[0] };
+  return "";
+}
+
+// Handle the questions in the loops. Each element in res is a loop in the questionnaire.
+function unrollLoops(txt, language) {
+  const loopRegex = /<loop max=(\d+)\s*>(.*?)<\/loop>/gm;
+  const questionIDRegex = /\[([A-Z_][A-Z0-9_#]*)([?!]?)(?:\|([^|\]]+)\|)?(,.*?)?\]/gm;
+  const disIfRegex = /displayif=.*?\(([A-Z_][A-Z0-9_#]*),.*?\)/g;
+
+  txt = txt.replace(/(?:\r\n|\r|\n)/g, "\xa9");
+
+  const allLoopMarkdown = [...txt.matchAll(loopRegex)].map(function (x, indx) {
+    return { cnt: x[1], txt: x[2], indx: indx + 1, orig: x[0] };
+  });
+  
+  // Prepare the markdown for conversion to HTML (that happens in a later step)
+  let cleanedText = allLoopMarkdown.map(function (x) {
+    // Handle the 'firstquestion' parameter, which is present in some surveys and missing in others.
+    // Insert the parameter in the first question of the loop in the |options| section of the HTML string
+    // for evaluation runtime. The same applies to the 'loopmax' parameter. These control loop behavior.
+    let isFirstQuestion = true;
+
+    x.txt = x.txt.replace(questionIDRegex, (match, id, operator, opts, args) => {
+      if (isFirstQuestion) {
+        // Extract 'loopmax' value from 'displayif' if present
+        const loopMaxMatch = x.txt.match(/displayif=greaterThanOrEqual\((D_\d+(?:_V\d+)?),#loop\)/);
+        const loopMaxString = loopMaxMatch ? ` loopmax=${loopMaxMatch[1]}` : '';
+        
+        // Check if 'firstquestion' is already in options
+        // If missing, add 'firstquestion' and 'loopmax' to the first question's options parameters
+        if (!opts || !opts.includes('firstquestion')) {
+          opts = (opts ? opts.trim() + ' ' : '') + `firstquestion=#loop${loopMaxString}`;
+        } else if (loopMaxString && !opts.includes('loopmax')) {
+          opts = opts.trim() + loopMaxString;
+        }
+
+        isFirstQuestion = false;
+      }
+
+      // Reconstruct the question ID with updated options
+      return `[${id}${operator || ''}${opts ? '|' + opts + '|' : ''}${args || ''}]`;
     });
-  
-    let idRegex = /\[([A-Z_][A-Z0-9_#]*)[?!]?(?:\|([^,\|\]]+)\|)?(,.*?)?\]/gm;
-    let disIfRegex = /displayif=.*?\(([A-Z_][A-Z0-9_#]*),.*?\)/g;
-    // we have an array of objects holding the text..
-    // get all the ids...
-    let cleanedText = res.map(function (x) {
-      x.txt = x.txt.replace("firstquestion", `loopindx=${x.indx} firstquestion`);
-      x.txt += "[_CONTINUE" + x.indx + ",displayif=setFalse(-1,#loop)]";
-      x.txt = x.txt.replace(/->\s*_CONTINUE\b/g, "-> _CONTINUE" + x.indx);
-      let ids = [...x.txt.matchAll(idRegex)].map((y) => ({
-        label: y[0],
-        id: y[1],
-        indx: x.indx,
-      }));
-      let disIfIDs = [...x.txt.matchAll(disIfRegex)].map((disIfID) => ({
-        label: disIfID[0],
-        id: disIfID[1],
-      }));
-      disIfIDs.map((x) => x.id);
-      ids.map((x) => x.id);
-  
-      // find all ids defined within the loop,
-      // note: textboxes are an outlier that needs to be fixed.
-      let idsInLoop = Array.from(x.txt.matchAll(/\|[\w\s=]*id=(\w+)|___\|\s*(\w+)|textbox:\s*(\w+)/g)).map(x => {
-        return x[1] ? x[1] : (x[2] ? x[2] : x[3])
+
+    // All first questions in the loop should have the 'firstquestion' parameter. Add the loop index.
+    x.txt = x.txt.replace("firstquestion", `loopindx=${x.indx} firstquestion`);
+
+    x.txt += "[_CONTINUE" + x.indx + ",displayif=setFalse(-1,#loop)]";
+
+    x.txt = x.txt.replace(/->\s*_CONTINUE\b/g, "-> _CONTINUE" + x.indx);
+    let ids = [...x.txt.matchAll(questionIDRegex)].map((y) => ({
+      label: y[0],
+      id: y[1],
+      operator: y[2],
+      indx: x.indx,
+    }));
+
+    let disIfIDs = [...x.txt.matchAll(disIfRegex)].map((disIfID) => ({
+      label: disIfID[0],
+      id: disIfID[1],
+    }));
+    disIfIDs.map((x) => x.id);
+    ids.map((x) => x.id);
+
+    // find all ids defined within the loop,
+    // note: textboxes are an outlier that needs to be fixed.
+    let idsInLoop = Array.from(x.txt.matchAll(/\|[\w\s=]*id=(\w+)|___\|\s*(\w+)|textbox:\s*(\w+)/g)).map(x => {
+      return x[1] ? x[1] : (x[2] ? x[2] : x[3])
+    })
+
+    // combobox and radiobuttons may have been renamed...
+    let rb_cb_regex = /(?:[\(\[])\d+:(.*?)[\,\)\]]/g
+
+    // goto from 1-> max for human consumption... need <=
+    let loopText = "";
+    for (let loopIndx = 1; loopIndx <= x.cnt; loopIndx++) {
+      let currentText = x.txt;
+
+      //replace all instances of the question ids with id_#
+      ids.map((id) => (currentText = currentText.replace(
+        new RegExp("\\b" + id.id + "\\b(?!\#)", "g"),
+        `${id.id}_${loopIndx}_${loopIndx}`))
+      );
+
+      //replace all idsInLoop in the loop with {$id_$loopIndx}
+      idsInLoop.forEach(id => {
+        currentText = currentText.replace(new RegExp(`\\b${id}\\b`, "g"), `${id}_${loopIndx}_${loopIndx}`);
       })
-  
-      // combobox and radiobuttons may have been renamed...
-      let rb_cb_regex = /(?:[\(\[])\d+:(.*?)[\,\)\]]/g
-  
-      // goto from 1-> max for human consumption... need <=
-      let loopText = "";
-      for (let loopIndx = 1; loopIndx <= x.cnt; loopIndx++) {
-        let currentText = x.txt;
-        // replace all instances of the question ids with id_#
-        ids.map((id) => (currentText = currentText.replace(
-            new RegExp("\\b" + id.id + "\\b(?!\#)", "g"),
-            `${id.id}_${loopIndx}_${loopIndx}`))
-        );
-        //replace all idsInLoop in the loop with {$id_$loopIndx}
-        idsInLoop.forEach(id => {
-          currentText = currentText.replace(new RegExp(`\\b${id}\\b`, "g"), `${id}_${loopIndx}_${loopIndx}`);
-        })
-  
-        //replace all user-named combo and radio boxes
-        currentText = currentText.replaceAll(rb_cb_regex,(all,g1)=>all.replace(g1,`${g1}_${loopIndx}`))
-        currentText = currentText.replace(/\{##\}/g, `${ordinal(loopIndx, language)}`)
-  
-        ids.map(() => (currentText = currentText.replace(/#loop/g, "" + loopIndx)));
-  
-        // replace  _\d_\d#prev with _{$loopIndex-1}
-        // we do it twice to match a previous bug..
-        currentText = currentText.replace(/_\d+_\d+#prev/g, `_${loopIndx - 1}_${loopIndx - 1}`)
-        loopText = loopText + "\n" + currentText;
-      }
 
-      loopText += "[_CONTINUE" + x.indx + "_DONE" + ",displayif=setFalse(-1,#loop)]";
-      loopText += "[END_OF_LOOP] placeholder";
-      return loopText;
-    });
-  
-    for (let loopIndx = 0; loopIndx < cleanedText.length; loopIndx++) {
-      txt = txt.replace(res[loopIndx].orig, cleanedText[loopIndx].replace('</loop>', '[END_OF_LOOP]'));
+      //replace all user-named combo and radio boxes
+      currentText = currentText.replaceAll(rb_cb_regex, (all, g1) => all.replace(g1, `${g1}_${loopIndx}`))
+      currentText = currentText.replace(/\{##\}/g, `${ordinal(loopIndx, language)}`)
+
+      ids.map(() => (currentText = currentText.replace(/#loop/g, "" + loopIndx)));
+
+      // replace  _\d_\d#prev with _{$loopIndex-1}
+      // we do it twice to match a previous bug..
+      currentText = currentText.replace(/_\d+_\d+#prev/g, `_${loopIndx - 1}_${loopIndx - 1}`)
+      loopText = loopText + "\n" + currentText;
     }
 
-    txt = txt.replace(/\xa9/g, "\n");
-  
-    return txt;
+    loopText += "[_CONTINUE" + x.indx + "_DONE" + ",displayif=setFalse(-1,#loop)]";
+    loopText += "[END_OF_LOOP] placeholder";
+    return loopText;
+  });
+
+  for (let loopIndx = 0; loopIndx < cleanedText.length; loopIndx++) {
+    txt = txt.replace(allLoopMarkdown[loopIndx].orig, cleanedText[loopIndx]);
   }
+
+  txt = txt.replace(/\xa9/g, "\n");
+
+  return txt;
+}

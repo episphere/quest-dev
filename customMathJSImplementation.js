@@ -238,11 +238,10 @@ export const customMathJSFunctions = {
     return (date1 < date2) ? -1 : (date1 == date2) ? 0 : 1
   },
 
-  // Refactor once we have individual question DOM structure. Consider querying on init and storing in miscState. markdown func is 'noneSelected'.
+  // Get the value of the cell input for the radio or checkbox from the form - table - tbody - tr - td - input structure.
   // id is the id of the specific radio button or checkbox. This is evaluated on a per-id basis, so if a row
   // has multiple radio buttons or checkboxes, each radio button will be evaluated separately.
   isSelected: function (radioOrCheckboxID) {
-    // Get the value of the cell input for the radio or checkbox from the form - table - tbody - tr - td - input structure in the QuestionProcessor's questions array.
     const questionProcessor = this.appState.getQuestionProcessor();
     const cellInputValue = questionProcessor.findGridRadioCheckboxEle(radioOrCheckboxID);
     if (!cellInputValue) {
@@ -296,6 +295,7 @@ export const customMathJSFunctions = {
     let responseValue = this._value(questionId);
 
     if (Array.isArray(responseValue) || Array.isArray(responseValue[name])) {
+      // Note: haven't found an instance of this case yet.
       console.error('TODO: (selectionCount) remove DOM access and use stateManager', x, countReset);
       responseValue = Array.isArray(responseValue) ? responseValue : responseValue[name]
 

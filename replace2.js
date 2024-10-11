@@ -1,4 +1,4 @@
-import { questionQueue, moduleParams, rbAndCbClick, swapVisibleQuestion } from "./questionnaire.js";
+import { questionQueue, moduleParams, rbAndCbClick, showAllQuestions, swapVisibleQuestion } from "./questionnaire.js";
 import { restoreResponses } from "./restoreResponses.js";
 import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
@@ -13,7 +13,6 @@ transform.rbAndCbClick = rbAndCbClick;
 
 // TODO: wrap with error handling.
 transform.render = async (obj, divID, previousResults = {}) => {
-  console.log('CONFIRMING QUESTION SEPARATOR BRANCH');
 
   // Set the global moduleParams object with data needed for different parts of the app.
   setModuleParams(obj, divID, previousResults);
@@ -33,6 +32,11 @@ transform.render = async (obj, divID, previousResults = {}) => {
   // Load the question queue from the tree JSON.
   loadQuestionQueue(initialUserData?.treeJSON);
 
+  // Support the renderer tool before the survey is activated. The renderer tool's primary setting lists all questions at the same time.
+  if (moduleParams.renderObj?.renderFullQuestionList) {
+    questionProcessor.processAllQuestions();
+  }
+
   // Initialize the active question, activate it, and display it.
   const activeQuestionID = getActiveQuestionID(questionProcessor.questions);
 
@@ -41,14 +45,10 @@ transform.render = async (obj, divID, previousResults = {}) => {
 
   // If the active question is not found, and it's an embedded use case, log an error and return false.
   // Note: Fail silently for the renderer tool since users are actively editing and testing markdown.
-  if (!activeQuestionEle && moduleParams.renderObj?.activate) {
+  if (!activeQuestionEle && !moduleParams.isRenderer) {
     console.error('Active question not found for:', activeQuestionID);
     return false;
   }
-
-  // Clear changed Items are cleared after the initial state is loaded.
-  // This ensures only the user's changes are tracked on the starting question.
-  appState.clearActiveQuestionState();
   
   // TODO: test loading/unloading/back button for soccer
   // If the soccer function is defined, call it. This is used for external listeners in the PWA.
@@ -56,10 +56,6 @@ transform.render = async (obj, divID, previousResults = {}) => {
 
   // Add the event listeners to the parent div.
   addEventListeners();
-
-  // Offload the full survey processing to a worker thread while handling the active question in the main thread.
-  //TODO: set up the worker and test.
-  //processQuestionsInBackground(questionProcessor);
 
   return true;
 };
@@ -95,7 +91,7 @@ function loadQuestionQueue(treeJSON) {
 function getActiveQuestionID(questionsArray) {
   if (questionsArray.length === 0) {
     // TODO: handle eager execution inefficiency in renderer.
-    if (!moduleParams.renderObj?.activate) console.error('No questions found in the survey.');
+    if (moduleParams.renderObj.isRenderer) console.error('No questions found in the survey.');
     return;
   }
 
@@ -124,15 +120,16 @@ function getActiveQuestionID(questionsArray) {
 function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initialUserData) {
   if (!activeQuestionID) return;
 
-  const isInitialLoad = true; // Defined for clarity.
-  const questionEle = questionProcessor.findQuestion(activeQuestionID, isInitialLoad);
-
+  const questionEle = questionProcessor.loadInitialQuestionOnStartup(activeQuestionID);
   if (!questionEle) {
     console.error('Active question not found:', activeQuestionID, questionEle);
     return;
   }
 
-  swapVisibleQuestion(questionEle);
+  moduleParams.renderObj?.renderFullQuestionList
+    ? showAllQuestions(questionProcessor.getAllProcessedQuestions())
+    : swapVisibleQuestion(questionEle);
+
   initialUserData[activeQuestionID] && restoreResponses(initialUserData, activeQuestionID);
   
   return questionEle;
@@ -140,7 +137,8 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
 
 function setModuleParams(obj, divID, previousResults) {
   moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
-  moduleParams.previousResults = previousResults;
+  moduleParams.renderObj.renderFullQuestionList = moduleParams.renderObj?.isRenderer && !moduleParams.renderObj?.activate;
+  moduleParams.previousResults = expandPreviousResults(previousResults);//previousResults; // TODO: tepporary -- needs more accurate fix in ConnectApp.
   moduleParams.soccer = obj.soccer;
   moduleParams.delayedParameterArray = obj.delayedParameterArray;
   moduleParams.i18n = obj.lang === 'es' ? es : en;
@@ -155,6 +153,22 @@ function setModuleParams(obj, divID, previousResults) {
   moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
     ? 'https://episphere.github.io/quest-dev/'
     : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
+}
+
+// Expand the previous results object with additional fields for the survey.
+// TODO: update to handle this in ConnectApp where we have more detailed D.O.B. Information to handle 'RCRTUP_YOB_V1R0'. Then delete this function.
+// This is off-by-one for many cases, but it's a quick fix for the current implementation.
+function expandPreviousResults(previousResults) {
+  if (!previousResults) return {};
+  if (previousResults['RCRTUP_YOB_V1R0']) return previousResults;
+
+  const age = parseInt(previousResults['age'] || previousResults['AGE']);
+  if (age) {
+    const currentYear = new Date().getFullYear();
+    previousResults['RCRTUP_YOB_V1R0'] = currentYear - age; // Calculate the year of birth from the age.
+  }
+
+  return previousResults;
 }
 
 function isLocalDevelopment() {
@@ -173,75 +187,3 @@ function isWindowsEnvironment() {
 function isFirefoxBrowser() {
   return typeof InstallTrigger !== 'undefined';
 }
-
-// TODO: implement this functionality in the worker
-function processQuestionsInBackground(questionProcessor) {
-  questionProcessor.processAllQuestions(); // Process all questions inline
-
-}
-// TODO: implement this
-//   const worker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
-
-//   worker.postMessage({
-//     command: 'processQuestions',
-//     data: {
-//       questions: questionProcessor.questions,
-//       questName: questionProcessor.questName,
-//       precalculatedValues: questionProcessor.precalculated_values,
-//       i18n: questionProcessor.i18n
-//     }
-//   });
-
-//   worker.onmessage = (event) => {
-//     if (event.data.command === 'processComplete') {
-//       questionProcessor.isProcessingComplete = true;
-//       const processedQuestionsHTML = questionProcessor.processAllQuestions(); // Process all questions inline
-//       console.log('Background processing complete:', processedQuestionsHTML);
-//     }
-//   };
-
-//   worker.onerror = (error) => {
-//     console.error('Error in transformMarkdownWorker:', error);
-//     // Fallback to inline processing if the worker fails
-//     const processedQuestionsHTML = questionProcessor.processAllQuestions(); // Process all questions inline
-//     console.log('Fallback processing complete:', processedQuestionsHTML);
-//   };
-// }
-
-
-// OLD CODE
-// // Initialize the worker.
-    // const transformMarkdownWorker = new Worker(`${moduleParams.basePath}transformMarkdownWorker.js`, { type: 'module' });
-    // transformMarkdownWorker.postMessage({ command: 'initialize' });
-    
-    // // Wait for the worker to initialize.
-    // const workerReadyPromise = new Promise((resolve, reject) => {
-    //     const timeout = setTimeout(() => {
-    //         reject(new Error('Worker initialization timed out'));
-    //     }, 2000); // Set timeout for worker initialization
-
-    //     transformMarkdownWorker.onmessage = (event) => {
-    //         if (event.data === 'ready') {
-    //             clearTimeout(timeout);
-    //             resolve();
-    //         }
-    //     };
-
-    //     transformMarkdownWorker.onerror = (error) => {
-    //         clearTimeout(timeout);
-    //         reject(new Error(`Worker initialization failed: ${error.message}`));
-    //     };
-    // });
-    // // If the worker fails to initialize, fallback to inline processing.
-    // try {
-    //     await workerReadyPromise;
-    // } catch (error) {
-    //     console.error('Error initializing transformMarkdownWorker. Fallback to inline processing:', error);
-    //     transformMarkdownWorker.terminate();
-
-    //     // TODO: now this needs to transform all questions in the background.
-    //     //[contents, questName] = transformMarkdownToHTML(contents, precalculated_values, moduleParams.i18n, isEmbeddedSurvey);
-    //     const retrievedData = await retrievedDataPromise;
-    //     transformMarkdownToHTML(questionProcessor, isEmbeddedSurvey); // TODO: process all questions (the old method) in the background.
-    //     return [questionProcessor, retrievedData];
-    // }

@@ -53,12 +53,12 @@ function handleClickEvent(event) {
     // Auto-focus the text input if the outer response element (radio or checkbox) is clicked.
     // Note: Some are checkboxes and some are radios though they look the same.
     // Skip in the renderer because focus() causes issues (ensure moduleParams.renderObj.activate === true).
-    if (moduleParams.renderObj?.activate) {
+    if (!moduleParams.renderObj?.isRenderer) {
       const responseContainer = target.closest('.response');
       const textInputElement = responseContainer?.querySelector('input[type="text"], textarea');
       if (textInputElement && !textInputElement.value && target.checked) {
         setTimeout(() => {
-          textInputElement.focus();
+          textInputElement.focus({ preventScroll: true });
         }, 0);
       }
     }
@@ -70,7 +70,7 @@ function handleChangeEvent(event) {
   
   // Firefox does not alway GRAB focus when the arrows are clicked. If a changeEvent fires, grab focus.
   if (moduleParams.isFirefoxBrowser && target.matches('input[type="number"]') && target !== document.activeElement) {
-    target.focus();
+    target.focus({ preventScroll: true });
   }
 
   if (target.matches('input[type="radio"], input[type="checkbox"]')) {
@@ -78,8 +78,9 @@ function handleChangeEvent(event) {
   }
 
   // VoiceOver (MAC) handles table focus well, but JAWS (Windows) does not.
+  // Ensure we're not in the renderer (skip this handling for the renderer).
   // We check if the environment is Windows and the target is a radio or checkbox to improve accessible UX for JAWS users.
-  if (moduleParams.renderObj?.activate && target.matches('input[type="radio"], input[type="checkbox"]')) {
+  if (!moduleParams.renderObj?.isRenderer && target.matches('input[type="radio"], input[type="checkbox"]')) {
     
     const isTable = target.closest('table') !== null;
 
@@ -113,7 +114,7 @@ function handleKeydownEvent(event) {
   }
 
   if (target.matches('input[type="text"], input[type="email"], input[type="tel"], textarea, select')) {
-    if (moduleParams.renderObj?.activate && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    if (!moduleParams.renderObj?.isRenderer && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
       handleUpDownArrowKeys(event);
     }
   }
@@ -185,7 +186,9 @@ function closeModalAndFocusQuestion(event) {
 
     if (activeQuestion) {
       const isModalClose = true;
-      manageAccessibleQuestion(activeQuestion.querySelector('fieldset') || activeQuestion, isModalClose);
+      setTimeout(() => {
+        manageAccessibleQuestion(activeQuestion.querySelector('fieldset') || activeQuestion, isModalClose);
+      }, 500);
     }
   }
 }
@@ -221,7 +224,7 @@ function focusNextElement(currentElement) {
 
     if (nextElement) {
       setTimeout(() => {
-        nextElement.focus()
+        nextElement.focus({ preventScroll: true })
       }, 0);
     }
   }
@@ -240,7 +243,7 @@ function focusPreviousResponse(currentElement) {
       const focusableElements = previousResponse.querySelectorAll('a, button, input:not([type="hidden"]), label, select, textarea, [tabindex]:not([tabindex="-1"])');
       if (focusableElements.length > 0) {
         setTimeout(() => {
-          focusableElements[0].focus();
+          focusableElements[0].focus({ preventScroll: true });
         }, 0);
       }
     }
@@ -254,7 +257,7 @@ function handleRadioCheckboxListEvents(event) {
   const eleToFocus = parentResponseDiv.querySelector('input') || parentResponseDiv;
   updateAriaLiveSelectionAnnouncer(parentResponseDiv);
   setTimeout(() => {
-    eleToFocus.focus();
+    eleToFocus.focus({ preventScroll: true });
   }, 100);
 }
 
@@ -363,7 +366,7 @@ function focusNextTableRowQuestion(nextRow) {
     }
 
     nextQuestionCell.appendChild(focusHelper);
-    focusHelper.focus();
+    focusHelper.focus({ preventScroll: true });
   }, 100);  
 }
 
@@ -387,7 +390,7 @@ function focusNextQuestionButton() {
     }
 
     nextQuestionButton.appendChild(focusHelper);
-    focusHelper.focus();
+    focusHelper.focus({ preventScroll: true });
   }, 100);
 }
 
@@ -397,7 +400,7 @@ function focusSelectedCheckbox(responseCell) {
     if (!focusHelper) return;
 
     responseCell.appendChild(focusHelper);
-    focusHelper.focus();
+    focusHelper.focus({ preventScroll: true });
   }, 100);
 }
 

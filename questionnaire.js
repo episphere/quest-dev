@@ -174,14 +174,13 @@ function exchangeValue(element, attrName, newAttrName) {
  * Sometimes the input element ID doesn't match the form ID due to the markdown/DOM structure.
  * Search for the parent form ID (which will match a key in state), and replace the date input ID for accurate validation.
  * Relevant for evaluateCondition calls e.g. min=valueOrDefault("<Some_ID>","2020-03").
+ * Example usage: COVID-19 Survey, 'When you had COVID-19' summary page.
  * @param {string} attribute - the attribute to resolve
  * @returns {string} - the resolved attribute.
  */
 
 function resolveAttributeToParentID(attribute, appState) {
-  console.log('resolveAttributeToParentID', attribute)
   const decodedAttribute = decodeURIComponent(attribute);
-  console.log('decodedAttribute', decodedAttribute);
 
   // If item found in state, no further evaluation needed.
   if (appState.findResponseValue(decodedAttribute)) {
@@ -189,19 +188,10 @@ function resolveAttributeToParentID(attribute, appState) {
   }
   
   // If not found in state, search for the parent form ID.
-  console.warn('TODO: resolve document access in resolveAttributeToParentID')
-  
   const questionProcessor = appState.getQuestionProcessor();
   const foundFormID = questionProcessor.findRelatedFormID(decodedAttribute);
-  console.log('decodedAttribute:', decodedAttribute);
-  console.log('foundFormID:', foundFormID);
+
   return foundFormID ?? decodedAttribute;
-  
-  //const foundElement = document.getElementById(decodedAttribute);
-  
-  //if (!foundElement) return decodedAttribute;
-  
-  //return foundElement.closest("form")?.id ?? decodedAttribute;
 }
 
 /**
@@ -215,6 +205,7 @@ const doesNotExistRegex = /doesNotExist\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
 const existsRegex = /exists\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
 const equalsRegex = /equals\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
 const isNotDefinedRegex = /isNotDefined\(["']([a-zA-Z0-9_]+?)["'](.*)\)/;
+const conceptIDMatchRegex = /\b\d{9}\b/
 
 const resolveRuntimeConditions = (attribute) => {
   const attributeConditionString = decodeURIComponent(attribute);
@@ -230,7 +221,6 @@ const resolveRuntimeConditions = (attribute) => {
   }
 
   // Only simple functions are evaluated here. If the attribute contains nested functions, return early.
-  // TODO: consider whether evaluateCondtion() might be a helpful optimization here.
   if (hasNestedFunctions(attributeConditionString)) {
     return null;
   }
@@ -248,10 +238,10 @@ const resolveRuntimeConditions = (attribute) => {
     }
   }
 
-  const value = resolveCondition(valueLengthRegex, /\b\d{9}\b/) ||
+  const value = resolveCondition(valueLengthRegex, conceptIDMatchRegex) ||
     resolveCondition(doesNotExistRegex) ||
     resolveCondition(existsRegex) ||
-    resolveCondition(equalsRegex) ||
+    resolveCondition(equalsRegex, conceptIDMatchRegex) ||
     resolveCondition(isNotDefinedRegex)
 
   if (value !== null) {
@@ -261,8 +251,6 @@ const resolveRuntimeConditions = (attribute) => {
   if (!['valueLength', 'doesNotExist', 'exists', 'equals', 'isNotDefined'].some(substring => attributeConditionString.includes(substring))) {
     console.error(`Unhandled attribute type in ${attributeConditionString} (resolveRuntimeConditions)`);
   }
-
-  console.warn(`TODO: confirm empty string response in (resolveRuntimeConditions): ${attributeConditionString}`);
   
   return '';
 }
@@ -276,14 +264,12 @@ const resolveRuntimeConditions = (attribute) => {
  * @returns {void} - updates the DOM with the evaluated values.
  */
 const handleForIDAttributes = (forIDElementArray) => {
-  console.log('HANDLE FORID ATTRIBUTES', forIDElementArray);
   const appState = getStateManager();
 
   if (forIDElementArray.length === 1) {
     const forIDElement = forIDElementArray[0];    
     const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
     const parentID = resolveAttributeToParentID(forid, appState);
-    console.log('PARENT ID', parentID);
 
     const defaultValue = forIDElement.getAttribute("optional");
     const updatedValue = math.valueOrDefault(parentID, defaultValue);
@@ -381,7 +367,6 @@ export function rbAndCbClick(event) {
 // If the checkbox is not selected, disable it and clear the value.
 // Note: things that can go wrong: if a response has more than one text box.
 export function radioAndCheckboxClearTextInput(inputElement) {
-  
   const responses = [...inputElement.form.querySelectorAll(".response")].filter(response => {
     const textBox = response.querySelector("input:not([type=radio]):not([type=checkbox])")
     const checkbox = response.querySelector("input[type=checkbox],input[type=radio]");
@@ -430,8 +415,7 @@ function clearSelection(inputElement) {
   if (!sameNameEles) return;
 
   const appState = getStateManager();
-
-   
+  
   // If this is a "none of the above", go through all elements with the same name and mark them as "false" or clear the text values.
   if (inputElement.dataset.reset) {
     sameNameEles.forEach((element) => {
@@ -477,7 +461,6 @@ export function handleXOR(inputElement) {
   if (!inputElement.hasAttribute("xor")) {
     return inputElement.value;
   }
-
 
   // if the user tabbed through the xor, Dont clear anything
   if (!["checkbox", "radio"].includes(inputElement.type) && inputElement.value.length == 0) {
@@ -628,15 +611,16 @@ async function analyzeFormResponses(norp) {
  * Get the next question from the questionQueue if it exists. Otherwise get the next sequential question from the markdown.
  * @returns {string} - the ID of the next question to load.
  */
+
 function getNextQuestionId() {
   let nextQuestionNode = questionQueue.next();
 
   if (nextQuestionNode.done) {
     const appState = getStateManager();
     const questionProcessor = appState.getQuestionProcessor();
-    const nextSequentialQuestionEle = questionProcessor.findQuestion(undefined);
+    const nextSequentialQuestionID = questionProcessor.getNextSequentialQuestionID();
 
-    questionQueue.add(nextSequentialQuestionEle.id);
+    questionQueue.add(nextSequentialQuestionID);
     nextQuestionNode = questionQueue.next();
   }
 
@@ -666,21 +650,19 @@ export function hideLoadingIndicator() {
 async function nextPage(norp) {
   const questionElement = norp.form;
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
-    // NOTE: these are grid elements that aren't shown due to displayifs and previous response evaluations (grid questions)
-    // See: MRE survey: "On the days that you did these household or shopping activities, ..."
-    console.log('HIDDEN ELEMENT (setResponsesInState)', x);
+    // These are grid elements that aren't shown due to displayifs and previous response evaluations.
+    // See: MRE survey - "On the days that you did these household or shopping activities, ..."
+    console.log('TODO: (verify behavior) HIDDEN ELEMENT (setResponsesInState)', x);
     x.value = "true"
     setResponsesInState(questionElement, x.value, x.id)
   });
 
   const appState = getStateManager();
   await appState.syncToStore();
-  const questionProcessor = appState.getQuestionProcessor();
 
   if (checkValid(questionElement) === false) {
     return null;
   }
-
 
   if (questionQueue.isEmpty()) {
     questionQueue.add(questionElement.id);
@@ -691,9 +673,11 @@ async function nextPage(norp) {
   checkForSkips(questionElement);
 
   let nextQuestionId = getNextQuestionId();  
+
+  const questionProcessor = appState.getQuestionProcessor();
+
   let nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
   nextQuestionEle = exitLoop(nextQuestionEle);
-  console.log('NEXT QUESTION ELE (after exitLoop)', nextQuestionEle);
 
   // before we add the next question to the queue...
   // check for the displayif status...
@@ -702,11 +686,10 @@ async function nextPage(norp) {
       let shouldDisplayQuestion = evaluateCondition(nextQuestionEle.getAttribute("displayif"));
       if (shouldDisplayQuestion) break;
 
-      if (nextQuestionEle.id.substring(0, 9) != "_CONTINUE") questionQueue.pop();
+      if (nextQuestionEle.id.substring(0, 9) !== "_CONTINUE") questionQueue.pop();
 
       let nextQuestionId = nextQuestionEle.dataset.nodisplay_skip;
       if (nextQuestionEle.dataset.nodisplay_skip) {
-        console.log('NEXT QUESTION ID (nodisplay_skip (after))', nextQuestionId);
         questionQueue.add(nextQuestionEle.dataset.nodisplay_skip);
       }
 
@@ -719,7 +702,14 @@ async function nextPage(norp) {
     }
   }
 
-  console.log('NEXT QUESTION ELE (after displayif check / while loop)', nextQuestionEle);
+  if (nextQuestionEle.id === 'END_OF_LOOP') {
+    const nextQuestionID = questionProcessor.getNextSequentialQuestionID();
+    nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionID);
+
+    questionQueue.pop();
+    questionQueue.add(nextQuestionEle.id);
+    questionQueue.next();
+  }
 
   swapVisibleQuestion(nextQuestionEle);
 }
@@ -734,7 +724,8 @@ function exitLoop(nextQuestionEle) {
   const loopData = questionProcessor.getLoopData(nextQuestionEle.id);
   const loopMaxResponse = loopData?.loopMaxResponse;
 
-  if (!loopMaxResponse) {
+  // 0 is a valid loopMaxResponse value. That will result in jumping to the end of the loop on 'firstquestion' load.
+  if (loopMaxResponse == null) {
     console.error(`LoopData is null or undefined for ${nextQuestionEle.id}`);
     return nextQuestionEle;
   }
@@ -742,23 +733,19 @@ function exitLoop(nextQuestionEle) {
   const firstQuestion = parseInt(nextQuestionEle.getAttribute("firstquestion"));
   const loopIndex = parseInt(nextQuestionEle.getAttribute("loopindx"));
 
-  console.log('LOOP MAX RESPONSE', loopMaxResponse);
-  console.log('FIRST QUESTION', firstQuestion);
-  console.log('LOOP INDEX (TODO: test this)', loopIndex);
-
   if (isNaN(loopMaxResponse) || isNaN(firstQuestion) || isNaN(loopIndex)) {
     console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextQuestionEle.id}: loopMax=${loopMaxResponse}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
     return nextQuestionEle;
   }
 
   if (math.evaluate(firstQuestion > loopMaxResponse)) {
-    nextQuestionEle = questionProcessor.findEndOfLoop();
+    const { question } = questionProcessor.findEndOfLoop();
 
     questionQueue.pop();
-    questionQueue.add(nextQuestionEle.id);
+    questionQueue.add(question.id);
     questionQueue.next();
 
-    nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionEle.id);
+    nextQuestionEle = questionProcessor.loadNextQuestion(question.id);
   }
   
   return nextQuestionEle;
@@ -773,6 +760,9 @@ function exitLoop(nextQuestionEle) {
  * @param {string} questionHTMLString - The HTML string of the question to be swapped in.
  */
 export function swapVisibleQuestion(questionEle) {
+  // return early if the renderer tool is active and displaying the full question list.
+  if (moduleParams.renderObj?.renderFullQuestionList) return;
+
   if (!questionEle) {
     console.error(`swapVisibleQuestion: questionEle is null or undefined.`);
     return;
@@ -795,6 +785,24 @@ export function swapVisibleQuestion(questionEle) {
   displayQuestion(questionEle);
 
   return questionEle;
+}
+
+export function showAllQuestions(allProcessedQuestionsMap) {
+  const questDiv = moduleParams.questDiv;
+  const modalEle = questDiv.querySelector('.modal');
+
+  const fragment = document.createDocumentFragment();
+
+  allProcessedQuestionsMap.forEach((questionEle) => {
+    if (questionEle.id === 'END_OF_LOOP') {
+      questionEle.style.display = 'none';
+    }
+    fragment.appendChild(questionEle);
+  });
+
+  modalEle
+    ? questDiv.insertBefore(fragment, modalEle)
+    : questDiv.appendChild(fragment);
 }
 
 function removeExtraBRElements(rootElement) {
@@ -822,13 +830,10 @@ function removeExtraBRElements(rootElement) {
 
 // Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
-
 export function displayQuestion(questionElement) {
 
   // Fail gently in the renderer tool.
   if (!questionElement && !moduleParams.renderObj.activate) return;
-  
-  const appState = getStateManager();
   
   questionFocusSet = false;
 
@@ -836,11 +841,15 @@ export function displayQuestion(questionElement) {
   const forIDElementArray = questionElement.querySelectorAll("span[forid]");
   if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
 
-  [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) =>
-      (x.max = document.getElementById(x.dataset.maxValidationDependency).value)); // TODO: (rm document search)
+  [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) => {
+    console.warn('TODO: (rm document search) - input[data-max-validation-dependency]');
+    x.max = document.getElementById(x.dataset.maxValidationDependency).value
+  });
 
-  [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) =>
-      (x.min = document.getElementById(x.dataset.minValidationDependency).value)); // TODO: (rm document search)
+  [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) => {
+    console.warn('TODO: (rm document search) - input[data-min-validation-dependency]');
+    x.min = document.getElementById(x.dataset.minValidationDependency).value;
+  });
 
   // check all responses for next question
   [...questionElement.querySelectorAll('[displayif]')].forEach((elm) => {
@@ -850,11 +859,12 @@ export function displayQuestion(questionElement) {
 
   // check for displayif spans...
   [...questionElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
-    const textContent = elm.textContent;
-    const isPlainText = textContent === elm.innerHTML;
+    const conditionFunctionRegex = /\b\w+\s*\(\s*["']?.*?["']?\s*(,\s*["']?.*?["']?\s*)*\)/;
+    const innerHTML = elm.innerHTML;
+    const textHasFunction = conditionFunctionRegex.test(innerHTML);
 
     if (elm.getAttribute('data-fallback') === null) {
-        elm.setAttribute('data-fallback', isPlainText ? textContent : '');
+      elm.setAttribute('data-fallback', !textHasFunction ? innerHTML : '');
     }
 
     const displayIfAttribute = elm.getAttribute("displayif");
@@ -864,10 +874,10 @@ export function displayQuestion(questionElement) {
 
       let displayIfText = resolveRuntimeConditions(displayIfAttribute) ?? elm.getAttribute('data-fallback');
       if (displayIfText) {
-        if (textContent.startsWith(',')) {
+        if (innerHTML.startsWith(',')) {
           displayIfText = ', ' + displayIfText;
         }
-        elm.textContent = displayIfText;
+        elm.innerHTML = displayIfText;
       }
     } else {
       elm.style.display = "none";
@@ -973,10 +983,22 @@ export function displayQuestion(questionElement) {
     });
   }
 
+  // Remove the reset answer button if there are no response inputs
+  const numResponseInputs = getNumResponseInputs(questionElement);
+  if (numResponseInputs === 0 && questionElement.id !== 'END') {
+    const resetButton = questionElement.querySelector('.reset');
+    if (resetButton) {
+      resetButton.remove();
+    }
+  }
+
+  const appState = getStateManager();
   appState.setActiveQuestionState(questionElement.id);
+  const questionProcessor = appState.getQuestionProcessor();
+  questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 150);
 
   // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
-  if (moduleParams.renderObj?.activate) {
+  if (!moduleParams.renderObj.isRenderer) {
     handleUserScrollLocation();
     setTimeout(() => {
       manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement);
@@ -994,7 +1016,7 @@ function handleUserScrollLocation() {
     rootElement = document.documentElement;
   }
 
-  rootElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  rootElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function isMobileDevice() {
@@ -1295,7 +1317,7 @@ export function evaluateCondition(evalString) {
   try {
     return math.evaluate(evalString)
   } catch (err) { //eslint-disable-line no-unused-vars
-    console.log('Using custom evaluation for:', evalString);
+    //console.log('Using custom evaluation for:', evalString); // Temp for debugging
     
     let displayIfStack = [];
     let lastMatchIndex = 0;
@@ -1319,7 +1341,7 @@ export function evaluateCondition(evalString) {
       if (isValidFunctionSyntax(displayIfStack, stackEnd)) {
         const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd, appState);
         const functionResult = knownFunctions[func](arg1, arg2, appState);
-        console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2, 'RESULT', functionResult); // Temp for debugging
+        //console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2, 'RESULT', functionResult); // Temp for debugging
 
         // Replace from stackEnd-5 to stackEnd with the results. Splice and replace the function call with the result.
         displayIfStack.splice(stackEnd - 5, 6, functionResult);
@@ -1333,14 +1355,30 @@ export function evaluateCondition(evalString) {
   }
 }
 
-// Test the string-based function syntax for a valid function call (converting markdown function strings to function calls).
+/**
+ * Test the string-based function syntax for a valid function call (converting markdown function strings to function calls).
+ * These are legacy, hardcoded conditions that must apply for 'knownFunctions' to evaluate.
+ * @param {array} stack - The stack of string-based conditions to evaluate.
+ * @param {number} stackEnd - The index of the closing parenthesis in the stack.
+ */
+
 const isValidFunctionSyntax = (stack, stackEnd) => {
   return stack[stackEnd - 4] === "(" &&
     stack[stackEnd - 2] === "," &&
     stack[stackEnd - 5] in knownFunctions
 }
 
-// func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
+/**
+ * Get the current function and arguments to evaluate from the stack.
+ * func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
+ * First, the individual arguments are evaluated to resolve any string-based conditions.
+ * Then, the function and arguments are returned as an object for evaluation as an expression.
+ * @param {array} stack - The stack of string-based conditions to evaluate.
+ * @param {number} callEnd - The index of the closing parenthesis in the stack.
+ * @param {object} appState - The application state.
+ * @returns {object} - The function and arguments to evaluate.
+ */
+
 function getFunctionArgsFromStack(stack, callEnd, appState) {
   const func = stack[callEnd - 5];
   
@@ -1357,18 +1395,17 @@ function getFunctionArgsFromStack(stack, callEnd, appState) {
  * Evaluate the individual args embedded in conditions.
  * Return early for: undefined, hardcoded numbers and booleans (they get evaluated in mathjs), and known loop markers.
  * @param {string} arg - The argument to evaluate.
- * @param {*} appState - The application state.
- * @returns 
+ * @param {object} appState - The application state.
+ * @returns {string} - The evaluated argument.
  */
 
 function evaluateArg(arg, appState) {
-
   if (arg === null || arg === 'undefined') return arg;
   else if (typeof arg === 'number' || parseInt(arg, 10) || parseFloat(arg)) return arg;
   else if (['true', true, 'false', false].includes(arg)) return arg;
   else if (arg === '#loop') return arg;
 
-  // Search for values in the surveyState. This search covers responses and 'previousResults' (passed in at startup).
+  // Search for values in the surveyState. This search covers responses and 'previousResults' (values from prior surveys passed in on initialization).
   const foundValue = appState.findResponseValue(arg);
   if (foundValue) {
     return foundValue;
