@@ -25,6 +25,8 @@ const createStateManager = (store, initialState = {}) => {
     let responseToQuestionMappingObj = {};
     // Cache found response values for faster access.
     let foundResponseCache = {};
+    // Set up the questionProcessor object
+    let questionProcessor = null;
 
     function updateStateKey(value, questionID, key = null) {
 
@@ -126,7 +128,7 @@ const createStateManager = (store, initialState = {}) => {
 
         // Handle 'prefer not to answer' and 'not sure' types of responses where other responses are removed programmatically (and they don't exist yet).
         // Handle the cases for string, Array, and Object types.
-        removeResponseItem: (questionID, key, numKeys, elementValue) => {
+        removeResponseItem: (questionID, key, numKeys) => {
             if (typeof questionID !== 'string' || (key != null && typeof key !== 'string')) {
                 throw new Error('StateManager -> removeItem: questionID and key must be strings');
             }
@@ -174,6 +176,7 @@ const createStateManager = (store, initialState = {}) => {
             responseKeysObj = {};
             responseToQuestionMappingObj = {};
             foundResponseCache = {};
+            questionProcessor = null;
         },
 
         // Set the active question state to the provided questionID. Important for: (1) return to survey and (2) 'Back' button click.
@@ -182,7 +185,7 @@ const createStateManager = (store, initialState = {}) => {
                 throw new Error('StateManager -> setActiveQuestionState: Key must be a string');
             }
 
-            if (surveyState.hasOwnProperty(questionID)) {
+            if (Object.prototype.hasOwnProperty.call(surveyState, questionID)) {
                 activeQuestionState = { [questionID]: surveyState[questionID] };
             }
         },
@@ -205,6 +208,13 @@ const createStateManager = (store, initialState = {}) => {
         // Sync changed items to the store alongside updated treeJSON. questionID is the form's id property.
         syncToStore: async () => {
             try {
+                // check loopData in case it's a loop-controlling question
+                if (Object.keys(activeQuestionState).length ===1) {
+                    const keyToCheck = Object.keys(activeQuestionState)[0];
+                    const valueToCheck = Object.values(activeQuestionState)[0];
+                    questionProcessor.checkLoopMaxData(keyToCheck, valueToCheck);
+                }
+
                 activeQuestionState['treeJSON'] = updateTreeJSON();
                 
                 const changedState = {};
@@ -261,6 +271,14 @@ const createStateManager = (store, initialState = {}) => {
             }
         },
 
+        setQuestionProcessor: (processor) => {
+            questionProcessor = processor;
+        },
+
+        getQuestionProcessor: () => {
+            return questionProcessor;
+        },
+
         // Set the num response keys for a question when the setFormValue function first triggers for the question.
         setNumResponseInputs: (key, value) => {
             responseKeysObj[key] = value;
@@ -294,7 +312,7 @@ const createStateManager = (store, initialState = {}) => {
 
             // If the responseKey is a number, and not a conceptID, return it directly.
             if (!isNaN(parseFloat(responseKey)) && (responseKey < 100000000 || responseKey > 999999999)) {
-                console.log('RETURNING (parseInt):', responseKey); // Temp for debugging
+                //console.log('RETURNING (parseInt):', responseKey); // Temp for debugging
                 return responseKey;
             }
 
@@ -303,7 +321,7 @@ const createStateManager = (store, initialState = {}) => {
                 : responseKey;
 
             // Check the cache first for a found response value.
-            if (foundResponseCache.hasOwnProperty(compoundKey)) {
+            if (Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
                 return foundResponseCache[compoundKey];
             }
 
@@ -314,22 +332,22 @@ const createStateManager = (store, initialState = {}) => {
 
                 // If the value is a string, return it.
                 if (typeof existingResponse === 'string') {
-                    console.log('RETURNING (string):', compoundKey, existingResponse); // Temp for debugging
+                    //console.log('RETURNING (string):', compoundKey, existingResponse); // Temp for debugging
                     value = existingResponse;
                     
                 // Checkbox groups are saved as arrays. If the value exists in the array, it was checked.
                 } else if (Array.isArray(existingResponse)) {
-                    console.log('RETURNING (array):', compoundKey, existingResponse); // Temp for debugging
+                    //console.log('RETURNING (array):', compoundKey, existingResponse); // Temp for debugging
                     value = existingResponse;
                 
                 // If the value is an object, it's stored as { key: { key: value }} return the value of the inner key.
                 // There may be two inner keys. The unmatched key is for 'other' text fields. Return the object when multiple keys exist. 
                 } else if (typeof existingResponse === 'object') {
                     if (Object.keys(existingResponse).length === 1) {
-                        console.log('RETURNING (one key in object):', compoundKey, existingResponse[Object.keys(existingResponse)[0]]); // Temp for debugging
+                        //console.log('RETURNING (one key in object):', compoundKey, existingResponse[Object.keys(existingResponse)[0]]); // Temp for debugging
                         value = existingResponse[Object.keys(existingResponse)[0]];
                     } else {
-                        console.log('RETURNING (nested object):', compoundKey, existingResponse[compoundKey]); // Temp for debugging
+                        //console.log('RETURNING (nested object):', compoundKey, existingResponse[compoundKey]); // Temp for debugging
                         value = existingResponse[compoundKey];
                     }
                 }
@@ -339,14 +357,14 @@ const createStateManager = (store, initialState = {}) => {
                     return value;
                 }
 
-                console.warn('RETURNING (default):', existingResponse); // Temp for debugging
+                //console.warn('RETURNING (default):', existingResponse); // Temp for debugging
                 foundResponseCache[compoundKey] = existingResponse;
                 return existingResponse;
             }
 
             // Check the previous results for known keys (these keys are accesesed on survey load for some surveys).
-            if (moduleParams.previousResults.hasOwnProperty(responseKey)) {
-                console.log('RETURNING (previousResults):', responseKey, moduleParams.previousResults[responseKey]); // Temp for debugging
+            if (Object.prototype.hasOwnProperty.call(moduleParams.previousResults, responseKey)) {
+                //console.log('RETURNING (previousResults):', responseKey, moduleParams.previousResults[responseKey]); // Temp for debugging
                 return moduleParams.previousResults[responseKey].toString();
             }
 
@@ -364,7 +382,7 @@ const createStateManager = (store, initialState = {}) => {
 
                 foundKey = Object.keys(responseToQuestionMappingObj).find((key) => key.startsWith(compoundKey));
                 if (!foundKey) {
-                    console.log('StateManager -> findResponseValue: (not found - searching with startsWith):', compoundKey); // Temp for debugging
+                    //console.log('StateManager -> findResponseValue: (not found - searching with startsWith):', compoundKey); // Temp for debugging
                     return undefined;
                 }
                 pathToData = responseToQuestionMappingObj[foundKey];
@@ -386,7 +404,7 @@ const createStateManager = (store, initialState = {}) => {
                 }
             }
 
-            console.log('RETURNING (found by path):', foundKey ?? compoundKey, value); // Temp for debugging
+            //console.log('RETURNING (found by path):', foundKey ?? compoundKey, value); // Temp for debugging
             foundKey
                 ? foundResponseCache[foundKey] = value
                 : foundResponseCache[compoundKey] = value;

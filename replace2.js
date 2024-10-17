@@ -1,4 +1,4 @@
-import { questionQueue, moduleParams, rbAndCbClick, displayQuestion } from "./questionnaire.js";
+import { questionQueue, moduleParams, rbAndCbClick, showAllQuestions, swapVisibleQuestion } from "./questionnaire.js";
 import { restoreResponses } from "./restoreResponses.js";
 import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
@@ -8,88 +8,67 @@ import { getStateManager } from "./stateManager.js";
 import en from "./i18n/en.js";
 import es from "./i18n/es.js";
 
-export let transform = function () {
-  // init
-};
+export let transform = function () { /* init */ };
+transform.rbAndCbClick = rbAndCbClick;
 
-transform.rbAndCbClick = rbAndCbClick
-
-transform.render = async (obj, divId, previousResults = {}) => {
+// TODO: wrap with error handling.
+transform.render = async (obj, divID, previousResults = {}) => {
 
   // Set the global moduleParams object with data needed for different parts of the app.
-  setModuleParams(obj, previousResults);
+  setModuleParams(obj, divID, previousResults);
   
   // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
-  const contents = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
-  if (!contents) {
-    console.error('No contents found for the survey.');
-    return false;
-  }
+  const markdown = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
 
-  // Initialize the survey and transform the markdown contents to HTML.
-  const [transformedContents, questName, retrievedData] = await initSurvey(contents);
-  moduleParams.questName = questName;
+  // Initialize the survey and start processing the questions in the background.
+  const retrievedData = await initSurvey(markdown);
 
   // Get the state manager and load the initial state. This prepares the state manager for use throughout the survey.
   const appState = getStateManager();
   appState.loadInitialSurveyState(retrievedData);
   const initialUserData = appState.getSurveyState();
-
-  // add the HTML/HEAD/BODY tags...
-  document.getElementById(divId).innerHTML = ariaLiveAnnouncementRegions() + transformedContents + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
+  const questionProcessor = appState.getQuestionProcessor();
 
   // Load the question queue from the tree JSON.
   loadQuestionQueue(initialUserData?.treeJSON);
 
-  // Get all the questions and the parent div element.
-  const questions = [...document.getElementsByClassName("question")];
-  const divElement = document.getElementById(divId);
-
-  // Handle remaining DOM management (removing buttons, hiding elements, etc.).
-  handleDOMManagement(questions, divElement);
+  // Support the renderer tool before the survey is activated. The renderer tool's primary setting lists all questions at the same time.
+  if (moduleParams.renderObj?.renderFullQuestionList) {
+    questionProcessor.processAllQuestions();
+  }
 
   // Initialize the active question, activate it, and display it.
-  const activeQuestionID = getActiveQuestionID(questions);
-  const activeQuestionElement = setActiveQuestion(activeQuestionID, divElement);
+  const activeQuestionID = getActiveQuestionID(questionProcessor.questions);
+
+  // Set the active question in the DOM on survey startup and restore existing responses.
+  const activeQuestionEle = setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initialUserData);
 
   // If the active question is not found, and it's an embedded use case, log an error and return false.
-  if (!activeQuestionElement && moduleParams.renderObj?.activate) {
+  // Note: Fail silently for the renderer tool since users are actively editing and testing markdown.
+  if (!activeQuestionEle && !moduleParams.isRenderer) {
     console.error('Active question not found for:', activeQuestionID);
     return false;
   }
-
-  // Restore the user's existing survey response for the active question (if they exist). 
-  restoreResponses(initialUserData, activeQuestionID);
-
-  // Clear changed Items are cleared after the initial state is loaded.
-  // This is to ensure that only the user's changes are tracked.
-  appState.clearActiveQuestionState();
-
-  // Display the active question.
-  displayQuestion(activeQuestionElement);
   
+  // TODO: test loading/unloading/back button for soccer
   // If the soccer function is defined, call it. This is used for external listeners in the PWA.
   if (moduleParams.soccer instanceof Function) moduleParams.soccer();
 
-  // All Global DOM processing is now complete (individual processing happens in displayQuestion()).
   // Add the event listeners to the parent div.
-  addEventListeners(divElement);
+  addEventListeners();
 
   return true;
 };
 
-function setModuleParams(obj, previousResults) {
-  moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
-  moduleParams.previousResults = previousResults;
-  moduleParams.soccer = obj.soccer;
-  moduleParams.delayedParameterArray = obj.delayedParameterArray;
-  moduleParams.i18n = obj.lang === 'es' ? es : en;
-  moduleParams.isWindowsEnvironment = isWindowsEnvironment();
-  moduleParams.isFirefoxBrowser = isFirefoxBrowser();
-  moduleParams.isLocalDevelopment = isLocalDevelopment();
-}
-
-// Load the question queue from the tree JSON. If the tree JSON is empty, ensure the question queue is cleared.
+/**
+ * Load the question queue from the tree JSON. If treeJSON is empty, cleare the queue.
+ * This is used to :
+ * - Load the initial state of the survey.
+ * - Load the state of the survey from the user's existing responses.
+ * - Track the user's progress through the survey.
+ * Note: It is built into all existing surveys (do not change or remove).
+ * @param {Object} treeJSON - The treeJSON object containing the question queue.
+ */
 function loadQuestionQueue(treeJSON) {
   if (treeJSON) {
     try {
@@ -103,85 +82,93 @@ function loadQuestionQueue(treeJSON) {
   }
 }
 
-// Get the active question from the tree and set it as active. If the tree is empty add the first question to the tree and make it active.
-function getActiveQuestionID(questions) {
-  if (questions.length === 0) {
-    if (!moduleParams.renderObj?.activate) console.error('No questions found in the survey.'); // TODO: handle eager execution inefficiency in renderer.
+/**
+ * Get the active question ID from questionQueue. If the queue is empty, add the first question to the queue and make it active.
+ * @param {Array} questionsArray - The array of questions from the questionProcessor. 
+ * @returns {string} - The ID of the active question.
+ */
+
+function getActiveQuestionID(questionsArray) {
+  if (questionsArray.length === 0) {
+    // TODO: handle eager execution inefficiency in renderer.
+    if (moduleParams.renderObj.isRenderer) console.error('No questions found in the survey.');
     return;
   }
 
   let currentQuestionID = questionQueue.currentNode.value;
   if (!currentQuestionID) {
-    currentQuestionID = questions[0].id;
+    currentQuestionID = questionsArray[0].questionID;
     questionQueue.add(currentQuestionID);
     questionQueue.next();
+  } else if (currentQuestionID.startsWith('_CONTINUE')) {
+    questionQueue.pop();
+    currentQuestionID = questionQueue.currentNode.value;
   }
   
   return currentQuestionID;
 }
 
-// Get the active question from the tree and set it as active.
-function setActiveQuestion(questionID, divElement) {
-  if (!questionID) return;
+/**
+ * Set the active question in the DOM on survey startup. This executes once, just after initialization.
+ * If the active question is not found, there's a setup error from the caller. Log an error and return.
+ * @param {Object} questionProcessor - The question processor object for processing markdown to HTML and managing questions.
+ * @param {string} activeQuestionID - The ID of the active question to set.
+ * @param {Object} initialUserData - The initial user data object containing the user's existing responses.
+ * @returns {void} - this manages the DOM on survey startup.
+ */
 
-  const activeQuestion = document.getElementById(questionID);
-  if (!activeQuestion) {
-    console.error('Active question not found:', questionID);
+function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initialUserData) {
+  if (!activeQuestionID) return;
+
+  const questionEle = questionProcessor.loadInitialQuestionOnStartup(activeQuestionID);
+  if (!questionEle) {
+    console.error('Active question not found:', activeQuestionID, questionEle);
     return;
   }
 
-  // remove active from all questions.
-  divElement.querySelectorAll('.active').forEach((element) => {
-    element.classList.remove('active');
-  });
+  moduleParams.renderObj?.renderFullQuestionList
+    ? showAllQuestions(questionProcessor.getAllProcessedQuestions())
+    : swapVisibleQuestion(questionEle);
 
-  // make the id active.
-  activeQuestion.classList.add('active');
-  console.log(`setting ${questionID} active and restoring responses`);
-
-  return activeQuestion;
+  initialUserData[activeQuestionID] && restoreResponses(initialUserData, activeQuestionID);
+  
+  return questionEle;
 }
 
-function handleDOMManagement(questions, divElement) {
+function setModuleParams(obj, divID, previousResults) {
+  moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
+  moduleParams.renderObj.renderFullQuestionList = moduleParams.renderObj?.isRenderer && !moduleParams.renderObj?.activate;
+  moduleParams.previousResults = expandPreviousResults(previousResults);//previousResults; // TODO: tepporary -- needs more accurate fix in ConnectApp.
+  moduleParams.soccer = obj.soccer;
+  moduleParams.delayedParameterArray = obj.delayedParameterArray;
+  moduleParams.i18n = obj.lang === 'es' ? es : en;
+  moduleParams.isWindowsEnvironment = isWindowsEnvironment();
+  moduleParams.isFirefoxBrowser = isFirefoxBrowser();
+  moduleParams.isLocalDevelopment = isLocalDevelopment();
+  moduleParams.questDiv = document.getElementById(divID);
+  moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
 
-  // remove the first 'previous' button and the final 'next' button.
-  if (questions.length > 0) {
-    let buttonToRemove = questions[0].querySelector(".previous");
-    if (buttonToRemove) {
-      buttonToRemove.remove();
-    }
-    buttonToRemove = [...questions].pop().querySelector(".next");
-    if (buttonToRemove) {
-      buttonToRemove.remove();
-    }
+  // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
+  // Set the base path for the module. This is used to fetch the stylesheets in init -> .
+  moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
+    ? 'https://episphere.github.io/quest-dev/'
+    : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
+}
+
+// Expand the previous results object with additional fields for the survey.
+// TODO: update to handle this in ConnectApp where we have more detailed D.O.B. Information to handle 'RCRTUP_YOB_V1R0'. Then delete this function.
+// This is off-by-one for many cases, but it's a quick fix for the current implementation.
+function expandPreviousResults(previousResults) {
+  if (!previousResults) return {};
+  if (previousResults['RCRTUP_YOB_V1R0']) return previousResults;
+
+  const age = parseInt(previousResults['age'] || previousResults['AGE']);
+  if (age) {
+    const currentYear = new Date().getFullYear();
+    previousResults['RCRTUP_YOB_V1R0'] = currentYear - age; // Calculate the year of birth from the age.
   }
 
-  // handle data-hidden elements
-  [...divElement.querySelectorAll("[data-hidden]")].forEach((x) => {
-    x.style.display = "none";
-  });
-
-  // TODO: need to update all 'document' handling upon single-question DOM implementation.
-  // validate confirm. If the confirm was used instead of data-confirm, fix it now
-  document.querySelectorAll("[confirm]").forEach( (element) => {
-    element.dataset.confirm = element.getAttribute("confirm")
-    element.removeAttribute("confirm")
-  });
-
-  document.querySelectorAll("[data-confirm]").forEach( (element) => {
-    if (!document.getElementById(element.dataset.confirm)) {
-      console.warn(`... cannot confirm ${element.id}. `)      
-      delete element.dataset.confirm
-    }
-    const otherElement = document.getElementById(element.dataset.confirm);
-    otherElement.dataset.conformationFor=element.id;
-  });
-
-  // enable all popovers...
-  const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
-  [...popoverTriggerList].forEach(popoverTriggerEl => {
-    new bootstrap.Popover(popoverTriggerEl);
-  });
+  return previousResults;
 }
 
 function isLocalDevelopment() {

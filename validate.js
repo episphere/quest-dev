@@ -28,7 +28,7 @@ export function validateInput(inputElement) {
         }
 
         handlers[inputElementType](inputElement)
-    } else if (inputElementType == "radio") {
+    } else if (["radio", "time"].includes(inputElementType)) {
         // no validation for radio buttons
     } else {
         console.log(`no handle for type: ${inputElementType}`)
@@ -236,10 +236,10 @@ function validate_text(inputElement) {
         clearValidationError(inputElement)
     }
 
-    let checkConfirmation = "confirm" in inputElement.dataset || "conformationFor" in inputElement.dataset;
+    let checkConfirmation = "confirm" in inputElement.dataset || "confirmationFor" in inputElement.dataset;
 
     if (checkConfirmation){
-        let otherId = inputElement.dataset.confirm ?? inputElement.dataset.conformationFor
+        let otherId = inputElement.dataset.confirm ?? inputElement.dataset.confirmationFor
         let otherElement = document.getElementById(otherId)
 
         if (otherElement.value != inputElement.value) {
@@ -253,9 +253,8 @@ function validate_text(inputElement) {
 }
 
 function validate_count(inputElement){
-
-    let hasMin = 'minCount' in inputElement.form?.dataset;
-    let hasMax = 'maxCount' in inputElement.form?.dataset;
+    let hasMin = inputElement.form?.dataset && 'minCount' in inputElement.form.dataset;
+    let hasMax = inputElement.form?.dataset && 'maxCount' in inputElement.form.dataset;
     
     if (hasMin || hasMax){
         let minCount = inputElement.form.dataset.minCount;
@@ -275,6 +274,5 @@ function validate_count(inputElement){
         else {
             clearValidationError(lastElement)
         }
-
     }
 }

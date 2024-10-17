@@ -53,15 +53,15 @@ export class YearMonth {
 export const customMathJSFunctions = {
   exists: function (x) {
     if (x == null || x === '') return false;
+    
+    if (typeof x === 'number') return true;
 
     if (x.toString().includes('.')) {
+      console.warn('EXISTS - X toString INCLUDES .', x);
       return !math.isUndefined(this.getKeyedValue(x));
     }
-
-    if (typeof x === 'number') return true;
     
     const existingResponse = this.appState.findResponseValue(x);
-
     switch (typeof existingResponse) {
       case 'object':
         return Array.isArray(existingResponse) ? existingResponse.length > 0 : Object.keys(existingResponse).length > 0;
@@ -93,7 +93,6 @@ export const customMathJSFunctions = {
     return ids.every(id => this.exists(id))
   },
 
-  // TODO: remove this in favor of appState.findResponseValue()
   getKeyedValue: function(x) {
     console.warn('TODO: GET KEYED VALUE', x);
     const array = x.toString().split('.');
@@ -110,13 +109,13 @@ export const customMathJSFunctions = {
   },
 
   _value: function (x) {
+    // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
+    if (typeof x === 'number') return x;
+
     if (!this.exists(x)) return null
 
     if (x.toString().includes('.')) return this.getKeyedValue(x);
     
-    // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
-    if (typeof x === 'number') return x;
-
     return this.appState.findResponseValue(x);
   },
 
@@ -239,30 +238,30 @@ export const customMathJSFunctions = {
     return (date1 < date2) ? -1 : (date1 == date2) ? 0 : 1
   },
 
-  // Refactor once we have individual question DOM structure. Consider querying on init and storing in miscState. markdown func is 'noneSelected'.
-  isSelected: function (id) {
-    console.warn('TODO: (isSelected) update for single-question DOM structure', id);
-    const match = id.match(stripIDSuffixRegex);
+  // Get the value of the cell input for the radio or checkbox from the form - table - tbody - tr - td - input structure.
+  // id is the id of the specific radio button or checkbox. This is evaluated on a per-id basis, so if a row
+  // has multiple radio buttons or checkboxes, each radio button will be evaluated separately.
+  isSelected: function (radioOrCheckboxID) {
+    const questionProcessor = this.appState.getQuestionProcessor();
+    const cellInputValue = questionProcessor.findGridRadioCheckboxEle(radioOrCheckboxID);
+    if (!cellInputValue) {
+      return false;
+    }
+    
+    const match = radioOrCheckboxID.match(stripIDSuffixRegex);
     if (!match || !match[1]) return false;
     
-    const responseValue = this.appState.findResponseValue(match[1]);
-    if (!responseValue) return false;
+    const baseRadioCheckboxID = match[1];
+    const responseValue = this.appState.findResponseValue(baseRadioCheckboxID);
 
-    const baseID = match[1];
-    const cellInputValue = document.getElementById(id)
-      ?.form
-      ?.querySelector(`table tbody tr[data-question-id="${baseID}"] td[data-question-id="${baseID}"] input[id="${id}"]`)
-      ?.value;
-
-    if (!cellInputValue) {
-      console.error('CELL INPUT VALUE NOT FOUND:', id);
+    if (!responseValue) {
       return false;
     }
 
     return cellInputValue === responseValue;
   },
 
-  someSelected: function (...ids) { // TODO: test. this is impacted by the isSelected changes.
+  someSelected: function (...ids) {
     return (ids.some(id => this.isSelected(id)))
   },
 
@@ -296,13 +295,13 @@ export const customMathJSFunctions = {
     let responseValue = this._value(questionId);
 
     if (Array.isArray(responseValue) || Array.isArray(responseValue[name])) {
+      // Note: haven't found an instance of this case yet.
+      console.error('TODO: (selectionCount) remove DOM access and use stateManager', x, countReset);
       responseValue = Array.isArray(responseValue) ? responseValue : responseValue[name]
 
       if (countReset){
         return responseValue.length;
       }
-
-      console.warn('TODO: (selectionCount) remove DOM access and use stateManager', x);
 
       // BUG FIX:  if the data-reset ("none of the above") is selected
       let questionElement = document.getElementById(questionId)
@@ -316,6 +315,8 @@ export const customMathJSFunctions = {
     // otherwise:
     return 0;
   },
+
+  // TODO: remove if unused
   // // For a question in a loop, does the value of the response
   // // for ANY ITERATION equal a value from a given set. 
   // loopQuestionValueIsOneOf: function (id, ...values) {
@@ -333,7 +334,7 @@ export const customMathJSFunctions = {
   // gridQuestionsValueIsOneOf: function (gridId, ...values) {
   //   if (this.doesNotExist(gridId)) return false
   //   console.warn('TODO: (gridQuestionsValueIsOneOf) remove DOM access and use stateManager', gridId, ...values);
-  //   let gridElement = document.getElementById(gridId) // TODO: rm DOM access, use stateManager
+  //   let gridElement = document.getElementById(gridId)
   //   if (! "grid" in gridElement.dataset) return false
 
   //   values = values.map(v => v.toString())
@@ -350,12 +351,12 @@ export const customMathJSFunctions = {
   //   return false;
   // },
   yearMonth: function (str) {
-    let isYM = /^(\d+)\-(\d+)$/.test(str)
+    let isYM = /^(\d+)-(\d+)$/.test(str)
     if (isYM) {
       return new YearMonth(str)
     }
     let value = this._value(str)
-    isYM = /^(\d+)\-(\d+)$/.test(value)
+    isYM = /^(\d+)-(\d+)$/.test(value)
     if (isYM) {
       return new YearMonth(value)
     }
