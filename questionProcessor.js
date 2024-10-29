@@ -1,6 +1,7 @@
-import { evaluateCondition, hideLoadingIndicator, moduleParams, showLoadingIndicator } from './questionnaire.js';
+import { moduleParams } from './questionnaire.js';
 import { parseGrid } from './buildGrid.js';
 import { translate } from './common.js';
+import { evaluateCondition } from "./evaluateConditions.js";
 import { getStateManager } from './stateManager.js';
 
 const questionSeparatorRegex = /\[([A-Z_][A-Z0-9_#]*[?!]?)(?:\|([^,|\]]+)\|?)?(,.*?)?\](.*?)(?=$|\[[A-Z_]|<form)/gs;
@@ -63,7 +64,7 @@ export class QuestionProcessor {
       return placeholder;
     });
 
-    // TODO: consider unrolling after user has input the response that determines number of loops.
+    // Future improvement: Consider unrolling after user has input the response that determines number of loops.
     // This would lighten the initial load considerably. Would need to handle insertions to the array.
     // Would also need to handle removing generated loop eles on back button click and/or change of the trigger response.
     // Current loop process unrolls all possible responses to n=loopMax (25).
@@ -173,12 +174,12 @@ export class QuestionProcessor {
     });
 
     [...newQuestionEle.querySelectorAll("[data-confirm]")].forEach((element) => {
+      console.warn('TODO: REMOVE? NOT FOUND in DOM (this previously used document access): confirm element found:', element.dataset.confirm);
       if (!newQuestionEle.querySelector(`#${element.dataset.confirm}`)) {
-        console.warn('TODO: TEST (this previously used document access): confirm element not found:', element.dataset.confirm);
         delete element.dataset.confirm
       }
       const otherElement = newQuestionEle.querySelector(`#${element.dataset.confirm}`);
-      console.warn('TODO: TEST (this previously used document access): confirm element found:', otherElement);
+      console.warn('TODO: REMOVE? NOT FOUND in DOM (this previously used document access): confirm element found (otherElement):', otherElement);
       otherElement.dataset.confirmationFor = element.id;
     });
 
@@ -586,7 +587,6 @@ export class QuestionProcessor {
     // Else, find the first question for the next loop iteration.
     } else {
       const nextIterationFirstQuestionID = `${loopData.loopFirstQuestionID}_${nextLoopIterationIndex}_${nextLoopIterationIndex}`;
-      console.log('TODO: TEST (questionQueue management) NEXT ITERATION START ID:', nextIterationFirstQuestionID);
       return this.findQuestion(nextIterationFirstQuestionID);
     }
   }
@@ -634,8 +634,6 @@ export class QuestionProcessor {
     console.error(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
   }
-
-  // TODO: consider moving the parsing functions to a separate file for better organization.
 
   replaceDateTags(content) {
     const replacements = [
@@ -739,7 +737,6 @@ export class QuestionProcessor {
       text = text.replace(/\|tel\|(?:([^|<]+[^|]+)\|)?/g, fPhone);
       text = text.replace(/\|SSN\|(?:([^|<]+[^|]+)\|)?/g, fSSN);
       text = text.replace(/\|state\|(?:([^|<]+[^|]+)\|)?/g, fState);
-      //text = text.replace(/\((\d*)(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio); // TODO: rm if unused
       text = text.replace(/\[(\d*)(\*)?(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g, fCheck);
       text = text.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
       text = text.replace(/\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?\s*(.*?)/g, fText);
@@ -778,8 +775,6 @@ export class QuestionProcessor {
     questText = questText.replace(/\|date\|(?:([^\|\<]+[^\|]+)\|)?/g, fDate);
     questText = questText.replace(/\|month\|(?:([^\|]+)\|)?/g, fMonth);
 
-    // TODO: does this have the same DOM ID / input ID mismatch issue as month inputs (resolved in fMonth)?
-    // If yes, refactor to combine and use the fMonth approach.
     function fDate(fullmatch, opts) {
       let type = fullmatch.match(/[^|]+/);
       let { options, elementId } = guaranteeIdSet(opts, type);
@@ -1046,7 +1041,7 @@ export class QuestionProcessor {
       `;
     }
 
-    // TODO: General: format for number input boxes needs adjustment for screen readers (description text first or aria description)
+    // TODO: (future): format for number input boxes needs adjustment for screen readers (description text first or aria description)
     // replace |__|__|  with a number box...
     questText = questText.replace(/\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g, fNum);
 

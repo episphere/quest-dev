@@ -18,7 +18,7 @@ transform.render = async (obj, divID, previousResults = {}) => {
   setModuleParams(obj, divID, previousResults);
   
   // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
-  const markdown = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
+  const markdown = moduleParams.text || await fetch(moduleParams.url).then(response => response.text());
 
   // Initialize the survey and start processing the questions in the background.
   const retrievedData = await initSurvey(markdown);
@@ -33,7 +33,7 @@ transform.render = async (obj, divID, previousResults = {}) => {
   loadQuestionQueue(initialUserData?.treeJSON);
 
   // Support the renderer tool before the survey is activated. The renderer tool's primary setting lists all questions at the same time.
-  if (moduleParams.renderObj?.renderFullQuestionList) {
+  if (moduleParams.renderFullQuestionList) {
     questionProcessor.processAllQuestions();
   }
 
@@ -90,8 +90,7 @@ function loadQuestionQueue(treeJSON) {
 
 function getActiveQuestionID(questionsArray) {
   if (questionsArray.length === 0) {
-    // TODO: handle eager execution inefficiency in renderer.
-    if (moduleParams.renderObj.isRenderer) console.error('No questions found in the survey.');
+    if (moduleParams.isRenderer) console.error('No questions found in the survey.');
     return;
   }
 
@@ -126,7 +125,7 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
     return;
   }
 
-  moduleParams.renderObj?.renderFullQuestionList
+  moduleParams.renderFullQuestionList
     ? showAllQuestions(questionProcessor.getAllProcessedQuestions())
     : swapVisibleQuestion(questionEle);
 
@@ -136,8 +135,15 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
 }
 
 function setModuleParams(obj, divID, previousResults) {
-  moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
-  moduleParams.renderObj.renderFullQuestionList = moduleParams.renderObj?.isRenderer && !moduleParams.renderObj?.activate;
+  moduleParams.url = obj.url;
+  moduleParams.text = obj.text || '';
+  moduleParams.store = obj.store;
+  moduleParams.retrieve = obj.retrieve;
+  moduleParams.questVersion = obj.questVersion || '';
+  moduleParams.surveyDataPrefetch = obj.surveyDataPrefetch;
+  moduleParams.isRenderer = obj.isRenderer || false;
+  moduleParams.activate = obj.activate || false;
+  moduleParams.renderFullQuestionList = moduleParams.isRenderer && !moduleParams.activate;
   moduleParams.previousResults = expandPreviousResults(previousResults);//previousResults; // TODO: tepporary -- needs more accurate fix in ConnectApp.
   moduleParams.soccer = obj.soccer;
   moduleParams.delayedParameterArray = obj.delayedParameterArray;
@@ -148,9 +154,9 @@ function setModuleParams(obj, divID, previousResults) {
   moduleParams.questDiv = document.getElementById(divID);
   moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
 
-  // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
+  // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.questVersion}/`)
   // Set the base path for the module. This is used to fetch the stylesheets in init -> .
-  moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
+  moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.questVersion
     ? 'https://episphere.github.io/quest-dev/'
     : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
 }

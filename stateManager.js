@@ -1,4 +1,6 @@
-import { hideLoadingIndicator, moduleParams, questionQueue, showLoadingIndicator } from './questionnaire.js';
+import { moduleParams, questionQueue } from './questionnaire.js';
+import { hideLoadingIndicator, showLoadingIndicator } from './common.js';
+
 /**
  * State Manager: Quest state manager to centralize state management and syncing to the store.
  * appState is the global state container for the application.
@@ -271,6 +273,15 @@ const createStateManager = (store, initialState = {}) => {
             }
         },
 
+        getQuestionHTMLByID: (questionID) => {
+            if (typeof questionID !== 'string') {
+                throw new Error('StateManager -> getQuestionHTMLByID: Key must be a string');
+            }
+
+            const { question } = questionProcessor.findQuestion(questionID);
+            return question;
+        },
+
         setQuestionProcessor: (processor) => {
             questionProcessor = processor;
         },
@@ -374,7 +385,7 @@ const createStateManager = (store, initialState = {}) => {
             let foundKey;
 
             if (!questionID) {
-                // TODO: TEMP FOR TESTING. Ensure no conflicts with this method. Remove after testing.
+                // TODO: (future): TEMP FOR TESTING. Ensure no conflicts with this method. Remove after testing.
                 const foundKeyArray = Object.keys(responseToQuestionMappingObj).filter((key) => key.startsWith(compoundKey));
                 if (foundKeyArray.length > 1) {
                     console.error('StateManager -> findResponseValue: (MULTIPLE FOUND - searching with startsWith):', compoundKey);

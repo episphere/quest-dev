@@ -1,16 +1,14 @@
 import { Tree } from "./tree.js";
-import { knownFunctions } from "./knownFunctions.js";
 import { validateInput, validationError } from "./validate.js"
 import { translate } from "./common.js";
 import { math } from './customMathJSImplementation.js';
 import { restoreResponses } from "./restoreResponses.js";
 import { getStateManager } from "./stateManager.js";
+import { evaluateCondition } from "./evaluateConditions.js";
+import { manageAccessibleQuestion } from "./accessibleQuestionTextBuilder.js";
 export const moduleParams = {};
 
-// TODO: break this up into more tightly related files
-
-// The questionQueue is an Tree which contains
-// the question ids in the order they should be displayed.
+// The questionQueue is a Tree. It contains the question ids in the order they should be displayed.
 export const questionQueue = new Tree();
 
 /**
@@ -22,7 +20,7 @@ export const questionQueue = new Tree();
  * @returns {number} - the number of response keys.
  */
 
-function getNumResponseInputs(form) {
+function countResponseInputs(form) {
   const responseInputs = new Set();
 
   form.querySelectorAll("input, textarea, select").forEach((current) => {
@@ -52,7 +50,7 @@ function getNumResponseInputs(form) {
 
 function setResponsesInState(form, value, id) {
   const appState = getStateManager();
-  const numResponses = appState?.getNumResponseInputs(form.id) || getNumResponseInputs(form);
+  const numResponses = appState?.getNumResponseInputs(form.id) || countResponseInputs(form);
   
   // Validate and sanitize inputs.
   if (!id || id.trim() === "") return;
@@ -504,23 +502,21 @@ function clearXORValidationMessage(inputElement) {
   }
 }
 
-export async function nextClick(norp) {
+export async function nextButtonClicked(nextOrPreviousButton) {
   // Because next button does not have ID, modal will pass-in ID of question
-  // norp needs to be next button element
-  if (typeof norp == "string") {
-    console.warn('TYPE OF - NORP is string', typeof norp);
-    norp = moduleParams.questDiv.querySelector(`#${norp} .next`)
+  if (typeof nextOrPreviousButton == "string") {
+    nextOrPreviousButton = moduleParams.questDiv.querySelector(`#${nextOrPreviousButton} .next`)
   }
 
   // check that each required element is set...
-  norp.form.querySelectorAll("[data-required]").forEach((elm) => {
+  nextOrPreviousButton.form.querySelectorAll("[data-required]").forEach((elm) => {
     validateInput(elm)
   });
 
-  await analyzeFormResponses(norp);
+  await analyzeFormResponses(nextOrPreviousButton);
 }
 
-function showUnansweredQuestionsModal(num, norp, soft) {
+function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
   const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
   
   const modalID = soft ? 'softModal' : 'hardModal';
@@ -540,7 +536,7 @@ function showUnansweredQuestionsModal(num, norp, soft) {
     continueButton.removeEventListener("click", continueButton.clickHandler);
     //await the store operation on 'continue without answering' click for correct screen reader focus
     continueButton.clickHandler = async () => {
-      await nextPage(norp);
+      await nextPage(nextOrPreviousButton);
     };
     continueButton.addEventListener("click", continueButton.clickHandler);
   }
@@ -558,10 +554,10 @@ function showUnansweredQuestionsModal(num, norp, soft) {
   });
 }
 
-async function analyzeFormResponses(norp) {
-  if (norp.form.getAttribute("softedit") == "true" || norp.form.getAttribute("hardedit") == "true") {
+async function analyzeFormResponses(nextOrPreviousButton) {
+  if (nextOrPreviousButton.form.getAttribute("softedit") === "true" || nextOrPreviousButton.form.getAttribute("hardedit") === "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
-    const fieldset = norp.form.querySelector('fieldset') || norp.form.querySelector('tbody');
+    const fieldset = nextOrPreviousButton.form.querySelector('fieldset') || nextOrPreviousButton.form.querySelector('tbody');
 
     let numBlankResponses = [...fieldset.children]
       .filter(x => 
@@ -574,37 +570,35 @@ async function analyzeFormResponses(norp) {
         x.value.length == 0 ? t + 1 : t, 0
       );
       
-    let hasNoResponses = getSelectedResponses(fieldset).filter((x) => x.type !== "hidden").length === 0;
+    let responsesAreIncomplete = getSelectedResponses(fieldset).filter((x) => x.type !== "hidden").length === 0;
 
-    if (fieldset.hasAttribute("radioCheckboxAndInput")) {
-      if (!radioCbHasAllAnswers(fieldset)) {
-        hasNoResponses = true;
-      }
+    if (fieldset.hasAttribute("radioCheckboxAndInput") && !radioCbHasAllAnswers(fieldset)) {
+      responsesAreIncomplete = true;
     }
 
-    if (norp.form.dataset.grid) {
+    if (nextOrPreviousButton.form.dataset.grid) {
+      numBlankResponses = numUnansweredGridQuestions(fieldset);
+
       if (!gridHasAllAnswers(fieldset)) {
-        hasNoResponses = true;
+        responsesAreIncomplete = true;
       }
-      numBlankResponses = numberOfUnansweredGridQuestions(fieldset);
     }
 
-    if (numBlankResponses == 0 && hasNoResponses == true) {
-      numBlankResponses = 1;
-    } else if ((numBlankResponses == 0) == true && hasNoResponses == false) {
-      numBlankResponses = 0;
-    } else if ((numBlankResponses == 0) == false && hasNoResponses == true) {
-      // do nothing
+    if (responsesAreIncomplete) {
+      if (numBlankResponses === 0) {
+        numBlankResponses = 1;
+      }
     } else {
       numBlankResponses = 0;
     }
 
     if (numBlankResponses > 0) {
-      showUnansweredQuestionsModal(numBlankResponses, norp, norp.form.getAttribute("softedit") == "true");
+      showNumUnansweredQuestionsModal(numBlankResponses, nextOrPreviousButton, nextOrPreviousButton.form.getAttribute("softedit") == "true");
       return null;
     }
   }
-  await nextPage(norp);
+
+  await nextPage(nextOrPreviousButton);
 }
 
 /**
@@ -627,32 +621,15 @@ function getNextQuestionId() {
   return nextQuestionNode.value.value;
 }
 
-// TODO: move these to a separate file
-export function showLoadingIndicator() {
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.id = 'loadingIndicator';
-    loadingIndicator.innerHTML = '<div class="spinner"></div>';
-    document.body.appendChild(loadingIndicator);
-}
-
-export function hideLoadingIndicator() {
-  const loadingIndicator = document.getElementById('loadingIndicator');
-  if (loadingIndicator) {
-    document.body.removeChild(loadingIndicator);
-  }
-}
-
-// norp == next or previous button (which ever is clicked...)
 // The root is defined as null, so if the question is not the same as the
-// current value in the questionQueue. Add it.  Only the root should be effected.
-// NOTE: if the root has no children, add the current question to the queue
-// and call next().
-async function nextPage(norp) {
-  const questionElement = norp.form;
+// current value in the questionQueue, or root has no children, add it.
+async function nextPage(nextOrPreviousButton) {
+  const questionElement = nextOrPreviousButton.form;
+
+  // These are grid elements that aren't shown due to displayifs and previous response evaluations.
+  // See: MRE survey - "On the days that you did these household or shopping activities, ..."
+  // legacy code: 'id' is undef for MRE survey. 'question-id' exists, but current behavior is aligned with production data.
   questionElement.querySelectorAll("[data-hidden]").forEach((x) => {
-    // These are grid elements that aren't shown due to displayifs and previous response evaluations.
-    // See: MRE survey - "On the days that you did these household or shopping activities, ..."
-    console.log('TODO: (verify behavior) HIDDEN ELEMENT (setResponsesInState)', x);
     x.value = "true"
     setResponsesInState(questionElement, x.value, x.id)
   });
@@ -751,7 +728,6 @@ function exitLoop(nextQuestionEle) {
   return nextQuestionEle;
 }
 
-
 /**
  * Update the active question in the DOM.
  * Identifies the existing question and swaps it with the new question.
@@ -761,7 +737,7 @@ function exitLoop(nextQuestionEle) {
  */
 export function swapVisibleQuestion(questionEle) {
   // return early if the renderer tool is active and displaying the full question list.
-  if (moduleParams.renderObj?.renderFullQuestionList) return;
+  if (moduleParams.renderFullQuestionList) return;
 
   if (!questionEle) {
     console.error(`swapVisibleQuestion: questionEle is null or undefined.`);
@@ -782,7 +758,7 @@ export function swapVisibleQuestion(questionEle) {
   }
 
   // Ensure the question is appended to the active DOM before calling displayQuestion for accessibility.
-  displayQuestion(questionEle);
+  prepareQuestionDOM(questionEle);
 
   return questionEle;
 }
@@ -830,10 +806,9 @@ function removeExtraBRElements(rootElement) {
 
 // Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
-export function displayQuestion(questionElement) {
-
+export function prepareQuestionDOM(questionElement) {
   // Fail gently in the renderer tool.
-  if (!questionElement && !moduleParams.renderObj.activate) return;
+  if (!questionElement && !moduleParams.activate) return;
   
   questionFocusSet = false;
 
@@ -841,15 +816,17 @@ export function displayQuestion(questionElement) {
   const forIDElementArray = questionElement.querySelectorAll("span[forid]");
   if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
 
+  /////////////////////
   [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) => {
-    console.warn('TODO: (rm document search) - input[data-max-validation-dependency]');
+    console.warn('TODO: REMOVE? NOT FOUND in DOM (rm document search) - input[data-max-validation-dependency]');
     x.max = document.getElementById(x.dataset.maxValidationDependency).value
   });
 
   [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) => {
-    console.warn('TODO: (rm document search) - input[data-min-validation-dependency]');
+    console.warn('TODO: REMOVE? NOT FOUND in DOM (rm document search) - input[data-min-validation-dependency]');
     x.min = document.getElementById(x.dataset.minValidationDependency).value;
   });
+  ///////////////////
 
   // check all responses for next question
   [...questionElement.querySelectorAll('[displayif]')].forEach((elm) => {
@@ -984,7 +961,7 @@ export function displayQuestion(questionElement) {
   }
 
   // Remove the reset answer button if there are no response inputs
-  const numResponseInputs = getNumResponseInputs(questionElement);
+  const numResponseInputs = countResponseInputs(questionElement);
   if (numResponseInputs === 0 && questionElement.id !== 'END') {
     const resetButton = questionElement.querySelector('.reset');
     if (resetButton) {
@@ -998,10 +975,10 @@ export function displayQuestion(questionElement) {
   questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 150);
 
   // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
-  if (!moduleParams.renderObj.isRenderer) {
+  if (!moduleParams.isRenderer) {
     handleUserScrollLocation();
     setTimeout(() => {
-      manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement);
+      questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
     }, 500);
   }
 }
@@ -1023,142 +1000,6 @@ function isMobileDevice() {
   return window.matchMedia('(max-width: 767px)').matches;
 }
 
-// Initialize the question text and focus management for screen readers.
-// This drives the screen reader's question announcement and focus when a question is loaded.
-export function manageAccessibleQuestion(fieldsetEle, isModalClose = false) {
-  //reset the questionFocusSet flag on modal close so the question is read by the screen reader.
-  if (isModalClose) questionFocusSet = false;
-
-  if (fieldsetEle && !questionFocusSet) {
-    // Announce the question text
-    let { text: questionText, focusNode } = buildQuestionText(fieldsetEle);
-
-    // Make sure focusable element is in the right location for screen reader focus management.
-    let focusableEle = fieldsetEle.querySelector('span[tabindex="0"]');
-    if (!focusableEle) {
-      focusableEle = document.createElement('span');
-      focusableEle.setAttribute('tabindex', '0');
-      focusableEle.style.cssText = `
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      `;
-      fieldsetEle.insertBefore(focusableEle, focusNode);
-    }
-
-    // For VoiceOver, update the focusable element with the question text.
-    focusableEle.textContent = '';
-
-    const isTable = !!fieldsetEle.querySelector('table')
-    if (isTable) questionText += ' Please use your arrow keys to interact with the table below.'
-
-    setTimeout(() => {
-      focusableEle.textContent = questionText;
-      focusableEle.focus();
-    }, 100);
-
-    questionFocusSet = true;
-  }
-}
-
-// Build the question text for screen readers.
-// Calculate the breakpoint between question and responses for accessible focus management.
-// Focus on the invisible focusable element to manage screen reader focus.
-// This sets the starting accessible control point just after the question text and before the responses list or table. 
-function buildQuestionText(fieldsetEle) {
-  let mainQuestionText = '';
-  let focusNode = null;
-
-  // The conditions for building textContent (survey questions) for the screen reader.
-  const textNodeConditional = (node) => node.nodeType === Node.TEXT_NODE || (node.nodeType === Node.ELEMENT_NODE && !['INPUT', 'BR', 'LABEL', 'TABLE'].includes(node.tagName) && !node.classList.contains('response'));
-  const childNodes = Array.from(fieldsetEle.childNodes);
-
-  for (const node of childNodes) {
-    if (textNodeConditional(node)) {
-      mainQuestionText += node.textContent.trim() + ' ';
-    } else if (node.tagName === 'BR') {
-      continue; // Skip breaks (some questions have multiple paragraphs).
-    } else {
-      focusNode = node; // The focus node splits questions and responses. The invisible focusable element is placed here.
-      break;
-    }
-  }
-
-  // If a breakpoint isn't found (common in intros where there are no responses), set it to the last child node.
-  // For that case, we don't need to search for additional questions.
-  if (!focusNode) {
-    focusNode = childNodes[childNodes.length - 1];
-  } else {
-    handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNode);
-  }
-
-  // Return the focus node for screen reader focus management.
-  return { text: mainQuestionText.trim(), focusNode };
-}
-
-// Find additional questions (e.g. QoL multi-question surveys).
-// Start after the focus node since the initial question is handled above for all cases.
-// Swap those nodes (text, <b>, <u>, <i>, and embedded <br>) into divs and add a tabindex to make them focusable for screen reader accessibility.
-function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNode) {
-  let currentQuestion = '';
-  let nodesToRemove = [];
-
-  let startIndex = childNodes.indexOf(focusNode) + 1;
-  for (let i = startIndex; i < childNodes.length; i++) {
-    const node = childNodes[i];
-
-    // Stop at the first input/Table/Label node. Multi-question surveys don't have these nodes.
-    // Note: This may require future adjustment depending on future survey structure.
-    if (['INPUT', 'TABLE', 'LABEL'].includes(node.tagName)) {
-      break;
-    }
-
-    // If the node is a text node and not empty, add it to the current question.
-    if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim() !== ''){
-      currentQuestion += node.textContent.trim() + ' ';
-      nodesToRemove.push(node);
-    // If currentQuestion is popluated and the node is a <br>, that marks the end of a question. Note: exclude text nodes with '\n' only.
-    // Wrap the current question in a div and add a tabindex. Remove the next <br> node if it exists to preserve spacing.
-    } else if (['U', 'B', 'I'].includes(node.tagName)) {
-      const tag = node.tagName.toLowerCase();
-      currentQuestion += `<${tag}>${node.textContent.trim()}</${tag}> `;
-      nodesToRemove.push(node);
-
-    // If currentQuestion is popluated and the node is a <br>, retain the br for accurate spacing.
-    } else if (node.tagName === 'BR') {
-      if (currentQuestion && currentQuestion.trim() !== '') {
-        currentQuestion += '<br>';
-        nodesToRemove.push(node);
-      }
-    }
-    // If currentQuestion is popluated and the node is a <div>, these parameters mark the end of the quesiton.
-    else if (currentQuestion && currentQuestion.trim() !== '' && node.classList?.contains('response')) {
-        const div = document.createElement('div');
-        div.innerHTML = currentQuestion.trim();
-        div.setAttribute('tabindex', '0');
-        div.setAttribute('role', 'alert');
-
-        // Insert the new div before the first node to remove
-        fieldsetEle.insertBefore(div, nodesToRemove[0]);
-
-        // Remove the tracked nodes in reverse order
-        for (let j = nodesToRemove.length - 1; j >= 0; j--) {
-          fieldsetEle.removeChild(nodesToRemove[j]);
-        }
-
-        // Reset the current question and nodes to remove to begin searching for the next question.
-        nodesToRemove = [];
-        currentQuestion = '';
-    }
-  }
-}
-
 // Check whether the browser supports "month" input type.
 // Browsers that do not support 'month' use 'text' input type fallback.
 // So input.type === 'month' -> true when supported and false otherwise.
@@ -1171,7 +1012,7 @@ function isMonthInputSupported() {
   return isSupported;
 }
 
-export async function previousClicked() {
+export async function previousButtonClicked() {
   // Get the previousElement from questionQueue
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) === "_CONTINUE") {
@@ -1259,7 +1100,7 @@ export function gridHasAllAnswers(questionFieldset) {
   },true)
 }
 
-export function numberOfUnansweredGridQuestions(questionFieldset) {
+export function numUnansweredGridQuestions(questionFieldset) {
   let gridRows = Array.from(questionFieldset.querySelectorAll("tr[data-gridrow='true']"));
   const checked = (element) => element.checked;
   return gridRows.reduce( (acc,current) => {
@@ -1299,118 +1140,4 @@ export function getSelectedResponses(questionElement) {
   const hiddenInputs = [...questionElement.querySelectorAll("input[type='hidden']")].filter((x) => x.hasAttribute("checked"));
 
   return [...radiosAndCheckboxes, ...inputFields, ...hiddenInputs];
-}
-
-// RegExp to segment text conditions passed in as a string with '[', '(', ')', ',', and ']'. https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
-const evaluateConditionRegex = /[(),]/g;
-
-/**
- * Try to evaluate using mathjs. Use fallback evaluation in the catch block.
- * math.evaluate(<string>) is a built-in mathjs func to evaluate string as mathematical expression.
- * @param {string} evalString - The string condition (markdown) to evaluate.
- * @returns {any}- The result of the evaluation.
- */
-
-export function evaluateCondition(evalString) {
-  evalString = decodeURIComponent(evalString);
-
-  try {
-    return math.evaluate(evalString)
-  } catch (err) { //eslint-disable-line no-unused-vars
-    //console.log('Using custom evaluation for:', evalString); // Temp for debugging
-    
-    let displayIfStack = [];
-    let lastMatchIndex = 0;
-
-    // split the displayif string into a stack of strings and operators
-    for (const match of evalString.matchAll(evaluateConditionRegex)) {
-      displayIfStack.push(evalString.slice(lastMatchIndex, match.index)); 
-      displayIfStack.push(match[0]);
-      lastMatchIndex = match.index + 1;
-    }
-
-    // remove all blanks
-    displayIfStack = displayIfStack.filter((x) => x != "");
-
-    const appState = getStateManager();
-
-    // Process the stack
-    while (displayIfStack.indexOf(")") > 0) {
-      const stackEnd = displayIfStack.indexOf(")");
-
-      if (isValidFunctionSyntax(displayIfStack, stackEnd)) {
-        const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd, appState);
-        const functionResult = knownFunctions[func](arg1, arg2, appState);
-        //console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2, 'RESULT', functionResult); // Temp for debugging
-
-        // Replace from stackEnd-5 to stackEnd with the results. Splice and replace the function call with the result.
-        displayIfStack.splice(stackEnd - 5, 6, functionResult);
-
-      } else {
-        throw { Message: "Bad Displayif Function: " + evalString, Stack: displayIfStack };
-      }
-    }
-
-    return displayIfStack[0];
-  }
-}
-
-/**
- * Test the string-based function syntax for a valid function call (converting markdown function strings to function calls).
- * These are legacy, hardcoded conditions that must apply for 'knownFunctions' to evaluate.
- * @param {array} stack - The stack of string-based conditions to evaluate.
- * @param {number} stackEnd - The index of the closing parenthesis in the stack.
- */
-
-const isValidFunctionSyntax = (stack, stackEnd) => {
-  return stack[stackEnd - 4] === "(" &&
-    stack[stackEnd - 2] === "," &&
-    stack[stackEnd - 5] in knownFunctions
-}
-
-/**
- * Get the current function and arguments to evaluate from the stack.
- * func, arg1, arg2 are in the stack at specific locations: callEnd-5, callEnd-3, callEnd-1
- * First, the individual arguments are evaluated to resolve any string-based conditions.
- * Then, the function and arguments are returned as an object for evaluation as an expression.
- * @param {array} stack - The stack of string-based conditions to evaluate.
- * @param {number} callEnd - The index of the closing parenthesis in the stack.
- * @param {object} appState - The application state.
- * @returns {object} - The function and arguments to evaluate.
- */
-
-function getFunctionArgsFromStack(stack, callEnd, appState) {
-  const func = stack[callEnd - 5];
-  
-  let arg1 = stack[callEnd - 3];
-  arg1 = evaluateArg(arg1, appState);
-
-  let arg2 = stack[callEnd - 1];
-  arg2 = evaluateArg(arg2, appState);
-
-  return { func, arg1, arg2 };
-}
-
-/**
- * Evaluate the individual args embedded in conditions.
- * Return early for: undefined, hardcoded numbers and booleans (they get evaluated in mathjs), and known loop markers.
- * @param {string} arg - The argument to evaluate.
- * @param {object} appState - The application state.
- * @returns {string} - The evaluated argument.
- */
-
-function evaluateArg(arg, appState) {
-  if (arg === null || arg === 'undefined') return arg;
-  else if (typeof arg === 'number' || parseInt(arg, 10) || parseFloat(arg)) return arg;
-  else if (['true', true, 'false', false].includes(arg)) return arg;
-  else if (arg === '#loop') return arg;
-
-  // Search for values in the surveyState. This search covers responses and 'previousResults' (values from prior surveys passed in on initialization).
-  const foundValue = appState.findResponseValue(arg);
-  if (foundValue) {
-    return foundValue;
-  } else {
-    console.log('RETURNING (default) empty string for:', arg); // Temp for debugging
-    return '';
-  }
 }

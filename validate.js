@@ -237,10 +237,13 @@ function validate_text(inputElement) {
     }
 
     let checkConfirmation = "confirm" in inputElement.dataset || "confirmationFor" in inputElement.dataset;
+    console.warn('CONFIRMATION (CASE NOT FOUND/HANDLED YET)', checkConfirmation, inputElement);
 
     if (checkConfirmation){
         let otherId = inputElement.dataset.confirm ?? inputElement.dataset.confirmationFor
         let otherElement = document.getElementById(otherId)
+
+        console.warn('CONFIRMATION (CASE NOT FOUND/HANDLED YET) - other element', otherElement);
 
         if (otherElement.value != inputElement.value) {
             validationError(inputElement, translate("validationMismatch"));

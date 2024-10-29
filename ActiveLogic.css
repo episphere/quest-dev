@@ -31,14 +31,12 @@
 }
 
 /* this is an answer with a text area...*/
-
 .freeresponse {
   display: flex;
   width: 80%;
 }
 
 /* select labels inside freesponses */
-
 .freeresponse label {
   flex-grow: 1;
   text-align: left;
@@ -72,91 +70,29 @@ input[type="text"] {
   flex-grow: 1;
 }
 
-/* CSS for grids... '.quest-grid' impacts all grids and list grids. '.quest-grid.table-layout' (increased specificity) handles the new table-based grids. */
-/* CSS for ALL (list and table) Grids... */
-.quest-grid {
+/* CSS for grids */
+.quest-grid.table-layout {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
   font-family: Arial, Helvetica, sans-serif;
   font-size: medium;
   margin-top: 10px;
+  overflow-x: auto;
+  gap: 1px;
+  overflow-y: visible;
+  display: inline-table;
 }
 
-.quest-grid * {
+.quest-grid.table-layout * {
   padding: 4px;
   text-align: center;
 }
 
-/* CSS for LIST grids... TODO: the list CSS is deprecated. */
-.quest-grid {
-  display: grid;
-  grid-template-columns: auto repeat(12,minmax(0px,auto));
-  overflow-x: auto;
-  gap: 1px;
-  overflow-y: visible;
-}
-
-.quest-grid > .nr {
+.quest-grid.table-layout > .nr {
   grid-column-start: 1;
   text-align: start;
   align-self: center;
-}
-
-ul.quest-grid{
-  padding: 0px;
-  list-style-type: none;
-  min-width: min-content;
-}
-
-@media screen and (min-width: 576px) {
-  ul.quest-grid input{
-      display: inline;
-      height: 1rem;
-  }
-  ul.quest-grid label{
-      display: none;
-  }
-}
-
-/** 
-I chose 576px because this matches the default breakpoint
-for bootstrap -xs
-**/
-@media screen and (max-width: 576px) {
-  .quest-grid {
-      display: block;
-      width:100%;
-  }
-  ul.quest-grid {
-      min-width: min-content;
-      list-style-type: none;
-      text-align: left;
-  }
-  ul.quest-grid > li {
-      margin-top: 2px;
-  }
-
-  li {
-    list-style-type: none;
-  }
-
-  ul.quest-grid .hr {
-      display: none;
-  }
-
-  ul.quest-grid li.nr {
-      display: block;
-  }
-
-  ul.quest-grid li.nr:not(:first-child){
-      padding-top: 10px;
-  }   
-}
-
-/* CSS for TABLE grids... */
-.quest-grid.table-layout {
-  display: inline-table;
 }
 
 .quest-grid.table-layout tr {
@@ -169,8 +105,6 @@ for bootstrap -xs
   padding: .2vw;
   text-align: center;
   vertical-align: top;
-  height: auto;
-  position: relative;
   background-color: transparent;
   border: none;
   font-weight: normal;
@@ -182,8 +116,6 @@ for bootstrap -xs
   padding: clamp(5px, 1vw, 10px);
   text-align: center;
   vertical-align: middle;
-  height: auto;
-  position: relative;
   background-color: transparent;
   border: none;
   font-size: clamp(12px, 1.5vw, 16px);
@@ -193,13 +125,12 @@ for bootstrap -xs
   padding: .5vw;
   text-align: center;
   vertical-align: middle;
-  height: auto;
-  position: relative;
   background-color: transparent;
   border: none;
 }
 
-.quest-grid.table-layout th.nr, .quest-grid.table-layout td.nr {
+.quest-grid.table-layout th.nr,
+.quest-grid.table-layout td.nr {
   text-align: left;
   font-size: clamp(12px, 1.5vw, 16px);
 }
@@ -276,7 +207,8 @@ for bootstrap -xs
 
 @media screen and (min-width: 576px) {
   /* Emphasize the first table column. Then let the browser calculate the width for the remaining columns */
-  .quest-grid.table-layout th:first-child, .quest-grid td:first-child {
+  .quest-grid.table-layout th:first-child,
+  .quest-grid td:first-child {
     width: 25%;
     font-weight: normal;
     font-size: clamp(12px, 1.5vw, 16px);
@@ -288,7 +220,9 @@ I chose 576px because this matches the default breakpoint
 for bootstrap -xs
 **/
 @media screen and (max-width: 576px) {
-  .quest-grid.table-layout, .quest-grid.table-layout thead, .quest-grid.table-layout td  { 
+  .quest-grid.table-layout,
+  .quest-grid.table-layout thead,
+  .quest-grid.table-layout td  { 
     display: block;
   }
 

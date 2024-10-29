@@ -1,7 +1,8 @@
-import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, manageAccessibleQuestion, moduleParams } from "./questionnaire.js";
+import { rbAndCbClick, handleXOR, parseSSN, parsePhoneNumber, textboxinput, radioAndCheckboxUpdate, moduleParams } from "./questionnaire.js";
 import { clearValidationError } from "./validate.js";
-import { nextClick, previousClicked } from "./questionnaire.js";
+import { nextButtonClicked, previousButtonClicked } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
+import { manageAccessibleQuestion } from "./accessibleQuestionTextBuilder.js";
 
 // Debounced version of handleInputEvent
 const debouncedHandleInputEvent = debounce(handleInputEvent, 250);
@@ -52,8 +53,8 @@ function handleClickEvent(event) {
     // Handle text inputs in radio/checkbox lists (e.g. "Other" text inputs). They're inside a response container..
     // Auto-focus the text input if the outer response element (radio or checkbox) is clicked.
     // Note: Some are checkboxes and some are radios though they look the same.
-    // Skip in the renderer because focus() causes issues (ensure moduleParams.renderObj.activate === true).
-    if (!moduleParams.renderObj?.isRenderer) {
+    // Skip in the renderer because focus() causes issues (ensure moduleParams.activate === true).
+    if (!moduleParams.isRenderer) {
       const responseContainer = target.closest('.response');
       const textInputElement = responseContainer?.querySelector('input[type="text"], textarea');
       if (textInputElement && !textInputElement.value && target.checked) {
@@ -80,7 +81,7 @@ function handleChangeEvent(event) {
   // VoiceOver (MAC) handles table focus well, but JAWS (Windows) does not.
   // Ensure we're not in the renderer (skip this handling for the renderer).
   // We check if the environment is Windows and the target is a radio or checkbox to improve accessible UX for JAWS users.
-  if (!moduleParams.renderObj?.isRenderer && target.matches('input[type="radio"], input[type="checkbox"]')) {
+  if (!moduleParams.isRenderer && target.matches('input[type="radio"], input[type="checkbox"]')) {
     
     const isTable = target.closest('table') !== null;
 
@@ -114,7 +115,7 @@ function handleKeydownEvent(event) {
   }
 
   if (target.matches('input[type="text"], input[type="email"], input[type="tel"], textarea, select')) {
-    if (!moduleParams.renderObj?.isRenderer && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    if (!moduleParams.isRenderer && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
       handleUpDownArrowKeys(event);
     }
   }
@@ -195,7 +196,7 @@ function closeModalAndFocusQuestion(event) {
 
 // Custom Accessible handling for up/down arrow keys.
 // This ensures focus doesn't trap accessible navigation in lists that have 'Other' text inputs.
-// Only active when moduleParams.renderObj.activate is true (inactive in the renderer because focus() causes issues).
+// Only active when moduleParams.activate is true (inactive in the renderer because focus() causes issues).
 function handleUpDownArrowKeys(event) {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
@@ -434,7 +435,7 @@ async function stopSubmit(event) {
   switch (clickType) {
     case 'previous':
       resetChildren(event.target);
-      await previousClicked(buttonClicked);
+      await previousButtonClicked(buttonClicked);
       break;
 
     case 'reset':
@@ -446,7 +447,7 @@ async function stopSubmit(event) {
       break;
 
     case 'next':
-      await nextClick(buttonClicked);
+      await nextButtonClicked(buttonClicked);
       break;
 
     default:

@@ -118,3 +118,17 @@ export const submitModal = () => {
       </div>
     `;
 }
+
+export function showLoadingIndicator() {
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.id = 'loadingIndicator';
+    loadingIndicator.innerHTML = '<div class="spinner"></div>';
+    document.body.appendChild(loadingIndicator);
+}
+
+export function hideLoadingIndicator() {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    if (loadingIndicator) {
+        document.body.removeChild(loadingIndicator);
+    }
+}
