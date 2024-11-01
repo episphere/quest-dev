@@ -206,7 +206,7 @@ export class QuestionProcessor {
    */
   setCurrentQuestionIndex(updateType, value) {
     if (typeof updateType !== 'string') {
-      console.error('Error (setCurrentQuestionIndex). updateType must be a string')
+      moduleParams.errorLogger('Error (setCurrentQuestionIndex). updateType must be a string')
     }
     
     switch(updateType) {
@@ -220,13 +220,13 @@ export class QuestionProcessor {
       
       case 'update':
         if (typeof value !== 'number') {
-          console.error('Error (setCurrentQuestionIndex). value must be a number for update operations.')
+          moduleParams.errorLogger('Error (setCurrentQuestionIndex). value must be a number for update operations.')
         }
         this.currentQuestionIndex = value;
         break;
 
       default:
-        console.error('Error (setCurrentQuestionIndex): unhandled updateType', updateType, value);
+        moduleParams.errorLogger('Error (setCurrentQuestionIndex): unhandled updateType', updateType, value);
     }
   }
 
@@ -238,7 +238,7 @@ export class QuestionProcessor {
 
   findQuestion(questionID) {
     if (!questionID) {
-      console.error('Error, findQuestion (no questionID provided):', questionID); 
+      moduleParams.errorLogger('Error, findQuestion (no questionID provided):', questionID); 
     }
 
     let index;
@@ -254,13 +254,13 @@ export class QuestionProcessor {
     if (index !== -1) {
       const foundQuestion = this.processQuestion(index);
       if (!foundQuestion) {
-        console.error('Error: (findQuestion): question not found at index', index)
+        moduleParams.errorLogger('Error: (findQuestion): question not found at index', index)
       }
 
       return { question: foundQuestion, index: index };
     }
 
-    console.error(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
+    moduleParams.errorLogger(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
     return { question: null, index: -1 };
   }
 
@@ -273,13 +273,13 @@ export class QuestionProcessor {
 
   loadInitialQuestionOnStartup(questionID) {
     if (this.questions.length === 0) {
-      console.error('Error during initialization (loadInitialQuestion): no questions found', this.questions);
+      moduleParams.errorLogger('Error during initialization (loadInitialQuestion): no questions found', this.questions);
       return null;
     }
 
     const { question, index } = this.findQuestion(questionID);
     if (!question) {
-      console.error('Error during initialization (loadInitialQuestion): question not found', questionID);
+      moduleParams.errorLogger('Error during initialization (loadInitialQuestion): question not found', questionID);
       return null;
     }
 
@@ -304,7 +304,7 @@ export class QuestionProcessor {
       return nextQuestion.id;
     }
 
-    console.error(`Error, getNextSequentialQuestion (no next question to load): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+    moduleParams.errorLogger(`Error, getNextSequentialQuestion (no next question to load): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
     return null;
   }
 
@@ -317,7 +317,7 @@ export class QuestionProcessor {
 
   loadPreviousQuestion(previousQuestionID) {
     if (this.currentQuestionIndex <= 0) {
-      console.error(`Error, loadPreviousQuestion (Unhandled case: no previous question to load): ${moduleParams.questName}, question: ${previousQuestionID}`);
+      moduleParams.errorLogger(`Error, loadPreviousQuestion (Unhandled case: no previous question to load): ${moduleParams.questName}, question: ${previousQuestionID}`);
       return null;
     }
 
@@ -340,7 +340,7 @@ export class QuestionProcessor {
 
   loadNextQuestion(questionID) {
     if (this.currentQuestionIndex + 1 > this.questions.length) {
-      console.error(`Error, loadNextQuestion (unhandled case: at end of survey): ${moduleParams.questName}, question: ${questionID}, index: ${this.currentQuestionIndex}, length: ${this.questions.length}`);
+      moduleParams.errorLogger(`Error, loadNextQuestion (unhandled case: at end of survey): ${moduleParams.questName}, question: ${questionID}, index: ${this.currentQuestionIndex}, length: ${this.questions.length}`);
       return null;
     }
 
@@ -362,7 +362,7 @@ export class QuestionProcessor {
 
   getCurrentQuestion() {
     if (this.currentQuestionIndex > this.questions.length || this.currentQuestionIndex < 0) {
-      console.error(`Error, getCurrentQuestion (index out of range): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+      moduleParams.errorLogger(`Error, getCurrentQuestion (index out of range): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
       return null;
     }
 
@@ -446,7 +446,7 @@ export class QuestionProcessor {
 
   manageActiveQuestionClass(questionToLoad, questionToUnload) {
     if (!questionToLoad) {
-      console.error('Error, manageActiveQuestionClass (no question to load):', questionToLoad, questionToUnload);
+      moduleParams.errorLogger('Error, manageActiveQuestionClass (no question to load):', questionToLoad, questionToUnload);
       return null;
     }
 
@@ -477,7 +477,7 @@ export class QuestionProcessor {
       }
     }
 
-    console.error(`Error, findGridInputElement (element not found): ${moduleParams.questName}, elementID: ${elementID}`);
+    moduleParams.errorLogger(`Error, findGridInputElement (element not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
   }
 
@@ -541,14 +541,14 @@ export class QuestionProcessor {
     // If the loopMax questionID is found, update the loopData object with the new response.
     const loopDataIndex = this.loopDataArr.findIndex(loopData => loopData.loopMaxQuestionID === questionID);
     if (loopDataIndex === -1) {
-      console.error(`Error, checkLoopMaxData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
+      moduleParams.errorLogger(`Error, checkLoopMaxData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
       return;
     }
 
     // update the loopData object with the new response
     const updatedLoopMaxResponse = parseInt(response, 10);
     if (isNaN(updatedLoopMaxResponse)) {
-      console.error(`Error, checkLoopMaxData (invalid response): ${moduleParams.questName}, response: ${response}`);
+      moduleParams.errorLogger(`Error, checkLoopMaxData (invalid response): ${moduleParams.questName}, response: ${response}`);
       return;
     }
 
@@ -567,7 +567,7 @@ export class QuestionProcessor {
     const loopIndexRegex = /_(\d+)_(\d+)$/;
     const loopIndexMatch = questionID.match(loopIndexRegex);
     if (!loopIndexMatch && loopIndexMatch[1] && loopIndexMatch[2]) {
-      console.error(`Error, findQuestion (loop index not found): ${moduleParams.questName}, question: ${questionID}`);
+      moduleParams.errorLogger(`Error, findQuestion (loop index not found): ${moduleParams.questName}, question: ${questionID}`);
       return null;
     }
 
@@ -576,7 +576,7 @@ export class QuestionProcessor {
 
     const loopData = this.getLoopData();
     if (!loopData) {
-      console.error(`Error, findQuestion (loop data not found): ${moduleParams.questName}, question: ${questionID}`);
+      moduleParams.errorLogger(`Error, findQuestion (loop data not found): ${moduleParams.questName}, question: ${questionID}`);
       return null;
     }
 
@@ -602,7 +602,7 @@ export class QuestionProcessor {
     });
 
     if (endOfLoopIndex === -1) {
-      console.error(`Error, findEndOfLoop (no end of loop found): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+      moduleParams.errorLogger(`Error, findEndOfLoop (no end of loop found): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
       return { question: null, index: -1 }
     }
 
@@ -631,7 +631,7 @@ export class QuestionProcessor {
       }
     }
 
-    console.error(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
+    moduleParams.errorLogger(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
   }
 

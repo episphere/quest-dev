@@ -155,7 +155,7 @@ function exchangeValue(element, attrName, newAttrName) {
         const previousResultsErrorMessage = moduleParams.previousResults && typeof moduleParams.previousResults === 'object' && Object.keys(moduleParams.previousResults)?.length === 0 && attr.includes('isDefined')
           ? `\nUsing the Markup Renderer?\nEnsure your variables are added to Settings -> Previous Results in JSON format.\nEx: {"AGE": "45"}`
           : '';
-        console.error(`Module Coding Error: Evaluating ${element.id}:${attrName} expression ${attr}  => ${tmpVal} ${previousResultsErrorMessage}`)
+        moduleParams.errorLogger(`Module Coding Error: Evaluating ${element.id}:${attrName} expression ${attr}  => ${tmpVal} ${previousResultsErrorMessage}`)
         validationError(element, `Module Coding Error: ${element.id}:${attrName} ${previousResultsErrorMessage}`)
         return
       }
@@ -247,7 +247,7 @@ const resolveRuntimeConditions = (attribute) => {
   }
 
   if (!['valueLength', 'doesNotExist', 'exists', 'equals', 'isNotDefined'].some(substring => attributeConditionString.includes(substring))) {
-    console.error(`Unhandled attribute type in ${attributeConditionString} (resolveRuntimeConditions)`);
+    moduleParams.errorLogger(`Unhandled attribute type in ${attributeConditionString} (resolveRuntimeConditions)`);
   }
   
   return '';
@@ -502,7 +502,7 @@ function clearXORValidationMessage(inputElement) {
   }
 }
 
-export async function nextButtonClicked(nextOrPreviousButton) {
+export function nextButtonClicked(nextOrPreviousButton) {
   // Because next button does not have ID, modal will pass-in ID of question
   if (typeof nextOrPreviousButton == "string") {
     nextOrPreviousButton = moduleParams.questDiv.querySelector(`#${nextOrPreviousButton} .next`)
@@ -513,7 +513,7 @@ export async function nextButtonClicked(nextOrPreviousButton) {
     validateInput(elm)
   });
 
-  await analyzeFormResponses(nextOrPreviousButton);
+  analyzeFormResponses(nextOrPreviousButton);
 }
 
 function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
@@ -535,8 +535,8 @@ function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
     const continueButton = document.getElementById("modalContinueButton");
     continueButton.removeEventListener("click", continueButton.clickHandler);
     //await the store operation on 'continue without answering' click for correct screen reader focus
-    continueButton.clickHandler = async () => {
-      await nextPage(nextOrPreviousButton);
+    continueButton.clickHandler = () => {
+      getNextQuestion(nextOrPreviousButton);
     };
     continueButton.addEventListener("click", continueButton.clickHandler);
   }
@@ -554,7 +554,7 @@ function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
   });
 }
 
-async function analyzeFormResponses(nextOrPreviousButton) {
+function analyzeFormResponses(nextOrPreviousButton) {
   if (nextOrPreviousButton.form.getAttribute("softedit") === "true" || nextOrPreviousButton.form.getAttribute("hardedit") === "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = nextOrPreviousButton.form.querySelector('fieldset') || nextOrPreviousButton.form.querySelector('tbody');
@@ -597,8 +597,8 @@ async function analyzeFormResponses(nextOrPreviousButton) {
       return null;
     }
   }
-
-  await nextPage(nextOrPreviousButton);
+  
+  getNextQuestion(nextOrPreviousButton);
 }
 
 /**
@@ -623,7 +623,7 @@ function getNextQuestionId() {
 
 // The root is defined as null, so if the question is not the same as the
 // current value in the questionQueue, or root has no children, add it.
-async function nextPage(nextOrPreviousButton) {
+export function getNextQuestion(nextOrPreviousButton, revertOnStoreError = false) {
   const questionElement = nextOrPreviousButton.form;
 
   // These are grid elements that aren't shown due to displayifs and previous response evaluations.
@@ -633,9 +633,6 @@ async function nextPage(nextOrPreviousButton) {
     x.value = "true"
     setResponsesInState(questionElement, x.value, x.id)
   });
-
-  const appState = getStateManager();
-  await appState.syncToStore();
 
   if (checkValid(questionElement) === false) {
     return null;
@@ -650,7 +647,8 @@ async function nextPage(nextOrPreviousButton) {
   checkForSkips(questionElement);
 
   let nextQuestionId = getNextQuestionId();  
-
+  
+  const appState = getStateManager();
   const questionProcessor = appState.getQuestionProcessor();
 
   let nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
@@ -674,7 +672,7 @@ async function nextPage(nextOrPreviousButton) {
       nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
       nextQuestionEle = exitLoop(nextQuestionEle);
     } else {
-      console.error(`Error (nextPage): nextQuestionEle is not a question element. ${nextQuestionEle}`);
+      moduleParams.errorLogger(`Error (nextPage): nextQuestionEle is not a question element. ${nextQuestionEle}`);
       console.trace();
     }
   }
@@ -689,6 +687,10 @@ async function nextPage(nextOrPreviousButton) {
   }
 
   swapVisibleQuestion(nextQuestionEle);
+
+  if (!revertOnStoreError) {
+    appState.syncToStore(nextOrPreviousButton);
+  }
 }
 
 function exitLoop(nextQuestionEle) {
@@ -703,7 +705,7 @@ function exitLoop(nextQuestionEle) {
 
   // 0 is a valid loopMaxResponse value. That will result in jumping to the end of the loop on 'firstquestion' load.
   if (loopMaxResponse == null) {
-    console.error(`LoopData is null or undefined for ${nextQuestionEle.id}`);
+    moduleParams.errorLogger(`LoopData is null or undefined for ${nextQuestionEle.id}`);
     return nextQuestionEle;
   }
 
@@ -711,7 +713,7 @@ function exitLoop(nextQuestionEle) {
   const loopIndex = parseInt(nextQuestionEle.getAttribute("loopindx"));
 
   if (isNaN(loopMaxResponse) || isNaN(firstQuestion) || isNaN(loopIndex)) {
-    console.error(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextQuestionEle.id}: loopMax=${loopMaxResponse}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
+    moduleParams.errorLogger(`LoopMax, firstQuestion, or loopIndex is NaN for ${nextQuestionEle.id}: loopMax=${loopMaxResponse}, firstQuestion=${firstQuestion}, loopIndex=${loopIndex}`);
     return nextQuestionEle;
   }
 
@@ -740,7 +742,7 @@ export function swapVisibleQuestion(questionEle) {
   if (moduleParams.renderFullQuestionList) return;
 
   if (!questionEle) {
-    console.error(`swapVisibleQuestion: questionEle is null or undefined.`);
+    moduleParams.errorLogger(`swapVisibleQuestion: questionEle is null or undefined.`);
     return;
   }
 
@@ -818,12 +820,12 @@ export function prepareQuestionDOM(questionElement) {
 
   /////////////////////
   [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) => {
-    console.warn('TODO: REMOVE? NOT FOUND in DOM (rm document search) - input[data-max-validation-dependency]');
+    console.warn('TODO: REMOVE? NOT FOUND in DOM (document search) - input[data-max-validation-dependency]');
     x.max = document.getElementById(x.dataset.maxValidationDependency).value
   });
 
   [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) => {
-    console.warn('TODO: REMOVE? NOT FOUND in DOM (rm document search) - input[data-min-validation-dependency]');
+    console.warn('TODO: REMOVE? NOT FOUND in DOM (document search) - input[data-min-validation-dependency]');
     x.min = document.getElementById(x.dataset.minValidationDependency).value;
   });
   ///////////////////
@@ -1012,21 +1014,23 @@ function isMonthInputSupported() {
   return isSupported;
 }
 
-export async function previousButtonClicked() {
+export function getPreviousQuestion(nextOrPreviousButton, revertOnStoreError = false) {
   // Get the previousElement from questionQueue
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) === "_CONTINUE") {
     pv = questionQueue.previous();
   }
 
-  const previousElementID = pv.value.value;
-
   const appState = getStateManager();
-  await appState.syncToStore();
-
   const questionProcessor = appState.getQuestionProcessor();
+
+  if (!revertOnStoreError) {
+    appState.syncToStore(nextOrPreviousButton);
+  }
+
+  const previousElementID = pv.value.value;
   const previousQuestionEle = questionProcessor.loadPreviousQuestion(previousElementID);
-  
+
   swapVisibleQuestion(previousQuestionEle);
   restoreResponses(appState.getSurveyState(), previousElementID);
 }

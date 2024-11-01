@@ -9,6 +9,8 @@ const es = {
     "responseRequiredLabel": "Respuesta Requerida",
     "responseErrorLabel": "Respuesta Solicitada",
     "responseErrorBody": "Hay un error en esta respuesta. ¿Es correcta?",
+    "storeErrorLabel": "Error al guardar la respuesta",
+    "storeErrorBody": "Hubo un error al guardar su respuesta. Por favor, inténtelo de nuevo.",
     "submitLabel": "Enviar Respuestas",
     "submitBody": "¿Está seguro de que desea enviar sus respuestas?",
     "continueWithoutAnsweringButton": "Continuar Sin Responder",
@@ -17,6 +19,7 @@ const es = {
     "incorrectButton": "Incorrecto",
     "submitButton": "Enviar",
     "cancelButton": "Cancelar",
+    "closeButton": "Cerrar",
 
     "yes": "Sí",
     "no": "No",

@@ -9,6 +9,8 @@ const en = {
     "responseRequiredLabel": "Response Required",
     "responseErrorLabel": "Response Requested",
     "responseErrorBody": "There is an error with this response. Is this correct?",
+    "storeErrorLabel": "Error saving response",
+    "storeErrorBody": "There was an error saving your response. Please try again.",
     "submitLabel": "Submit Answers",
     "submitBody": "Are you sure you want to submit your answers?",
     "continueWithoutAnsweringButton": "Continue Without Answering",
@@ -17,6 +19,7 @@ const en = {
     "incorrectButton": "Incorrect",
     "submitButton": "Submit",
     "cancelButton": "Cancel",
+    "closeButton": "Close",
 
     "yes": "Yes",
     "no": "No",

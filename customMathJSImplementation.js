@@ -70,7 +70,7 @@ export const customMathJSFunctions = {
       case 'undefined':
         return false;
       default:
-        console.error(`unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
+        moduleParams.errorLogger(`unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
         return false;
     }
   },

@@ -237,9 +237,10 @@ function validate_text(inputElement) {
     }
 
     let checkConfirmation = "confirm" in inputElement.dataset || "confirmationFor" in inputElement.dataset;
-    console.warn('CONFIRMATION (CASE NOT FOUND/HANDLED YET)', checkConfirmation, inputElement);
-
+    
     if (checkConfirmation){
+        console.warn('CONFIRMATION (CASE NOT FOUND/HANDLED YET)', checkConfirmation, inputElement);
+        console.warn('INPUT ELEMENT DATASET', inputElement.dataset);
         let otherId = inputElement.dataset.confirm ?? inputElement.dataset.confirmationFor
         let otherElement = document.getElementById(otherId)
 

@@ -1,3 +1,5 @@
+import { moduleParams } from './questionnaire.js';
+
 // Initialize the question text and focus management for screen readers.
 // This drives the screen reader's question announcement and focus when a question is loaded.
 export function manageAccessibleQuestion(fieldsetEle, questionFocusSet, isModalClose = false) {
@@ -133,5 +135,255 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNo
             nodesToRemove = [];
             currentQuestion = '';
         }
+    }
+}
+
+// Close the modal and focus on the question text.
+// Re-build the question text and focus management for screen readers.
+export function closeModalAndFocusQuestion(event) {
+    const modal = moduleParams.questDiv.querySelector('#softModal');
+    const isWindowClick = event.target === modal;
+    const isButtonClick = ['close', 'modalCloseButton', 'modalContinueButton'].includes(event.target.id);
+
+    if (isWindowClick || isButtonClick) {
+        modal.style.display = 'none';
+
+        // Find the active question
+        const activeQuestion = moduleParams.questDiv.querySelector('.question.active');
+
+        if (activeQuestion) {
+            const isModalClose = true;
+            setTimeout(() => {
+                manageAccessibleQuestion(activeQuestion.querySelector('fieldset') || activeQuestion, isModalClose);
+            }, 500);
+        }
+    }
+}
+
+// Custom Accessible handling for up/down arrow keys.
+// This ensures focus doesn't trap accessible navigation in lists that have 'Other' text inputs.
+// Only active when moduleParams.activate is true (inactive in the renderer because focus() causes issues).
+export function handleUpDownArrowKeys(event) {
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        focusNextElement(event.target);
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        focusPreviousResponse(event.target);
+    }
+}
+
+// Get the next focusable element.
+// Important for JAWS compatibility with text input fields in radio/checkbox groups.
+function focusNextElement(currentElement) {
+    const focusableElements = 'a, button, input:not([type="hidden"]), label, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const allFocusable = Array.from(moduleParams.questDiv.querySelectorAll(focusableElements));
+
+    const currentIndex = allFocusable.indexOf(currentElement);
+    if (currentIndex !== -1) {
+        let newIndex = currentIndex;
+        let nextElement;
+
+        do {
+            newIndex++;
+            nextElement = allFocusable[newIndex];
+        } while (nextElement && (nextElement === currentElement || (nextElement.tagName === 'INPUT' && nextElement.type === 'text' && document.activeElement === nextElement)));
+
+        if (nextElement) {
+            setTimeout(() => {
+                nextElement.focus({ preventScroll: true })
+            }, 0);
+        }
+    }
+}
+
+// Get the previous focuasble 'response' div.
+// Important for JAWS compatibility with text input fields in radio/checkbox groups.
+function focusPreviousResponse(currentElement) {
+    const currentResponse = currentElement.closest('.response');
+    if (currentResponse) {
+        let previousResponse = currentResponse.previousElementSibling;
+        while (previousResponse && !previousResponse.classList.contains('response')) {
+            previousResponse = previousResponse.previousElementSibling;
+        }
+        if (previousResponse) {
+            const focusableElements = previousResponse.querySelectorAll('a, button, input:not([type="hidden"]), label, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (focusableElements.length > 0) {
+                setTimeout(() => {
+                    focusableElements[0].focus({ preventScroll: true });
+                }, 0);
+            }
+        }
+    }
+    return null;
+}
+
+// Function to handle radio button clicks and changes in lists.
+export function handleRadioCheckboxListEvents(event) {
+    const parentResponseDiv = event.target.closest('.response');
+    const eleToFocus = parentResponseDiv.querySelector('input') || parentResponseDiv;
+    updateAriaLiveSelectionAnnouncer(parentResponseDiv);
+    setTimeout(() => {
+        eleToFocus.focus({ preventScroll: true });
+    }, 100);
+}
+
+// Function to handle radio button clicks and changes in tables.
+// For accessibility. Focus management is seamless in VoiceOver (MAC) but flawed in JAWS (Windows).
+// This manages the screen reader's table focus with a hidden element inside a table cell.
+// The element moves to the cell when a radio button is clicked.
+export function handleRadioCheckboxTableEvents(event) {
+    const radioOrCheckbox = event.target;
+    const responseCell = radioOrCheckbox.closest('.response');
+
+    if (responseCell) {
+        const currentRow = responseCell.closest('tr');
+
+        switch (radioOrCheckbox.type) {
+            // If it's a radio click, focus the hidden element on the next question (the first column of the next row).
+            case 'radio': {
+
+                const nextRow = currentRow.nextElementSibling;
+                // If next row exists, focus the question (the first cell in the next row).
+                // Otherwise, focus the next question button so the user can continue.
+                nextRow
+                    ? focusNextTableRowQuestion(nextRow)
+                    : focusNextQuestionButton();
+
+                break;
+            }
+
+            // If it's a checkbox click, focus the hidden element on the selection so the user can continue making selections.
+            // If middle of row, place focus back on the checkbox.
+            // If end of row, focus the next question button so the user can continue.
+            // If end of last row, focus the next question button so the user can continue.
+            case 'checkbox': {
+                updateAriaLiveSelectionAnnouncerTable(responseCell);
+                const nextCell = responseCell.nextElementSibling;
+                const isLastCellInRow = !nextCell;
+                const isLastRow = !currentRow.nextElementSibling;
+
+                if (isLastRow && isLastCellInRow) {
+                    focusNextQuestionButton();
+                } else {
+                    focusSelectedCheckbox(responseCell);
+                }
+                break;
+            }
+
+            default:
+                moduleParams.errorLogger('RadioCheckboxTableEvent: Invalid event type', event.type);
+        }
+    }
+}
+
+// Update the aria-live region with the current selection announcement in a list (for screen readers).
+export function updateAriaLiveSelectionAnnouncer(responseDiv) {
+    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
+    const label = responseDiv.querySelector('label');
+    const input = responseDiv.querySelector('input[type="checkbox"], input[type="radio"]');
+
+    if (!liveRegion || !label || !input) {
+        return;
+    }
+
+    const actionText = input.checked ? 'Selected.' : 'Unselected.';
+    const isTable = responseDiv.closest('table') !== null;
+    const announcementText = isTable
+        ? `${actionText}`
+        : `${label.textContent} ${actionText}`;
+
+    liveRegion.textContent = '';
+
+    setTimeout(() => {
+        liveRegion.textContent = announcementText;
+    }, 250);
+}
+
+// Update the aria-live region with the current selection announcement in a table (for screen readers).
+// Note: cell-specific targeting is required for dependable selection announcements.
+export function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
+    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
+    const cell = responseDiv.closest('td'); // Get the closest table cell (td)
+    const label = cell?.querySelector('label'); // Find the label within the cell
+    const input = cell?.querySelector('input[type="checkbox"], input[type="radio"]');
+
+    if (!liveRegion || !cell || !label || !input) {
+        return;
+    }
+
+    const actionText = input.checked ? 'Selected.' : 'Unselected.';
+    const announcementText = `${label.textContent} ${actionText}`;
+
+    liveRegion.textContent = '';
+    setTimeout(() => {
+        liveRegion.textContent = announcementText;
+    }, 250);
+}
+
+function focusNextTableRowQuestion(nextRow) {
+    setTimeout(() => {
+        const focusHelper = getFocusHelper();
+        if (!focusHelper) return;
+
+        const nextQuestionCell = nextRow.querySelector('th');
+        if (!nextQuestionCell) {
+            moduleParams.errorLogger('RadioCheckboxTableEvent: Next question cell not found', nextRow);
+            return;
+        }
+
+        nextQuestionCell.appendChild(focusHelper);
+        focusHelper.focus({ preventScroll: true });
+    }, 100);
+}
+
+// Focus the next question button after a selection is made.
+// This handles the last row's selection in a radio table and the final selectable cell in a checkbox table.
+function focusNextQuestionButton() {
+    setTimeout(() => {
+        const focusHelper = getFocusHelper();
+        if (!focusHelper) return;
+
+        const activeQuestion = moduleParams.questDiv.querySelector('.question.active');
+        if (!activeQuestion) {
+            moduleParams.errorLogger('Active question not found', document.activeElement);
+            return;
+        }
+
+        const nextQuestionButton = activeQuestion.querySelector('button.next');
+        if (!nextQuestionButton) {
+            moduleParams.errorLogger('Next question button not found', activeQuestion);
+            return;
+        }
+
+        nextQuestionButton.appendChild(focusHelper);
+        focusHelper.focus({ preventScroll: true });
+    }, 100);
+}
+
+function focusSelectedCheckbox(responseCell) {
+    setTimeout(() => {
+        const focusHelper = getFocusHelper();
+        if (!focusHelper) return;
+
+        responseCell.appendChild(focusHelper);
+        focusHelper.focus({ preventScroll: true });
+    }, 100);
+}
+
+function getFocusHelper() {
+    const focusHelper = moduleParams.questDiv.querySelector('#srFocusHelper');
+    if (!focusHelper) {
+        moduleParams.errorLogger('Focus helper not found');
+        return null;
+    }
+
+    return focusHelper;
+}
+
+export function clearSelectionAnnouncement() {
+    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
+    if (liveRegion) {
+        liveRegion.textContent = '';
     }
 }

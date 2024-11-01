@@ -145,6 +145,6 @@ export function restoreResponses(results, questionID) {
     handleObjectResponse(formElement, response);
 
   } else {
-    console.error('RESTORE RESPONSES: (unhandled response type):', response);
+    moduleParams.errorLogger('RESTORE RESPONSES: (unhandled response type):', response);
   }
 }

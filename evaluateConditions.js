@@ -18,7 +18,6 @@ export function evaluateCondition(evalString) {
     try {
         return math.evaluate(evalString)
     } catch (err) { //eslint-disable-line no-unused-vars
-        //console.log('Using custom evaluation for:', evalString); // Temp for debugging
 
         let displayIfStack = [];
         let lastMatchIndex = 0;
@@ -42,7 +41,6 @@ export function evaluateCondition(evalString) {
             if (isValidFunctionSyntax(displayIfStack, stackEnd)) {
                 const { func, arg1, arg2 } = getFunctionArgsFromStack(displayIfStack, stackEnd, appState);
                 const functionResult = knownFunctions[func](arg1, arg2, appState);
-                //console.warn('FUNC:', func, 'ARG1:', arg1, 'ARG2:', arg2, 'RESULT', functionResult); // Temp for debugging
 
                 // Replace from stackEnd-5 to stackEnd with the results. Splice and replace the function call with the result.
                 displayIfStack.splice(stackEnd - 5, 6, functionResult);
@@ -95,6 +93,7 @@ function getFunctionArgsFromStack(stack, callEnd, appState) {
 /**
  * Evaluate the individual args embedded in conditions.
  * Return early for: undefined, hardcoded numbers and booleans (they get evaluated in mathjs), and known loop markers.
+ * Otherwise, search for values in the surveyState. This search covers responses and 'previousResults' (values from prior surveys passed in on initialization).
  * @param {string} arg - The argument to evaluate.
  * @param {object} appState - The application state.
  * @returns {string} - The evaluated argument.
@@ -105,13 +104,5 @@ function evaluateArg(arg, appState) {
     else if (typeof arg === 'number' || parseInt(arg, 10) || parseFloat(arg)) return arg;
     else if (['true', true, 'false', false].includes(arg)) return arg;
     else if (arg === '#loop') return arg;
-
-    // Search for values in the surveyState. This search covers responses and 'previousResults' (values from prior surveys passed in on initialization).
-    const foundValue = appState.findResponseValue(arg);
-    if (foundValue) {
-        return foundValue;
-    } else {
-        console.log('RETURNING (default) empty string for:', arg); // Temp for debugging
-        return '';
-    }
+    else return appState.findResponseValue(arg) ?? '';
 }

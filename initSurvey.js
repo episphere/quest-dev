@@ -73,7 +73,7 @@ async function fetchAndProcessResources() {
 
         return retrievedData;
     } catch (error) {
-        console.error('Error fetching retrieve function and css:', error);
+        moduleParams.errorLogger('Error fetching retrieve function and css:', error);
         return null;
     }
 }

@@ -119,6 +119,30 @@ export const submitModal = () => {
     `;
 }
 
+export const storeErrorModal = () => {
+
+    return `
+      <div class="modal" id="storeErrorModal" tabindex="-1" role="dialog" aria-labelledby="storeErrorModalTitle" aria-modal="true" aria-describedby="storeErrorModalBody">
+          <div class="modal-dialog" role="document">
+              <div class="modal-content">
+                  <div class="modal-header">
+                      <h5 class="modal-title" id="storeErrorModalTitle">${translate('storeErrorLabel')}</h5>
+                      <button type="button" class="close ms-auto" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                          <span>&times;</span>
+                      </button>
+                  </div>
+                  <div id="modalResponseBody" class="modal-body">
+                      <p>${translate('storeErrorBody')}</p>
+                  </div>
+                  <div id="storeErrorModalFooter" class="modal-footer text-center">
+                      <button type="button" id="cancelModalButton" class="btn btn-danger mx-auto" data-dismiss="modal" data-bs-dismiss="modal">${translate('closeButton')}</button>
+                  </div>
+              </div>
+          </div>
+      </div>
+    `;
+}
+
 export function showLoadingIndicator() {
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loadingIndicator';
