@@ -15,7 +15,10 @@ export function addEventListeners() {
   moduleParams.questDiv.addEventListener('keyup', handleKeyupEvent);
   moduleParams.questDiv.addEventListener('input', debouncedHandleInputEvent);
   moduleParams.questDiv.addEventListener('focusout', handleBlurFocusoutEvent);
-  moduleParams.questDiv.addEventListener('submit', handleSubmitEvent);
+  moduleParams.questDiv.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await handleSubmitEvent(event);  // Calls the async function
+  });
 
   // Attach event listeners to modal and close buttons (for screen readers)
   // Modals are at the questDiv level, not embedded in the question.
@@ -163,16 +166,16 @@ function handleInputEvent(event) {
   }
 }
 
-function handleSubmitEvent(event) {
+async function handleSubmitEvent(event) {
   const target = event.target;
 
   if (target.matches('.question') || target.closest('.question')) {
-      handleQuestButtons(event);
+      await handleQuestButtons(event);
   }
 }
 
 // Handle the next, reset, and back buttons
-function handleQuestButtons(event) {
+async function handleQuestButtons(event) {
   event.preventDefault();
 
   // Clear the selection announcement
@@ -184,7 +187,7 @@ function handleQuestButtons(event) {
   switch (clickType) {
     case 'previous':
       resetChildren(event.target);
-      getPreviousQuestion(buttonClicked);
+      await getPreviousQuestion(buttonClicked);
       break;
 
     case 'reset':
@@ -196,7 +199,7 @@ function handleQuestButtons(event) {
       break;
 
     case 'next':
-      nextButtonClicked(buttonClicked);
+      await nextButtonClicked(buttonClicked);
       break;
 
     default:

@@ -1,6 +1,6 @@
 import { Tree } from "./tree.js";
-import { validateInput, validationError } from "./validate.js"
-import { translate } from "./common.js";
+import { clearValidationError, validateInput, validationError } from "./validate.js"
+import { hideLoadingIndicator, translate, showLoadingIndicator } from "./common.js";
 import { math } from './customMathJSImplementation.js';
 import { restoreResponses } from "./restoreResponses.js";
 import { getStateManager } from "./stateManager.js";
@@ -502,7 +502,7 @@ function clearXORValidationMessage(inputElement) {
   }
 }
 
-export function nextButtonClicked(nextOrPreviousButton) {
+export async function nextButtonClicked(nextOrPreviousButton) {
   // Because next button does not have ID, modal will pass-in ID of question
   if (typeof nextOrPreviousButton == "string") {
     nextOrPreviousButton = moduleParams.questDiv.querySelector(`#${nextOrPreviousButton} .next`)
@@ -513,48 +513,10 @@ export function nextButtonClicked(nextOrPreviousButton) {
     validateInput(elm)
   });
 
-  analyzeFormResponses(nextOrPreviousButton);
+  await analyzeFormResponses(nextOrPreviousButton);
 }
 
-function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
-  const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
-  
-  const modalID = soft ? 'softModal' : 'hardModal';
-  const modal = new bootstrap.Modal(document.getElementById(modalID));
-  const softModalText = translate("softPrompt");
-  const hardModalText = translate("hardPrompt", [num > 1 ? "s" : ""]);
-
-  const modalBodyTextId = soft ? "modalBodyText" : "hardModalBodyText";
-  const modalBodyTextEle = document.getElementById(modalBodyTextId);
-  
-  modalBodyTextEle.innerText = `${prompt} ${soft ? softModalText : hardModalText}`;
-  modalBodyTextEle.setAttribute('tabindex', '0');
-  modalBodyTextEle.setAttribute('role', 'alert');
-
-  if (soft) {
-    const continueButton = document.getElementById("modalContinueButton");
-    continueButton.removeEventListener("click", continueButton.clickHandler);
-    //await the store operation on 'continue without answering' click for correct screen reader focus
-    continueButton.clickHandler = () => {
-      getNextQuestion(nextOrPreviousButton);
-    };
-    continueButton.addEventListener("click", continueButton.clickHandler);
-  }
-
-  modal.show();
-
-  // Set focus to the modal title
-  document.getElementById("softModalTitle").focus();
-
-  let modalElement = modal._element;
-  modalElement.querySelector('.close').addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-      modal.hide();
-    }
-  });
-}
-
-function analyzeFormResponses(nextOrPreviousButton) {
+async function analyzeFormResponses(nextOrPreviousButton) {
   if (nextOrPreviousButton.form.getAttribute("softedit") === "true" || nextOrPreviousButton.form.getAttribute("hardedit") === "true") {
     // Fieldset is the parent of the inputs for all but grid questions. Grid questions are in a table.
     const fieldset = nextOrPreviousButton.form.querySelector('fieldset') || nextOrPreviousButton.form.querySelector('tbody');
@@ -597,8 +559,45 @@ function analyzeFormResponses(nextOrPreviousButton) {
       return null;
     }
   }
-  
-  getNextQuestion(nextOrPreviousButton);
+
+  await getNextQuestion(nextOrPreviousButton);
+}
+
+function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
+  const prompt = translate("basePrompt", [num > 1 ? "are" : "is", num, num > 1 ? "s" : ""]);
+
+  const modalID = soft ? 'softModal' : 'hardModal';
+  const modal = new bootstrap.Modal(document.getElementById(modalID));
+  const softModalText = translate("softPrompt");
+  const hardModalText = translate("hardPrompt", [num > 1 ? "s" : ""]);
+
+  const modalBodyTextId = soft ? "modalBodyText" : "hardModalBodyText";
+  const modalBodyTextEle = document.getElementById(modalBodyTextId);
+
+  modalBodyTextEle.innerText = `${prompt} ${soft ? softModalText : hardModalText}`;
+  modalBodyTextEle.setAttribute('tabindex', '0');
+  modalBodyTextEle.setAttribute('role', 'alert');
+
+  if (soft) {
+    const continueButton = document.getElementById("modalContinueButton");
+    continueButton.removeEventListener("click", continueButton.clickHandler);
+    continueButton.clickHandler = async () => {
+      await getNextQuestion(nextOrPreviousButton);
+    };
+    continueButton.addEventListener("click", continueButton.clickHandler);
+  }
+
+  modal.show();
+
+  // Set focus to the modal title
+  document.getElementById("softModalTitle").focus();
+
+  let modalElement = modal._element;
+  modalElement.querySelector('.close').addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      modal.hide();
+    }
+  });
 }
 
 /**
@@ -623,7 +622,7 @@ function getNextQuestionId() {
 
 // The root is defined as null, so if the question is not the same as the
 // current value in the questionQueue, or root has no children, add it.
-export function getNextQuestion(nextOrPreviousButton, revertOnStoreError = false) {
+export async function getNextQuestion(nextOrPreviousButton, revertOnStoreError = false) {
   const questionElement = nextOrPreviousButton.form;
 
   // These are grid elements that aren't shown due to displayifs and previous response evaluations.
@@ -646,7 +645,7 @@ export function getNextQuestion(nextOrPreviousButton, revertOnStoreError = false
   // check if we need to add questions to the question queue
   checkForSkips(questionElement);
 
-  let nextQuestionId = getNextQuestionId();  
+  let nextQuestionId = getNextQuestionId();
   
   const appState = getStateManager();
   const questionProcessor = appState.getQuestionProcessor();
@@ -686,7 +685,7 @@ export function getNextQuestion(nextOrPreviousButton, revertOnStoreError = false
     questionQueue.next();
   }
 
-  swapVisibleQuestion(nextQuestionEle);
+  await swapVisibleQuestion(nextQuestionEle);
 
   if (!revertOnStoreError) {
     appState.syncToStore(nextOrPreviousButton);
@@ -737,7 +736,7 @@ function exitLoop(nextQuestionEle) {
  * @param {HTMLElement} questDiv - The parent div housing the Quest UI.
  * @param {string} questionHTMLString - The HTML string of the question to be swapped in.
  */
-export function swapVisibleQuestion(questionEle) {
+export async function swapVisibleQuestion(questionEle) {
   // return early if the renderer tool is active and displaying the full question list.
   if (moduleParams.renderFullQuestionList) return;
 
@@ -759,8 +758,8 @@ export function swapVisibleQuestion(questionEle) {
       : questDiv.appendChild(questionEle);
   }
 
-  // Ensure the question is appended to the active DOM before calling displayQuestion for accessibility.
-  prepareQuestionDOM(questionEle);
+  // Ensure the question is appended to the active DOM before calling prepareQuestionDOM for accessibility.
+  await prepareQuestionDOM(questionEle);
 
   return questionEle;
 }
@@ -783,52 +782,160 @@ export function showAllQuestions(allProcessedQuestionsMap) {
     : questDiv.appendChild(fragment);
 }
 
-function removeExtraBRElements(rootElement) {
-  let consecutiveBrs = [];
-  
-  // Traverse the DOM tree to find all <br> elements
-  rootElement.querySelectorAll('br').forEach((br) => {
-    if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
-      consecutiveBrs.push(br);
-    } else {
-      if (consecutiveBrs.length > 3) {
-        // Remove all but the first two <br> elements
-        consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
-      }
-      // Reset the array to start tracking a new sequence
-      consecutiveBrs = [br];
-    }
-  });
+// Manage the text builder for screen readers (only build when necessary)
+let questionFocusSet;
+export async function prepareQuestionDOM(questionElement) {
+  // Fail gently in the renderer tool.
+  if (!questionElement && !moduleParams.activate) return;
+  // Reset the questionFocusSet flag to reset accessibility features.
+  questionFocusSet = false;
 
-  // Final check in case the last sequence of <br>s is at the end of the document
-  if (consecutiveBrs.length > 3) {
-    consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+  // Handle questions in moduleParams.asyncQuestionsMap. These are fetched externally and appended to the DOM. Uncommon. Connect example: SOCcer.
+  if (Object.keys(moduleParams.asyncQuestionsMap).length > 0 && Object.keys(moduleParams.asyncQuestionsMap).includes(questionElement.id) && moduleParams.fetchAsyncQuestion instanceof Function) {
+    const fieldset = questionElement.querySelector('fieldset') || questionElement.querySelector('tbody');
+    await manageAsyncQuestionLoad(fieldset, questionElement.id);
+  }
+
+  handleQuestionDisplayIfs(questionElement);
+  handleQuestionInputAttributes(questionElement);
+  handleQuestionBRElements(questionElement);
+
+  // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
+  // The tabindex leads to a negative user experience in VoiceOver (macOS).
+  if (moduleParams.isWindowsEnvironment) {
+    [...questionElement.querySelectorAll("div.response")].forEach((responseElement) => {
+      responseElement.setAttribute("tabindex", "0");
+    });
+  }
+
+  // Remove the reset answer button if there are no response inputs
+  const numResponseInputs = countResponseInputs(questionElement);
+  if (numResponseInputs === 0 && questionElement.id !== 'END') {
+    const resetButton = questionElement.querySelector('.reset');
+    if (resetButton) {
+      resetButton.remove();
+    }
+  }
+
+  const appState = getStateManager();
+  appState.setActiveQuestionState(questionElement.id);
+  const questionProcessor = appState.getQuestionProcessor();
+
+  if (moduleParams.showProgressBarInQuest) {  
+    updateProgressBar(questionProcessor);
+  }
+  
+  if (!moduleParams.isRenderer) {
+    handleUserScrollLocation();
+    
+    setTimeout(() => {
+      // Handle accessibility features after the question renders.
+      // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
+      questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
+      
+      // Batch process questions for large surveys after the current question is displayed.
+      questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 50);
+    }, 500);
   }
 }
 
-// Manage the text builder for screen readers (only build when necessary)
-let questionFocusSet;
-export function prepareQuestionDOM(questionElement) {
-  // Fail gently in the renderer tool.
-  if (!questionElement && !moduleParams.activate) return;
+/**
+ * The progress bar is an optional feature managed by the moduleParams.showProgressBarInQuest flag.
+ * It is displayed at the top of the questionnaire and updates as the user progresses through the questions.
+ * @param {QuestionProcessor} questionProcessor - The question processor object (managed in state)
+ */
+function updateProgressBar(questionProcessor) {
+  const progressBar = moduleParams.questDiv.querySelector('.progress-bar');
+  const progressText = document.getElementById('progressBarText');
+  if (!progressBar || !progressText) return;
   
-  questionFocusSet = false;
+  let completionPercentage = 0;
+
+  if (Array.isArray(questionProcessor.questions) && questionProcessor.questions.length > 0) {
+    const currentQuestionIndex = questionProcessor.currentQuestionIndex;
+    const totalQuestions = questionProcessor.questions.length;
+    const fixedVal = totalQuestions > 500 ? 2 : totalQuestions > 100 ? 1 : 0;
+
+    if (currentQuestionIndex === totalQuestions - 1) {
+      completionPercentage = 100;
+    } else {
+      completionPercentage = (currentQuestionIndex / totalQuestions * 100).toFixed(fixedVal);
+    }
+
+    progressBar.style.width = `${completionPercentage}%`;
+    progressBar.setAttribute('aria-valuenow', completionPercentage);
+    progressText.textContent = `${completionPercentage}% Complete`;
+  }
+}
+
+/**
+ * Async questions are fetched from external sources and appended to the DOM.
+ * Fetch the data, remove the loading placeholder, and update the DOM.
+ * moduleParams.asyncQuestionsMap contains the async question data.
+ * @param {HTMLElement} fieldset - The fieldset element containing the async question.
+ * @param {string} questionID - The ID of the async question to load.
+ */
+async function manageAsyncQuestionLoad(fieldset, questionID) {
+  showLoadingIndicator();
+  clearValidationError(fieldset);
+  insertLoadingTextNode(fieldset);
+
+  const funcToFetch = moduleParams.asyncQuestionsMap[questionID].func;
+  const relatedArgs = moduleParams.asyncQuestionsMap[questionID].args;
+  const appState = getStateManager();
+
+  const args = [
+    ...relatedArgs.map(arg => appState.findResponseValue(arg) ?? ''),
+    moduleParams.i18n.language,
+  ];
+  
+  try {
+    await moduleParams.fetchAsyncQuestion(funcToFetch, args);
+
+  } catch (error) {
+    moduleParams.errorLogger(`Error fetching async question: ${error}, Function: ${funcToFetch}, Args: ${relatedArgs}`);
+    validationError(fieldset, `Error fetching question. Please go back and try again.`);
+    
+  } finally {
+    removeLoadingTextNode(fieldset);
+    hideLoadingIndicator();
+  }
+}
+
+// For async questions: Make sure the loading text is visible.
+function insertLoadingTextNode(fieldset) {
+  const loadingText = moduleParams.i18n.loading;
+  let loadingTextNode = Array.from(fieldset.childNodes).find(node =>
+    node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() === loadingText
+  );
+
+  if (!loadingTextNode) {
+    loadingTextNode = document.createTextNode(loadingText);
+    fieldset.insertBefore(loadingTextNode, fieldset.firstChild);
+  }
+}
+
+// For async questions: If a response element is found, remove the loading text.
+function removeLoadingTextNode(fieldset) {
+  const loadingText = moduleParams.i18n.loading;
+  const responseElement = fieldset.querySelector('.response');
+  if (responseElement) {
+    const loadingTextNode = Array.from(fieldset.childNodes).find(node =>
+      node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() === loadingText
+    );
+
+    if (loadingTextNode) {
+      fieldset.removeChild(loadingTextNode);
+    }
+  }
+}
+
+// Legacy operations: resolve attributes from markdown to HTML
+function handleQuestionDisplayIfs(questionElement) {
 
   // When the input ID isn't the quesiton ID (e.g. YYYY-MM input), find the parent question ID
   const forIDElementArray = questionElement.querySelectorAll("span[forid]");
   if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
-
-  /////////////////////
-  [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) => {
-    console.warn('TODO: REMOVE? NOT FOUND in DOM (document search) - input[data-max-validation-dependency]');
-    x.max = document.getElementById(x.dataset.maxValidationDependency).value
-  });
-
-  [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) => {
-    console.warn('TODO: REMOVE? NOT FOUND in DOM (document search) - input[data-min-validation-dependency]');
-    x.min = document.getElementById(x.dataset.minValidationDependency).value;
-  });
-  ///////////////////
 
   // check all responses for next question
   [...questionElement.querySelectorAll('[displayif]')].forEach((elm) => {
@@ -863,9 +970,9 @@ export function prepareQuestionDOM(questionElement) {
     }
   });
 
-  [...questionElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm=>{
-      let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
-      elm.innerText=f;
+  [...questionElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm => {
+    let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
+    elm.innerText = f;
   });
 
   // ISSUE: 403
@@ -877,7 +984,7 @@ export function prepareQuestionDOM(questionElement) {
       e.innerText = math.evaluate(decodeURIComponent(e.dataset.gridreplace))
     }
   });
-  
+
   // Check if grid elements need to be shown. Elm is a <tr>. If f !== true, remove the row (elm) from the DOM.
   [...questionElement.querySelectorAll("[data-gridrow][data-displayif]")].forEach((elm) => {
     const f = evaluateCondition(decodeURIComponent(elm.dataset.displayif));
@@ -889,6 +996,21 @@ export function prepareQuestionDOM(questionElement) {
       elm.style.display = "";
     }
   });
+}
+
+// Legacy operations: resolve attributes from markdown to HTML
+function handleQuestionInputAttributes(questionElement) {
+  /////////////////////
+  [...questionElement.querySelectorAll("input[data-max-validation-dependency]")].forEach((x) => {
+    console.warn('TODO: REMOVE? NOT FOUND in DOM (document search) - input[data-max-validation-dependency]');
+    x.max = document.getElementById(x.dataset.maxValidationDependency).value
+  });
+
+  [...questionElement.querySelectorAll("input[data-min-validation-dependency]")].forEach((x) => {
+    console.warn('TODO: REMOVE? NOT FOUND in DOM (document search) - input[data-min-validation-dependency]');
+    x.min = document.getElementById(x.dataset.minValidationDependency).value;
+  });
+  ///////////////////
 
   //Replacing all default HTML form validations with datasets
   [...questionElement.querySelectorAll("input[required]")].forEach((element) => {
@@ -941,48 +1063,39 @@ export function prepareQuestionDOM(questionElement) {
       input.setAttribute('placeholder', 'YYYY-MM');
     });
   }
+}
 
-  removeExtraBRElements(questionElement);
+function handleQuestionBRElements(questionElement) {
+  let consecutiveBrs = [];
+
+  // Traverse the DOM tree to find all <br> elements
+  questionElement.querySelectorAll('br').forEach((br) => {
+    if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
+      consecutiveBrs.push(br);
+    } else {
+      if (consecutiveBrs.length > 3) {
+        // Remove all but the first two <br> elements
+        consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+      }
+      // Reset the array to start tracking a new sequence
+      consecutiveBrs = [br];
+    }
+  });
+
+  // Final check in case the last sequence of <br>s is at the end of the document
+  if (consecutiveBrs.length > 3) {
+    consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+  }
 
   //Sets the brs after non-displays to not show as well
   [...questionElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
     e.style = "display: none"
   });
-  
+
   // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
   [...questionElement.querySelectorAll("br")].forEach((br) => {
     br.setAttribute("aria-hidden", "true");
   });
-
-  // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
-  // The tabindex leads to a negative user experience in VoiceOver (macOS).
-  if (moduleParams.isWindowsEnvironment) {
-    [...questionElement.querySelectorAll("div.response")].forEach((responseElement) => {
-      responseElement.setAttribute("tabindex", "0");
-    });
-  }
-
-  // Remove the reset answer button if there are no response inputs
-  const numResponseInputs = countResponseInputs(questionElement);
-  if (numResponseInputs === 0 && questionElement.id !== 'END') {
-    const resetButton = questionElement.querySelector('.reset');
-    if (resetButton) {
-      resetButton.remove();
-    }
-  }
-
-  const appState = getStateManager();
-  appState.setActiveQuestionState(questionElement.id);
-  const questionProcessor = appState.getQuestionProcessor();
-  questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 150);
-
-  // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
-  if (!moduleParams.isRenderer) {
-    handleUserScrollLocation();
-    setTimeout(() => {
-      questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
-    }, 500);
-  }
 }
 
 // Scroll higher on tablets and computers to show the site header.
@@ -990,7 +1103,7 @@ export function prepareQuestionDOM(questionElement) {
 function handleUserScrollLocation() {
   let rootElement;
   if (isMobileDevice()) {
-    rootElement = document.getElementById('root') || moduleParams.questDiv.parentElement || moduleParams.questDiv;
+    rootElement = document.getElementById('progressBarContainer') || moduleParams.questDiv.parentElement || moduleParams.questDiv;
   } else {
     rootElement = document.documentElement;
   }
@@ -1014,7 +1127,7 @@ function isMonthInputSupported() {
   return isSupported;
 }
 
-export function getPreviousQuestion(nextOrPreviousButton, revertOnStoreError = false) {
+export async function getPreviousQuestion(nextOrPreviousButton, revertOnStoreError = false) {
   // Get the previousElement from questionQueue
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) === "_CONTINUE") {
@@ -1031,7 +1144,7 @@ export function getPreviousQuestion(nextOrPreviousButton, revertOnStoreError = f
   const previousElementID = pv.value.value;
   const previousQuestionEle = questionProcessor.loadPreviousQuestion(previousElementID);
 
-  swapVisibleQuestion(previousQuestionEle);
+  await swapVisibleQuestion(previousQuestionEle);
   restoreResponses(appState.getSurveyState(), previousElementID);
 }
 

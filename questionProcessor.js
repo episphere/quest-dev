@@ -54,6 +54,13 @@ export class QuestionProcessor {
     // Remove comments from the markdown
     markdown = this.removeMarkdownComments(markdown);
 
+    // Search for items in delayedParameterArray and add 'Loading...' placeholder text so it's parsed correctly
+    if (Object.keys(moduleParams.asyncQuestionsMap).length > 0) {
+      Object.keys(moduleParams.asyncQuestionsMap).forEach((key) => {
+        markdown = markdown.replace(key, `${key} ${moduleParams.i18n.loading}`);
+      });
+    };
+
     // Replace grids with placeholders and store grid content for later processing
     let gridPlaceholders = [];
     const gridButtonDiv = this.getButtonDiv(true)
@@ -696,9 +703,9 @@ export class QuestionProcessor {
     if (hardBool || softBool) {
       questionID = questionID.slice(0, -1);
       if (hardBool) {
-        target = "data-target='#hardModal'";
+        target = "data-bs-target='#hardModal'";
       } else {
-        target = "data-target='#softModal'";
+        target = "data-bs-target='#softModal'";
       }
     }
 
@@ -797,7 +804,7 @@ export class QuestionProcessor {
   
       // Adding placeholders and aria-describedby attributes in one line
       options += ` placeholder='Select ${type}' aria-describedby='${elementId}-desc' aria-label='Select ${type}'`;
-      return `<input type='${type}' ${options}><span id='${elementId}-desc' class='sr-only'>${descText}</span>`;
+      return `<input type='${type}' ${options}><span id='${elementId}-desc' class='visually-hidden'>${descText}</span>`;
     }
 
     function fMonth(fullmatch, opts) {
@@ -827,7 +834,7 @@ export class QuestionProcessor {
       const descText = "Enter the month and year in format: four digit year - two digit month. YYYY-MM";
       const finalOptions = `${updatedOptions} ${unevaluatedDates.join(' ')} placeholder='Select month' aria-describedby='${elementId}-desc' aria-label='Select month'`;
 
-      return `<input type='${type}' ${finalOptions}><span id='${elementId}-desc' class='sr-only'>${descText}</span>`;
+      return `<input type='${type}' ${finalOptions}><span id='${elementId}-desc' class='visually-hidden'>${descText}</span>`;
     }
 
     // replace |tel| with phone input
@@ -1036,7 +1043,7 @@ export class QuestionProcessor {
     function fTime(x, opts) {
       const { options, elementId } = guaranteeIdSet(opts, "time");
       return `
-        <label for='${elementId}' class='sr-only'>Enter Time</label>
+        <label for='${elementId}' class='visually-hidden'>Enter Time</label>
         <input type='time' id='${elementId}' ${options} aria-label='Enter Time'>
       `;
     }
@@ -1099,7 +1106,7 @@ export class QuestionProcessor {
 
       //onkeypress forces whole numbers
       return `<input type='number' aria-label='${value}' step='any' onkeypress='return (event.charCode == 8 || event.charCode == 0 || event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57' name='${questionID}' ${options}>
-              <div id="${elementId}-desc" class="sr-only">${descriptionText}</div><br>`;
+              <div id="${elementId}-desc" class="visually-hidden">${descriptionText}</div><br>`;
     }
 
     // replace |__| or [text box:xxx] with an input box...
@@ -1137,7 +1144,7 @@ export class QuestionProcessor {
         elId = z1;
       }
 
-      return `<label for="${elId}" class="sr-only"></label>
+      return `<label for="${elId}" class="visually-hidden"></label>
         <textarea id='${elId}' name='${elId}' style="resize:auto;" aria-label='Enter your response'></textarea>`;
     }
 
@@ -1145,7 +1152,7 @@ export class QuestionProcessor {
     questText = questText.replace(
       /#YNP/g,
       `<div role="radiogroup" aria-labelledby="yesNoDontKnowLabel">
-        <label id="yesNoDontKnowLabel" class="sr-only">Select "Yes," "No," or "Prefer not to answer" to answer the question.</label>
+        <label id="yesNoDontKnowLabel" class="visually-hidden">Select "Yes," "No," or "Prefer not to answer" to answer the question.</label>
         <ul>
           <li class='response'>
             <input type='radio' id="${questionID}_1" name="${questionID}" value="yes">
@@ -1168,7 +1175,7 @@ export class QuestionProcessor {
     questText = questText.replace(
       /#YN/g,
       `<div role="radiogroup" aria-labelledby="yesNoLabel">
-        <div id="yesNoLabel" class="sr-only">Select "Yes" or "No" to answer the question.</div>
+        <div id="yesNoLabel" class="visually-hidden">Select "Yes" or "No" to answer the question.</div>
         <ul>
           <li class='response'>
             <input type='radio' id="${questionID}_1" name="${questionID}" value="yes">

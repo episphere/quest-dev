@@ -13,11 +13,21 @@ export const translate = (key, replacements = []) => {
 
 export const ariaLiveAnnouncementRegions = () => {
     return `
-        <div id="srAnnouncerContainer" class="sr-only">
+        <div id="srAnnouncerContainer" class="visually-hidden">
             <div id="ariaLiveQuestionAnnouncer" aria-live="polite"></div>
             <div id="ariaLiveSelectionAnnouncer" aria-live="polite"></div>
         </div>
     `;
+}
+
+export const progressBar = () => {
+    return moduleParams.showProgressBarInQuest ? `
+        <div id="progressBarContainer" class="progress" style="margin-top:25px">
+            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <span class="visually-hidden" id="progressBarText">0% Complete</span>
+            </div>
+        </div>
+    ` : '';
 }
 
 export const responseRequestedModal = () => {
@@ -28,7 +38,7 @@ export const responseRequestedModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="softModalTitle" tabindex="-1">${translate('responseRequestedLabel')}</h5>
-                      <button type="button" class="close ms-auto" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="close ms-auto" data-bs-dismiss="modal" aria-label="Close">
                           <span>&times;</span>
                       </button>
                   </div>
@@ -36,8 +46,8 @@ export const responseRequestedModal = () => {
                       <p id="modalBodyText"></p>
                   </div>
                   <div id="softModalFooter" class="modal-footer">
-                      <button type="button" id=modalContinueButton class="btn btn-light" data-dismiss="modal" data-bs-dismiss="modal">${translate('continueWithoutAnsweringButton')}</button>
-                      <button type="button" id=modalCloseButton class="btn btn-light" data-dismiss="modal" data-bs-dismiss="modal">${translate('answerQuestionButton')}</button>
+                      <button type="button" id=modalContinueButton class="btn btn-light" data-bs-dismiss="modal">${translate('continueWithoutAnsweringButton')}</button>
+                      <button type="button" id=modalCloseButton class="btn btn-light" data-bs-dismiss="modal">${translate('answerQuestionButton')}</button>
                   </div>
               </div>
           </div>
@@ -53,7 +63,7 @@ export const responseRequiredModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="hardModalLabel">${translate('responseRequiredLabel')}</h5>
-                      <button type="button" class="close ms-auto" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="close ms-auto" data-bs-dismiss="modal" aria-label="Close">
                           <span>&times;</span>
                       </button>
                   </div>
@@ -61,7 +71,7 @@ export const responseRequiredModal = () => {
                       <p id="hardModalBodyText"></p>
                   </div>
                   <div class="modal-footer">
-                      <button type="button" class="btn btn-danger" data-dismiss="modal" data-bs-dismiss="modal">${translate('answerQuestionButton')}</button>
+                      <button type="button" class="btn btn-danger" data-bs-dismiss="modal">${translate('answerQuestionButton')}</button>
                   </div>
               </div>
           </div>
@@ -77,7 +87,7 @@ export const responseErrorModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="softModalResponseTitle">${translate('responseErrorLabel')}</h5>
-                      <button type="button" class="close ms-auto" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="close ms-auto" data-bs-dismiss="modal" aria-label="Close">
                           <span>&times;</span>
                       </button>
                   </div>
@@ -85,8 +95,8 @@ export const responseErrorModal = () => {
                       <p>${translate('responseErrorBody')}</p>
                   </div>
                   <div id="softModalResponseFooter" class="modal-footer">
-                      <button type="button" id=modalResponseContinueButton class="btn btn-success" data-dismiss="modal" data-bs-dismiss="modal">${translate('correctButton')}</button>
-                      <button type="button" id=modalResponseCloseButton class="btn btn-danger" data-dismiss="modal" data-bs-dismiss="modal">${translate('incorrectButton')}</button>
+                      <button type="button" id=modalResponseContinueButton class="btn btn-success" data-bs-dismiss="modal">${translate('correctButton')}</button>
+                      <button type="button" id=modalResponseCloseButton class="btn btn-danger" data-bs-dismiss="modal">${translate('incorrectButton')}</button>
                   </div>
               </div>
           </div>
@@ -102,7 +112,7 @@ export const submitModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="submitModalLabel" tabindex="-1">${translate('submitLabel')}</h5>
-                      <button type="button" class="close ms-auto" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" >
+                      <button type="button" class="close ms-auto" data-bs-dismiss="modal" aria-label="Close" >
                           <span>&times;</span>
                       </button>
                   </div>
@@ -110,8 +120,8 @@ export const submitModal = () => {
                       <p id="submitModalBodyText">${translate('submitBody')}</p>
                   </div>
                   <div class="modal-footer">
-                      <button type="button" id="submitModalButton" class="btn btn-success" data-dismiss="modal" data-bs-dismiss="modal">${translate('submitButton')}</button>
-                      <button type="button" id="cancelModalButton" class="btn btn-danger" data-dismiss="modal" data-bs-dismiss="modal">${translate('cancelButton')}</button>
+                      <button type="button" id="submitModalButton" class="btn btn-success" data-bs-dismiss="modal">${translate('submitButton')}</button>
+                      <button type="button" id="cancelModalButton" class="btn btn-danger" data-bs-dismiss="modal">${translate('cancelButton')}</button>
                   </div>
               </div>
           </div>
@@ -127,7 +137,7 @@ export const storeErrorModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="storeErrorModalTitle">${translate('storeErrorLabel')}</h5>
-                      <button type="button" class="close ms-auto" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="close ms-auto" data-bs-dismiss="modal" aria-label="Close">
                           <span>&times;</span>
                       </button>
                   </div>
@@ -135,7 +145,7 @@ export const storeErrorModal = () => {
                       <p>${translate('storeErrorBody')}</p>
                   </div>
                   <div id="storeErrorModalFooter" class="modal-footer text-center">
-                      <button type="button" id="cancelModalButton" class="btn btn-danger mx-auto" data-dismiss="modal" data-bs-dismiss="modal">${translate('closeButton')}</button>
+                      <button type="button" id="cancelModalButton" class="btn btn-danger mx-auto" data-bs-dismiss="modal">${translate('closeButton')}</button>
                   </div>
               </div>
           </div>

@@ -20,8 +20,6 @@ let appState = null;
  * @returns {Object} stateManager - the state manager object and its methods.
  */
 
-// TODO: handle thrown errors in stateManager.
-
 const createStateManager = (store, initialState = {}) => {
     // The complete survey state with all questions.
     let surveyState = { ...initialState };
@@ -162,7 +160,6 @@ const createStateManager = (store, initialState = {}) => {
         }, 5000);
     }
 
-
     const stateManager = {
         // Set a response as the user updates form inputs. This is called on input change.
         // Single value responses are stored directly in the activeQuestionState object (case 1), multi-value responses are stored in an object (default case).
@@ -273,6 +270,7 @@ const createStateManager = (store, initialState = {}) => {
          * Handle store errors by reverting the survey to the question that was active when the store() write failed.
          * @param {HTMLButtonElement} nextOrPreviousButton - the button clicked by the user (Next or Back).
          */
+
         syncToStore: (nextOrPreviousButton) => {
             let previousSurveyState = {};
             let previousActiveQuestionState = {};
@@ -314,7 +312,8 @@ const createStateManager = (store, initialState = {}) => {
             // Update the survey state with the active question state.
             surveyState = { ...surveyState, ...activeQuestionState };
             activeQuestionState = {};
-            console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState); 
+
+            if (moduleParams.isRenderer) console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState); 
         },
 
         getResponseToQuestionMapping: () => ({ ...responseToQuestionMappingObj }),
@@ -495,6 +494,7 @@ const createStateManager = (store, initialState = {}) => {
  * @param {Function} store - the store function passed into Quest. 
  * @param {Object} initialState - the initial state to be set in the state manager.
  */
+
 export function initializeStateManager(store, initialState = {}) {
     if (!appState) {
         appState = createStateManager(store, initialState);
@@ -511,7 +511,12 @@ export function getStateManager(isRenderer = false) {
     return appState;
 }
 
-// Update the tree in StateManager. This is called when the next button is clicked, before syncToStore().
+/**
+ * Update the tree in StateManager. Legacy survey question tracking. Continued compatibility is essential.
+ * This is called before the syncToStore() write operation.
+ * The treeJSON is updated with the current question queue.
+ */
+
 function updateTreeJSON() {
     return moduleParams.questName && questionQueue
         ? questionQueue.toJSON()

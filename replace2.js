@@ -1,7 +1,7 @@
 import { questionQueue, moduleParams, rbAndCbClick, showAllQuestions, swapVisibleQuestion } from "./questionnaire.js";
 import { restoreResponses } from "./restoreResponses.js";
 import { addEventListeners } from "./eventHandlers.js";
-import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, storeErrorModal, submitModal  } from "./common.js";
+import { ariaLiveAnnouncementRegions, progressBar, responseRequestedModal, responseRequiredModal, responseErrorModal, storeErrorModal, submitModal  } from "./common.js";
 import { initSurvey } from "./initSurvey.js";
 import { getStateManager } from "./stateManager.js";
 
@@ -48,10 +48,6 @@ transform.render = async (obj, divID, previousResults = {}) => {
       moduleParams.errorLogger('Active question not found for:', activeQuestionID);
       return false;
     }
-    
-    // TODO: SOCCER test loading/unloading/back button.
-    // If the soccer function is defined, call it. This is used for external listeners in the PWA.
-    if (moduleParams.soccer instanceof Function) moduleParams.soccer();
 
     // Add the event listeners to the parent div.
     addEventListeners();
@@ -149,13 +145,16 @@ function setModuleParams(obj, divID, previousResults) {
   moduleParams.renderFullQuestionList = moduleParams.isRenderer && !moduleParams.activate;
   moduleParams.previousResults = previousResults;
   moduleParams.soccer = obj.soccer;
-  moduleParams.delayedParameterArray = obj.delayedParameterArray;
+  moduleParams.showProgressBarInQuest = obj.showProgressBarInQuest || false;
+  moduleParams.asyncQuestionsMap = obj.asyncQuestionsMap || {};
+  moduleParams.fetchAsyncQuestion = obj.fetchAsyncQuestion;
+  moduleParams.delayedParameterArray = obj.delayedParameterArray || [];
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
   moduleParams.isFirefoxBrowser = isFirefoxBrowser();
   moduleParams.isLocalDevelopment = isLocalDevelopment();
   moduleParams.questDiv = document.getElementById(divID);
-  moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal() + storeErrorModal();
+  moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + progressBar() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal() + storeErrorModal();
   moduleParams.errorLogger = obj.errorLogger || defaultErrorLogger;
 
   // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.questVersion}/`)

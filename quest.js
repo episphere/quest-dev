@@ -1,5 +1,5 @@
 import { transform } from "./replace2.js";
-import { questionQueue } from "./questionnaire.js";
+import { moduleParams, questionQueue } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
 
 class QuestRenderer {
@@ -80,7 +80,6 @@ class QuestRenderer {
     // Handle URL parameters and fragment identifiers
     const fragmentUrl = decodeURIComponent(location.hash.substring(1));
     if (fragmentUrl.length > 0) {
-      console.log("Loading module from fragment:", fragmentUrl);
       this.loadModule(fragmentUrl);
 
       window.history.replaceState(
@@ -156,7 +155,6 @@ class QuestRenderer {
     // Styling and logic checkboxes
     document.querySelectorAll("#logic,#styling").forEach((ele) => {
       ele.addEventListener("change", (event) => {
-        console.log(event.target.id, event.target.checked);
         this.questLocalForage.setItem(event.target.id, event.target.checked);
         this.setStylingAndLogic();
       });
@@ -164,7 +162,6 @@ class QuestRenderer {
 
     // Hide markup checkbox
     document.querySelector("#hide-markup").addEventListener("change", (event) => {
-      console.log(event.target.checked);
       document.getElementById("markup").style.display = event.target.checked ? "none" : "initial";
       document.getElementById("renderText").style.display = event.target.checked ? "none" : "initial";
     });
@@ -268,7 +265,7 @@ class QuestRenderer {
       })
       .catch((err) => {
         this.loadDisplay.innerHTML = "caught error" + err;
-        console.log("Error while clearing local forage:", err);
+        moduleParams.errorLogger("Error while clearing local forage:", err);
       });
 
     questionQueue.clear();

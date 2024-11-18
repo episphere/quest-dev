@@ -58,7 +58,9 @@ const en = {
     "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
 
     "example": "Example",
-    "enterValue": "Enter a value"
+    "enterValue": "Enter a value",
+
+    "loading": "Loading...",
 }
 
 export default en;

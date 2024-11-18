@@ -5,7 +5,8 @@ import { QuestionProcessor } from './questionProcessor.js';
 import { getStateManager } from './stateManager.js';
 
 /**
- * Initialize the survey: state manager, precalculated values, mathJS implementation, and questionProcessor
+ * Initialize the survey: state manager, precalculated values, mathJS implementation, and questionProcessor.
+ * Normalize ids in asyncQuestionsMap for DOM manipulation: [D_761310265?] -> D_761310265.
  * moduleParams.activate determines if the survey is embedded in an application or found in the included rendering tool.
  * If activate is true, the survey is embedded and the retrieve function and CSS files are fetched.
  * If activate is false, the survey is standalone in the renderer tool.
@@ -21,6 +22,13 @@ export async function initSurvey(contents) {
     
     const stateManager = getStateManager();
     stateManager.setQuestionProcessor(questionProcessor);
+
+    moduleParams.asyncQuestionsMap = Object.fromEntries(
+        Object.entries(moduleParams.asyncQuestionsMap).map(([key, value]) => {
+            const normalizedKey = key.replace(/[[\]]/g, '').replace(/[?!]$/, '');
+            return [normalizedKey, value];
+        })
+    );
 
     return !moduleParams.isRenderer
         ? await fetchAndProcessResources()

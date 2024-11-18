@@ -1,4 +1,4 @@
-import { textboxinput, radioAndCheckboxUpdate } from "./questionnaire.js";
+import { moduleParams, textboxinput, radioAndCheckboxUpdate } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
 
 function getFromRbCb(formElement, rbCbName, result) {
@@ -23,12 +23,12 @@ function handleSimpleStringResponse(formElement, response) {
     if (selectedRadioElement) {
       selectedRadioElement.checked = true;
     } else {
-      console.log("RESTORE RESPONSE: Problem with radio:", element);
+      moduleParams.errorLogger("RESTORE RESPONSE: Problem with radio:", element);
     }
     radioAndCheckboxUpdate(selectedRadioElement);
 
   } else if (element?.type === "submit") {
-    console.log(`RESTORE RESPONSE: Response value: ${response}. Submit button: skipping update.`);
+    moduleParams.errorLogger(`RESTORE RESPONSE: Response value: ${response}. Submit button: skipping update.`);
     return;
   } else {
     element.value = response;
@@ -39,7 +39,7 @@ function handleSimpleStringResponse(formElement, response) {
 function handleObjectResponse(formElement, response) {
   Object.keys(response).forEach((resKey) => {
     if (!resKey) {
-      console.log(`RESTORE RESPONSE: Response value: ${response}; skipping.`);
+      moduleParams.errorLogger(`RESTORE RESPONSE: Response value: ${response}; skipping.`);
       return;
     }
 
@@ -85,7 +85,7 @@ function handleObjectResponse(formElement, response) {
         if (selectedRadioElement) {
           selectedRadioElement.checked = true;
         } else {
-          console.warn("RESTORE RESPONSE: Problem with DIV/FORM:", element);
+          moduleParams.errorLogger("RESTORE RESPONSE: Problem with DIV/FORM:", element);
         }
         radioAndCheckboxUpdate(selectedRadioElement);
       } else {
