@@ -1,6 +1,7 @@
 import { math } from './customMathJSImplementation.js';
 import { knownFunctions } from "./knownFunctions.js";
 import { getStateManager } from "./stateManager.js";
+import { moduleParams } from './questionnaire.js';
 
 // RegExp to segment text conditions passed in as a string with '[', '(', ')', ',', and ']'. https://stackoverflow.com/questions/6323417/regex-to-extract-all-matches-from-string-using-regexp-exec
 const evaluateConditionRegex = /[(),]/g;
@@ -46,6 +47,7 @@ export function evaluateCondition(evalString) {
                 displayIfStack.splice(stackEnd - 5, 6, functionResult);
 
             } else {
+                moduleParams.errorLogger('Error in Displayif Function:', evalString, displayIfStack);
                 throw { Message: "Bad Displayif Function: " + evalString, Stack: displayIfStack };
             }
         }

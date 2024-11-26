@@ -86,7 +86,6 @@ function handleChangeEvent(event) {
   if (!moduleParams.isRenderer && target.matches('input[type="radio"], input[type="checkbox"]')) {
     
     const isTable = target.closest('table') !== null;
-
     if (moduleParams.isWindowsEnvironment) {
       if (isTable) {
         handleRadioCheckboxTableEvents(event);
@@ -195,7 +194,7 @@ async function handleQuestButtons(event) {
       break;
 
     case 'submitSurvey':
-      new bootstrap.Modal(moduleParams.questDiv.querySelector('#submitModal')).show();
+      handleSubmitSurveyClick();
       break;
 
     case 'next':
@@ -245,8 +244,28 @@ function debounce(func, wait) {
   };
 }
 
+function handleSubmitSurveyClick() {
+  const submitModal = new bootstrap.Modal(moduleParams.questDiv.querySelector('#submitModal'));
+  const submitModalBodyTextEle = moduleParams.questDiv.querySelector('#submitModalBodyText');
+  submitModalBodyTextEle.setAttribute('tabindex', '0');
+  submitModalBodyTextEle.setAttribute('role', 'alert'); 
+
+  submitModal.show();
+
+  //Force focus to the modal title
+  moduleParams.questDiv.querySelector('#submitModalTitle').focus();
+
+  let submitModalElement = submitModal._element;
+  submitModalElement.querySelector('.btn-close').addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      submitModal.hide();
+    }
+  });
+}
+
 function addSubmitSurveyListener() {
-  moduleParams.questDiv.querySelector('#submitModalButton').onclick = async () => {
+  const submitModalButton = moduleParams.questDiv.querySelector('#submitModalButton');
+  submitModalButton.addEventListener('click', async () => {
     const lastBackButton = moduleParams.questDiv.querySelector('#lastBackButton');
     if (lastBackButton) {
       lastBackButton.remove();
@@ -260,5 +279,5 @@ function addSubmitSurveyListener() {
     const appState = getStateManager();
     await appState.submitSurvey();
     location.reload();
-  };
+  });
 }

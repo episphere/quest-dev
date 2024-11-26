@@ -1,5 +1,6 @@
 import { getStateManager } from './stateManager.js';
 import { create, all } from 'https://cdn.skypack.dev/pin/mathjs@v13.0.3-l5exVmFmmRoBpcv9HZ2w/mode=imports,min/optimized/mathjs.js';
+import { moduleParams } from './questionnaire.js';
 export const math = create(all);
 
 // Strip '_<num>' when an id that _0, _1, _2, etc. as a suffix.
@@ -306,9 +307,10 @@ export const customMathJSFunctions = {
       const questionHTML = this.appState.getQuestionHTMLByID(questionId);
       if (questionHTML) {
         // Find the checked input and check if it has the dataset["reset"] attribute
-        const inputChecked = Object.values(questionHTML)
-          .filter(input => input.startsWith('input') && input.includes(name) && input.includes('checked'))
-          .find(input => questionHTML[input]?.dataset?.reset);
+        const inputs = Array.from(questionHTML.querySelectorAll('input'));
+        const inputChecked = inputs
+          .filter(input => input.name === name && input.checked && input.dataset?.reset !== undefined)
+          .find(input => input.dataset?.reset);
 
         return inputChecked ? 0 : responseValue.length;
       }

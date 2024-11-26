@@ -70,6 +70,12 @@ input[type="text"] {
   flex-grow: 1;
 }
 
+.question-text {
+  font-size: 1rem;
+  display: block;
+  white-space: pre-line;
+}
+
 /* CSS for grids */
 .quest-grid.table-layout {
   width: 100%;
@@ -221,9 +227,12 @@ for bootstrap -xs
 **/
 @media screen and (max-width: 576px) {
   .quest-grid.table-layout,
-  .quest-grid.table-layout thead,
-  .quest-grid.table-layout td  { 
+  .quest-grid.table-layout td { 
     display: block;
+  }
+
+  .quest-grid.table-layout thead {
+    display: none;
   }
 
   .quest-grid.table-layout th.nr {
@@ -266,7 +275,7 @@ for bootstrap -xs
     width: 100%;
     margin-bottom: 3px;
     text-align: center;
-    min-height: 100px;
+    min-height: 75px;
     height: auto;
     padding: 5px;
     cursor: pointer;

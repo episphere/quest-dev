@@ -10,15 +10,15 @@ import { getStateManager } from './stateManager.js';
  * moduleParams.activate determines if the survey is embedded in an application or found in the included rendering tool.
  * If activate is true, the survey is embedded and the retrieve function and CSS files are fetched.
  * If activate is false, the survey is standalone in the renderer tool.
- * @param {String} contents - The markdown contents of the survey prior to transformation.
+ * @param {String} markdown - The markdown contents of the survey prior to transformation.
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
-export async function initSurvey(contents) {
+export async function initSurvey(markdown) {
     initializeStateManager(moduleParams.store);
     initializeCustomMathJSFunctions();
 
-    const precalculated_values = getPreCalculatedValues(contents);
-    const questionProcessor = new QuestionProcessor(contents, precalculated_values, moduleParams.i18n);
+    const precalculated_values = getPreCalculatedValues(markdown);
+    const questionProcessor = new QuestionProcessor(markdown, precalculated_values, moduleParams.i18n);
     
     const stateManager = getStateManager();
     stateManager.setQuestionProcessor(questionProcessor);
@@ -57,11 +57,11 @@ async function fetchAndProcessResources() {
 
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
             moduleParams.retrieve && !moduleParams.surveyDataPrefetch ? moduleParams.retrieve() : Promise.resolve(),
-            // TODO: Remove the hardcoded paths and use the basePath from the moduleParams.
-            shouldFetchStylesheets ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-            shouldFetchStylesheets ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
-            // shouldFetchStylesheets ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-            // shouldFetchStylesheets ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
+            // TODO: Toggle the hardcoded paths for development and use the basePath from the moduleParams.
+            // shouldFetchStylesheets ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
+            // shouldFetchStylesheets ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
+            shouldFetchStylesheets ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
+            shouldFetchStylesheets ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
         ]);
 
         // retrievedData is the prefetched user data, the result of the retrieve function, or null (for the renderer or when no retrieve function is provided).

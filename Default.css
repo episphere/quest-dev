@@ -3,6 +3,12 @@ input[type="checkbox"] + label {
   margin: 5px;
 }
 
+.question-text {
+  font-size: 1rem;
+  display: block;
+  white-space: pre-line;
+}
+
 /* CSS for grids */
 .quest-grid.table-layout {
   width: 100%;
@@ -154,10 +160,13 @@ for bootstrap -xs
 **/
 @media screen and (max-width: 576px) {
   .quest-grid.table-layout,
-  .quest-grid.table-layout thead,
-  .quest-grid.table-layout td  { 
-    display: block;
-  }
+    .quest-grid.table-layout td {
+      display: block;
+    }
+  
+    .quest-grid.table-layout thead {
+      display: none;
+    }
 
   .quest-grid.table-layout th.nr {
     font-weight: bold;

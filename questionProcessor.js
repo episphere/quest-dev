@@ -54,6 +54,10 @@ export class QuestionProcessor {
     // Remove comments from the markdown
     markdown = this.removeMarkdownComments(markdown);
 
+    // TODO: remove (this is a temporary fix for the yob issue)
+    //replace all instances of RCRTUP_YOB_V1R0 with yob
+    markdown = markdown.replace(/RCRTUP_YOB_V1R0/g, 'yob');
+
     // Search for items in delayedParameterArray and add 'Loading...' placeholder text so it's parsed correctly
     if (Object.keys(moduleParams.asyncQuestionsMap).length > 0) {
       Object.keys(moduleParams.asyncQuestionsMap).forEach((key) => {
@@ -1318,7 +1322,7 @@ export class QuestionProcessor {
         : `<button type='submit' class='next w-100' ${target} aria-label='Next question' data-click-type='next'>${this.buttonTextObj.next}</button>`;
     
     const resetButton = (questionID === 'END')
-        ? `<button type='submit' class='reset' id='submitButton' aria-label='Submit your survey' data-click-type='submitSurvey'>${this.buttonTextObj.submit}</button>`
+        ? `<button type='submit' class='reset w-100' id='submitButton' aria-label='Submit your survey' data-click-type='submitSurvey'>${this.buttonTextObj.submit}</button>`
         : hasInputField
             ? `<button type='submit' class='reset w-100' aria-label='Reset this answer' data-click-type='reset'>${this.buttonTextObj.reset}</button>`
             : "";
@@ -1337,7 +1341,7 @@ export class QuestionProcessor {
                 <div class="col-md-3 col-sm-12 order-md-3">
                     ${nextButton}
                 </div>
-                <div class="col-md-6 col-sm-12 order-2">
+                <div class="col-md-6 col-sm-12 order-md-2">
                     ${resetButton}
                 </div>
                 <div class="col-md-3 col-sm-12 order-md-1">

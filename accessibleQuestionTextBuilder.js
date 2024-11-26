@@ -1,44 +1,24 @@
 import { moduleParams } from './questionnaire.js';
 
-// Initialize the question text and focus management for screen readers.
-// This drives the screen reader's question announcement and focus when a question is loaded.
-export function manageAccessibleQuestion(fieldsetEle, questionFocusSet, isModalClose = false) {
-    //reset the questionFocusSet flag on modal close so the question is read by the screen reader.
-    if (isModalClose) questionFocusSet = false;
+/**
+ * Initialize the question text and focus management for screen readers.
+ * This drives the screen reader's question announcement and focus when a question is loaded.
+ * Set the focus after a brief timeout to ensure the screen reader has time to process the new content.
+ * @param {HTMLElement} fieldsetEle - The fieldset element containing the question text.
+ * @param {Boolean} questionFocusSet - The flag to manage screen reader focus.
+ * @param {Boolean} isModalClose - The flag to reset the questionFocusSet flag on modal close.
+ * @returns {Boolean} - The updated questionFocusSet flag.
+ */
 
+export function manageAccessibleQuestion(fieldsetEle, questionFocusSet) {
     if (fieldsetEle && !questionFocusSet) {
-        // Announce the question text
-        let { text: questionText, focusNode } = buildQuestionText(fieldsetEle);
+        // Build the question text and get the focusable element
+        let focusableEle = buildQuestionText(fieldsetEle);
 
-        // Make sure focusable element is in the right location for screen reader focus management.
-        let focusableEle = fieldsetEle.querySelector('span[tabindex="0"]');
-        if (!focusableEle) {
-            focusableEle = document.createElement('span');
-            focusableEle.setAttribute('tabindex', '0');
-            focusableEle.style.cssText = `
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      `;
-            fieldsetEle.insertBefore(focusableEle, focusNode);
-        }
-
-        // For VoiceOver, update the focusable element with the question text.
-        focusableEle.textContent = '';
-
-        const isTable = !!fieldsetEle.querySelector('table')
-        if (isTable) questionText += ' Please use your arrow keys to interact with the table below.'
-
+        // Focus the hidden, focusable element
         setTimeout(() => {
-            focusableEle.textContent = questionText;
             focusableEle.focus();
-        }, 100);
+        }, 500);
 
         questionFocusSet = true;
     }
@@ -46,39 +26,64 @@ export function manageAccessibleQuestion(fieldsetEle, questionFocusSet, isModalC
     return questionFocusSet;
 }
 
-// Build the question text for screen readers.
-// Calculate the breakpoint between question and responses for accessible focus management.
-// Focus on the invisible focusable element to manage screen reader focus.
-// This sets the starting accessible control point just after the question text and before the responses list or table. 
+/**
+ * Build the question text for screen readers.
+ * Calculate the breakpoint between question and responses for accessible focus management.
+ * Create a legend tag for the question text - legend tags are automatically read by screen readers.
+ * Create a hidden, focusable element for screen reader focus management.
+ * This sets the starting accessible control point just after the question text and before the responses list or table. 
+ * @param {HTMLElement} fieldsetEle - The fieldset element containing the question text.
+ * @returns {HTMLElement} - The hidden, focusable element for screen reader focus management.
+ */
+
 function buildQuestionText(fieldsetEle) {
-    let mainQuestionText = '';
     let focusNode = null;
 
     // The conditions for building textContent (survey questions) for the screen reader.
-    const textNodeConditional = (node) => node.nodeType === Node.TEXT_NODE || (node.nodeType === Node.ELEMENT_NODE && !['INPUT', 'BR', 'LABEL', 'TABLE'].includes(node.tagName) && !node.classList.contains('response'));
+    const textNodeConditional = (node) =>
+        node.nodeType === Node.TEXT_NODE ||
+        (node.nodeType === Node.ELEMENT_NODE &&
+            !['INPUT', 'BR', 'LABEL', 'LEGEND', 'TABLE'].includes(node.tagName) &&
+            !node.classList.contains('response'));
+
     const childNodes = Array.from(fieldsetEle.childNodes);
 
+    // Collect the question text and find the split point for responses.
+    const questionElements = [];
     for (const node of childNodes) {
         if (textNodeConditional(node)) {
-            mainQuestionText += node.textContent.trim() + ' ';
+
+            // Stop collecting for legend if we hit the input labels
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().startsWith('#')) {
+                focusNode = node;
+                break;
+            }
+            questionElements.push(node.cloneNode(true));
+            // Stop looping if the text contains the 'a summary' text (otherwise the summary prompts get compressed).
+            if (node.textContent && node.textContent.includes('a summary')) {
+                focusNode = node.nextSibling;
+                break;
+            }
         } else if (node.tagName === 'BR') {
-            continue; // Skip breaks (some questions have multiple paragraphs).
+            continue; // Skip <br> tags.
         } else {
             focusNode = node; // The focus node splits questions and responses. The invisible focusable element is placed here.
             break;
         }
     }
 
-    // If a breakpoint isn't found (common in intros where there are no responses), set it to the last child node.
-    // For that case, we don't need to search for additional questions.
+    // Handle cases where no split point is found.
     if (!focusNode) {
         focusNode = childNodes[childNodes.length - 1];
     } else {
         handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNode);
     }
+    
+    // Create the <legend> tag for screen readers and move the question text into it.
+    const updatedFieldset = manageLegendTag(fieldsetEle, questionElements);
 
-    // Return the focus node for screen reader focus management.
-    return { text: mainQuestionText.trim(), focusNode };
+    // Create and return the hidden, focusable element for screen reader focus management.
+    return createFocusableElement(updatedFieldset, focusNode);
 }
 
 // Find additional questions (e.g. QoL multi-question surveys).
@@ -138,24 +143,132 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNo
     }
 }
 
-// Close the modal and focus on the question text.
-// Re-build the question text and focus management for screen readers.
+/**
+ * Insert the <legend> tag for the question text. This is the accessible question text for screen readers.
+ * Check for an existing <legend> tag since the user can navigate back and forth between questions.
+ * Tables require special handling.
+ * @param {HTMLElement} fieldsetEle - The fieldset element containing the question text.
+ * @param {Array<Node>} questionElements - array of nodes to be added to the legend.
+ */
+
+function manageLegendTag(fieldsetEle, questionElements) {
+    const existingLegend = fieldsetEle.querySelector('legend');
+    if (existingLegend) return fieldsetEle;
+
+    let legendEle = document.createElement('legend');
+    legendEle.classList.add('question-text');
+
+    // Add all question elements to the new <legend>.
+    questionElements.forEach((el) => legendEle.appendChild(el));
+
+    // Remove the original question elements to prevent duplication.
+    questionElements.forEach((el) => {
+        const originalNode = Array.from(fieldsetEle.childNodes).find(
+            (child) => child.isEqualNode(el)
+        );
+        if (originalNode) {
+            originalNode.remove();
+        }
+    });
+
+    const table = fieldsetEle.querySelector('table');
+    if (table) {
+        // Create the table navigation instructions for screen readers as a visually hidden element in the legend.
+        const tableInstructions = document.createElement('span');
+        tableInstructions.classList.add('visually-hidden');
+        tableInstructions.textContent = 'Please use your arrow keys to interact with the table below.';
+        legendEle.appendChild(tableInstructions);
+
+        // Create a new <fieldset> element, then add the <legend> to it.
+        const newFieldset = document.createElement('fieldset');
+        newFieldset.appendChild(legendEle);
+
+        // Move the table inside the new <fieldset>
+        table.parentNode.insertBefore(newFieldset, table);
+        newFieldset.appendChild(table);
+        removeBRAfterLegend(newFieldset);
+
+        return newFieldset;
+
+    } else {
+        // Insert the <legend> as the first child of the existing <fieldset> for non-table questions.
+        fieldsetEle.insertBefore(legendEle, fieldsetEle.firstChild);
+        removeBRAfterLegend(fieldsetEle);
+        return fieldsetEle;
+    }
+}
+
+const removeBRAfterLegend = (fieldsetEle) => {
+    const legendEle = fieldsetEle.querySelector('legend');
+    if (!legendEle) return;
+    let nextSibling = legendEle.nextSibling;
+    while (nextSibling?.tagName === 'BR' && nextSibling.nextSibling?.tagName === 'BR') {
+        fieldsetEle.removeChild(nextSibling);
+        nextSibling = legendEle.nextSibling;
+    }
+}
+
+/**
+ * Create a hidden, focusable element for screen reader focus management in each question.
+ * @param {HTMLElement} fieldsetEle - The fieldset element containing the question text.
+ * @param {Node} focusNode - The node to place the focusable element after.
+ * @returns {HTMLElement} - The hidden, focusable element for screen reader focus management.
+ */
+
+function createFocusableElement(fieldsetEle, focusNode) {
+    let focusableEle = fieldsetEle.querySelector('span.screen-reader-focus');
+    if (!focusableEle) {
+        focusableEle = document.createElement('span');
+        focusableEle.classList.add('screen-reader-focus');
+        focusableEle.setAttribute('tabindex', '0');
+        focusableEle.style.cssText = `
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        `;
+
+        if (focusNode && fieldsetEle.contains(focusNode)) {
+            fieldsetEle.insertBefore(focusableEle, focusNode);
+        } else {
+            const legendEle = fieldsetEle.querySelector('legend');
+            if (legendEle) {
+                legendEle.after(focusableEle);
+            } else {
+                fieldsetEle.appendChild(focusableEle);
+            }
+        }
+    }
+
+    return focusableEle;
+}
+
+/**
+ * Close the modal and focus on the question text.
+ * Re-build the question text and focus management for screen readers.
+ * @param {Event} event - The event object.
+ */
 export function closeModalAndFocusQuestion(event) {
     const modal = moduleParams.questDiv.querySelector('#softModal');
     const isWindowClick = event.target === modal;
-    const isButtonClick = ['close', 'modalCloseButton', 'modalContinueButton'].includes(event.target.id);
+    const isButtonClick = event.target.closest('button.btn-close') ||
+        ['modalCloseButton', 'modalContinueButton'].includes(event.target.id);
 
     if (isWindowClick || isButtonClick) {
         modal.style.display = 'none';
 
         // Find the active question
         const activeQuestion = moduleParams.questDiv.querySelector('.question.active');
-
         if (activeQuestion) {
-            const isModalClose = true;
+            const questionFocusSet = false;
             setTimeout(() => {
-                manageAccessibleQuestion(activeQuestion.querySelector('fieldset') || activeQuestion, isModalClose);
-            }, 500);
+                manageAccessibleQuestion(activeQuestion.querySelector('fieldset') || activeQuestion, questionFocusSet);
+            }, 100);
         }
     }
 }

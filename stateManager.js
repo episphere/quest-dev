@@ -293,6 +293,12 @@ const createStateManager = (store, initialState = {}) => {
             previousSurveyState = { ...surveyState };
             previousActiveQuestionState = { ...activeQuestionState };
 
+            // Update the survey state with the active question state.
+            surveyState = { ...surveyState, ...activeQuestionState };
+            activeQuestionState = {};
+
+            if (moduleParams.isRenderer) console.log('StateManager -> SURVEY STATE:', surveyState); 
+
             // Use .then() instead of await to avoid blocking the UI.
             // On error: revert to the previous question and restore the previous state (handleStoreError()).
             if (typeof store === 'function') {                
@@ -308,12 +314,6 @@ const createStateManager = (store, initialState = {}) => {
             } else {
                 delete activeQuestionState['treeJSON'];
             }
-
-            // Update the survey state with the active question state.
-            surveyState = { ...surveyState, ...activeQuestionState };
-            activeQuestionState = {};
-
-            if (moduleParams.isRenderer) console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState); 
         },
 
         getResponseToQuestionMapping: () => ({ ...responseToQuestionMappingObj }),
@@ -400,10 +400,17 @@ const createStateManager = (store, initialState = {}) => {
             const compoundKey = questionID
                 ? `${responseKey}.${questionID}`
                 : responseKey;
-                
-            // Check the cache first for a found response value.
-            if (Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
+            
+            // Check the cache first for a found response value in this order:
+            //  (1) compoundKey when quesitonID is passed in,
+            //  (2) responseKey.responseKey for object structures
+            //  (3) responseKey for single value responses.
+            if (questionID && Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
                 return foundResponseCache[compoundKey];
+            } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, `${responseKey}.${responseKey}`)) {
+                return foundResponseCache[`${responseKey}.${responseKey}`];
+            } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, responseKey)) {
+                return foundResponseCache[responseKey];
             }
 
             // Check if the responseKey is already in the surveyState object.

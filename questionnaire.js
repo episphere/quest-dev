@@ -265,7 +265,7 @@ const handleForIDAttributes = (forIDElementArray) => {
   const appState = getStateManager();
 
   if (forIDElementArray.length === 1) {
-    const forIDElement = forIDElementArray[0];    
+    const forIDElement = forIDElementArray[0];
     const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
     const parentID = resolveAttributeToParentID(forid, appState);
 
@@ -285,7 +285,13 @@ const handleForIDAttributes = (forIDElementArray) => {
   } else {
     forIDElementArray.forEach(element => {
       const forid = decodeURIComponent(element.getAttribute("forid"));
-      const foundValue = appState.findResponseValue(forid);
+
+      let foundValue = appState.findResponseValue(forid);
+      if (foundValue == null) {
+        const parentID = resolveAttributeToParentID(forid, appState);
+        foundValue = appState.findResponseValue(parentID);
+      }
+
       toggleElementVisibility(element, foundValue);
     });
   }
@@ -593,7 +599,7 @@ function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
   document.getElementById("softModalTitle").focus();
 
   let modalElement = modal._element;
-  modalElement.querySelector('.close').addEventListener('keydown', function (event) {
+  modalElement.querySelector('.btn-close').addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
       modal.hide();
     }
@@ -637,6 +643,13 @@ export async function getNextQuestion(nextOrPreviousButton, revertOnStoreError =
     return null;
   }
 
+  const appState = getStateManager();
+  const questionProcessor = appState.getQuestionProcessor();
+
+  if (!revertOnStoreError) {
+    appState.syncToStore(nextOrPreviousButton);
+  }
+
   if (questionQueue.isEmpty()) {
     questionQueue.add(questionElement.id);
     questionQueue.next();
@@ -646,9 +659,6 @@ export async function getNextQuestion(nextOrPreviousButton, revertOnStoreError =
   checkForSkips(questionElement);
 
   let nextQuestionId = getNextQuestionId();
-  
-  const appState = getStateManager();
-  const questionProcessor = appState.getQuestionProcessor();
 
   let nextQuestionEle = questionProcessor.loadNextQuestion(nextQuestionId);
   nextQuestionEle = exitLoop(nextQuestionEle);
@@ -686,10 +696,6 @@ export async function getNextQuestion(nextOrPreviousButton, revertOnStoreError =
   }
 
   await swapVisibleQuestion(nextQuestionEle);
-
-  if (!revertOnStoreError) {
-    appState.syncToStore(nextOrPreviousButton);
-  }
 }
 
 function exitLoop(nextQuestionEle) {
@@ -798,7 +804,6 @@ export async function prepareQuestionDOM(questionElement) {
 
   handleQuestionDisplayIfs(questionElement);
   handleQuestionInputAttributes(questionElement);
-  handleQuestionBRElements(questionElement);
 
   // JAWS (Windows) requires tabindex to be set on the response divs for the radio buttons to be accessible.
   // The tabindex leads to a negative user experience in VoiceOver (macOS).
@@ -818,7 +823,6 @@ export async function prepareQuestionDOM(questionElement) {
   }
 
   const appState = getStateManager();
-  appState.setActiveQuestionState(questionElement.id);
   const questionProcessor = appState.getQuestionProcessor();
 
   if (moduleParams.showProgressBarInQuest) {  
@@ -828,14 +832,15 @@ export async function prepareQuestionDOM(questionElement) {
   if (!moduleParams.isRenderer) {
     handleUserScrollLocation();
     
-    setTimeout(() => {
-      // Handle accessibility features after the question renders.
-      // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
-      questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
-      
-      // Batch process questions for large surveys after the current question is displayed.
-      questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 50);
-    }, 500);
+    // Handle accessibility features after the question renders.
+    // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
+    questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
+    
+    // TODO: evaluate this.
+    // Batch process questions for large surveys after the current question is displayed.
+    //questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 50);
+
+    handleQuestionBRElements(questionElement);
   }
 }
 
@@ -1065,7 +1070,7 @@ function handleQuestionInputAttributes(questionElement) {
   }
 }
 
-function handleQuestionBRElements(questionElement) {
+function handleQuestionBRElements(questionElement, maxBrs = 3) {
   let consecutiveBrs = [];
 
   // Traverse the DOM tree to find all <br> elements
@@ -1073,9 +1078,9 @@ function handleQuestionBRElements(questionElement) {
     if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
       consecutiveBrs.push(br);
     } else {
-      if (consecutiveBrs.length > 3) {
+      if (consecutiveBrs.length > maxBrs) {
         // Remove all but the first two <br> elements
-        consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+        consecutiveBrs.slice(maxBrs).forEach((extraBr) => extraBr.remove());
       }
       // Reset the array to start tracking a new sequence
       consecutiveBrs = [br];
@@ -1083,8 +1088,8 @@ function handleQuestionBRElements(questionElement) {
   });
 
   // Final check in case the last sequence of <br>s is at the end of the document
-  if (consecutiveBrs.length > 3) {
-    consecutiveBrs.slice(3).forEach((extraBr) => extraBr.remove());
+  if (consecutiveBrs.length > maxBrs) {
+    consecutiveBrs.slice(maxBrs).forEach((extraBr) => extraBr.remove());
   }
 
   //Sets the brs after non-displays to not show as well
@@ -1111,8 +1116,8 @@ function handleUserScrollLocation() {
   rootElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function isMobileDevice() {
-  return window.matchMedia('(max-width: 767px)').matches;
+export function isMobileDevice() {
+  return window.matchMedia('(max-width: 576px)').matches;
 }
 
 // Check whether the browser supports "month" input type.

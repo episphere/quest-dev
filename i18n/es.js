@@ -52,8 +52,8 @@ const es = {
     "validationTextShort": "El texto ingresado es demasiado corto (debe tener al menos {0} caracteres)",
     "validationTextLong": "El texto ingresado es demasiado largo (debe tener como máximo {0} caracteres)",
     "validationMismatch": "Los valores no coinciden",
-    "validationCountMore": "Ha seleccionado {0} elementos. Seleccione al menos {1}",
-    "validationCountLess": "Ha seleccionado {0} elementos. Seleccione no más de {1}",
+    "validationCountMore": "Ha seleccionado {0} elementos. Seleccione al menos {1}.",
+    "validationCountLess": "Ha seleccionado {0} elementos. Seleccione no más de {1}.",
 
     "months": ["Ene", "Feb", "Mar", "Abr", "Mayo", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
 
