@@ -50,15 +50,43 @@ function buildQuestionText(fieldsetEle) {
 
     // Collect the question text and find the split point for responses.
     const questionElements = [];
-    for (const node of childNodes) {
+
+    for (let nodeIndex = 0; nodeIndex < childNodes.length; nodeIndex++) {
+        const node = childNodes[nodeIndex];
         if (textNodeConditional(node)) {
+            // Special <br> handling to retain spacing for top headings with question text below.
+            if (node.tagName === 'B' && nodeIndex <= 1 && (nodeIndex === 0 || (childNodes[nodeIndex - 1].nodeType === Node.TEXT_NODE && !childNodes[nodeIndex - 1].textContent.trim()))) {
+                questionElements.push(node.cloneNode(true));
+
+                // Ensure exactly two <br> nodes follow the <b> tag.
+                let brCount = 0;
+                let nextSiblingNodeIndex = nodeIndex + 1;
+
+                // Count existing <br> nodes after the <b> heading.
+                while (nextSiblingNodeIndex < childNodes.length && childNodes[nextSiblingNodeIndex].tagName === 'BR') {
+                    questionElements.push(childNodes[nextSiblingNodeIndex].cloneNode(true)); // Include existing <br> nodes.
+                    brCount++;
+                    nextSiblingNodeIndex++;
+                }
+
+                // Add missing <br> nodes for a total of two.
+                while (brCount < 1) {
+                    const brNode = document.createElement('br');
+                    questionElements.push(brNode);
+                    brCount++;
+                }
+
+                continue;
+            }
 
             // Stop collecting for legend if we hit the input labels
             if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().startsWith('#')) {
                 focusNode = node;
                 break;
             }
+
             questionElements.push(node.cloneNode(true));
+            
             // Stop looping if the text contains the 'a summary' text (otherwise the summary prompts get compressed).
             if (node.textContent && node.textContent.includes('a summary')) {
                 focusNode = node.nextSibling;
@@ -154,7 +182,7 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNo
 function manageLegendTag(fieldsetEle, questionElements) {
     const existingLegend = fieldsetEle.querySelector('legend');
     if (existingLegend) return fieldsetEle;
-
+    
     let legendEle = document.createElement('legend');
     legendEle.classList.add('question-text');
 
@@ -173,12 +201,6 @@ function manageLegendTag(fieldsetEle, questionElements) {
 
     const table = fieldsetEle.querySelector('table');
     if (table) {
-        // Create the table navigation instructions for screen readers as a visually hidden element in the legend.
-        const tableInstructions = document.createElement('span');
-        tableInstructions.classList.add('visually-hidden');
-        tableInstructions.textContent = 'Please use your arrow keys to interact with the table below.';
-        legendEle.appendChild(tableInstructions);
-
         // Create a new <fieldset> element, then add the <legend> to it.
         const newFieldset = document.createElement('fieldset');
         newFieldset.appendChild(legendEle);
@@ -198,7 +220,7 @@ function manageLegendTag(fieldsetEle, questionElements) {
     }
 }
 
-const removeBRAfterLegend = (fieldsetEle) => {
+function removeBRAfterLegend(fieldsetEle) {
     const legendEle = fieldsetEle.querySelector('legend');
     if (!legendEle) return;
     let nextSibling = legendEle.nextSibling;

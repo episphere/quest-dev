@@ -57,15 +57,11 @@ async function fetchAndProcessResources() {
 
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
             moduleParams.retrieve && !moduleParams.surveyDataPrefetch ? moduleParams.retrieve() : Promise.resolve(),
-            // TODO: Toggle the hardcoded paths for development and use the basePath from the moduleParams.
-            // shouldFetchStylesheets ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-            // shouldFetchStylesheets ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
             shouldFetchStylesheets ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
             shouldFetchStylesheets ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
         ]);
 
         // retrievedData is the prefetched user data, the result of the retrieve function, or null (for the renderer or when no retrieve function is provided).
-        // This is used to populate the questionnaire (fillForm).
         const retrievedData = moduleParams.surveyDataPrefetch || unwrapData(retrieveFunctionResponse?.data);
 
         // Add the stylesheets to the document.

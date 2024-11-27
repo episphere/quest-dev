@@ -101,117 +101,119 @@ input[type="text"] {
   align-self: center;
 }
 
-.quest-grid.table-layout tr {
-  width: auto;
-  display: table-row;
-  font-size: clamp(12px, 1.5vw, 16px);
-}
- 
-.quest-grid.table-layout th.hr {
-  padding: .2vw;
-  text-align: center;
-  vertical-align: top;
-  background-color: transparent;
-  border: none;
-  font-weight: normal;
-  font-size: clamp(11px, 1.8vw, 16px);
-  word-wrap: break-word;
-}
-
-.quest-grid.table-layout th.nr {
-  padding: clamp(5px, 1vw, 10px);
-  text-align: center;
-  vertical-align: middle;
-  background-color: transparent;
-  border: none;
-  font-size: clamp(12px, 1.5vw, 16px);
-}
-
-.quest-grid.table-layout td {
-  padding: .5vw;
-  text-align: center;
-  vertical-align: middle;
-  background-color: transparent;
-  border: none;
-}
-
-.quest-grid.table-layout th.nr,
-.quest-grid.table-layout td.nr {
-  text-align: left;
-  font-size: clamp(12px, 1.5vw, 16px);
-}
-
-.quest-grid.table-layout input[type="checkbox"],
-.quest-grid.table-layout input[type="radio"] {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-
-.quest-grid.table-layout .custom-label {
-  position: relative;
-  height: clamp(19px, 2vw, 34px);
-  min-width: clamp(19px, 2vw, 34px);
-  color: transparent;
-  background-color: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: none;
-  outline: none;
-  overflow: hidden;
-  padding: 1em;
-}
-
-.quest-grid.table-layout .custom-label::before {
-  content: '';
-  display: block;
-  width: clamp(19px, 2vw, 34px);
-  height: clamp(19px, 2vw, 34px);
-  border: 0.15vw solid #b3b3b3;
-  border-radius: 50%;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  background-color: transparent;
-}
-
-.quest-grid.table-layout input[type="checkbox"]:checked + .custom-label::after,
-.quest-grid.table-layout input[type="radio"]:checked + .custom-label::after {
-  content: '';
-  display: block;
-  width: clamp(14px, 1.4vw, 23px);
-  height: clamp(14px, 1.4vw, 23px);
-  border-radius: 50%;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  background-color: #327ABB;
-}
-
-.quest-grid.table-layout .custom-label:hover {
-  background-color: transparent;
-  border: none;
-  outline: none;
-}
-
-.quest-grid .custom-label:hover::before {
-  border-color: #1c5d86;
-  box-shadow: 0 0 .75vw #b3b3b3;
-}
-
-.quest-grid.table-layout input[type="checkbox"]:checked + .custom-label,
-.quest-grid.table-layout input[type="radio"]:checked + .custom-label {
-  border: none;
-  background-color: transparent;
-  color: transparent;
-} 
-
 @media screen and (min-width: 576px) {
+
+  .quest-grid.table-layout tr {
+    width: auto;
+    display: table-row;
+    font-size: clamp(12px, 1.5vw, 16px);
+  }
+  
+  .quest-grid.table-layout th.hr {
+    padding: .2vw;
+    text-align: center;
+    vertical-align: top;
+    background-color: transparent;
+    border: none;
+    font-weight: normal;
+    font-size: clamp(11px, 1.8vw, 16px);
+    word-wrap: break-word;
+  }
+
+  .quest-grid.table-layout th.nr {
+    padding: clamp(5px, 1vw, 10px);
+    text-align: center;
+    vertical-align: middle;
+    background-color: transparent;
+    border: none;
+    font-size: clamp(12px, 1.5vw, 16px);
+  }
+
+  .quest-grid.table-layout td {
+    padding: .5vw;
+    text-align: center;
+    vertical-align: middle;
+    background-color: transparent;
+    border: none;
+  }
+
+  .quest-grid.table-layout th.nr,
+  .quest-grid.table-layout td.nr {
+    text-align: left;
+    font-size: clamp(12px, 1.5vw, 16px);
+  }
+
+  .quest-grid.table-layout input[type="checkbox"],
+  .quest-grid.table-layout input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .quest-grid.table-layout .custom-label {
+    position: relative;
+    height: clamp(19px, 2vw, 34px);
+    min-width: clamp(19px, 2vw, 34px);
+    color: transparent;
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: none;
+    outline: none;
+    overflow: hidden;
+    padding: 1em;
+  }
+
+  .quest-grid.table-layout .custom-label::before {
+    content: '';
+    display: block;
+    width: clamp(19px, 2vw, 34px);
+    height: clamp(19px, 2vw, 34px);
+    border: 0.15vw solid #b3b3b3;
+    border-radius: 50%;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-color: transparent;
+  }
+
+  .quest-grid.table-layout input[type="checkbox"]:checked + .custom-label::after,
+  .quest-grid.table-layout input[type="radio"]:checked + .custom-label::after {
+    content: '';
+    display: block;
+    width: clamp(14px, 1.4vw, 23px);
+    height: clamp(14px, 1.4vw, 23px);
+    border-radius: 50%;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #327ABB;
+  }
+
+  .quest-grid.table-layout .custom-label:hover {
+    background-color: transparent;
+    border: none;
+    outline: none;
+  }
+
+  .quest-grid .custom-label:hover::before {
+    border-color: #1c5d86;
+    box-shadow: 0 0 .75vw #b3b3b3;
+  }
+
+  .quest-grid.table-layout input[type="checkbox"]:checked + .custom-label,
+  .quest-grid.table-layout input[type="radio"]:checked + .custom-label {
+    border: none;
+    background-color: transparent;
+    color: transparent;
+  } 
+
+
   /* Emphasize the first table column. Then let the browser calculate the width for the remaining columns */
   .quest-grid.table-layout th:first-child,
   .quest-grid td:first-child {
@@ -221,58 +223,26 @@ input[type="text"] {
   }
 }
 
-/** 
-I chose 576px because this matches the default breakpoint
-for bootstrap -xs
-**/
+/* 576px matches the default breakpoint for bootstrap xs */
 @media screen and (max-width: 576px) {
-  .quest-grid.table-layout,
-  .quest-grid.table-layout td { 
+  .quest-grid.table-layout {
     display: block;
+  }
+
+  .quest-grid.table-layout tbody,
+  .quest-grid.table-layout tr {
+    display: block;
+    margin-bottom: 15px;
   }
 
   .quest-grid.table-layout thead {
     display: none;
   }
 
-  .quest-grid.table-layout th.nr {
-    font-weight: bold;
-    font-size: 16px;
-  }
-  .quest-grid.table-layout .custom-label {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: transparent;
-    cursor: pointer;
-    display: block;
-  }
-
-  .quest-grid.table-layout tbody {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .quest-grid.table-layout thead tr { 
-    position: absolute;
-    top: -9999px;
-    left: -9999px;
-  }
-
-  .quest-grid.table-layout tr { 
-    display: flex;
-    flex-direction: column;
-    border: 1px solid #a3a3a3;
-    border-radius: 4px;
-    margin-top: 10px; 
-    padding: 5px;
-  }
-
-  .quest-grid.table-layout td { 
+  .quest-grid.table-layout td {
     display: block;
     width: 100%;
+    border: 1px solid #ccc;
     margin-bottom: 3px;
     text-align: center;
     min-height: 75px;
@@ -284,51 +254,30 @@ for bootstrap -xs
     font-size: 16px;
     border-radius: 4px;
     position: relative;
-  }
 
-  .quest-grid.table-layout td:hover {
-    background-color: #e0e0e0;
-    color: #333;
-  }
+    .custom-label {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
 
-  .quest-grid.table-layout input[type="checkbox"]:checked + .custom-label::after,
-  .quest-grid.table-layout input[type="radio"]:checked + .custom-label::after {
-    display: none;
-  }
+    /* Show the label text when the input is checked */
+    input:checked+.custom-label {
+      color: white;
+      background-color: #327ABB;
+    }
 
-  .quest-grid.table-layout .custom-label::before {
-    display: none;
-  }
-
-  .quest-grid.table-layout td input[type="checkbox"]:checked + .custom-label,
-  .quest-grid.table-layout td input[type="radio"]:checked + .custom-label {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #327ABB;
-    color: white;
-    display: flex;
-    align-items: center;
-    text-align: center;
-    justify-content: center;
-    padding: 0 5px;
-    box-sizing: border-box;
-    z-index: 1;
-    text-transform: none;
-    line-height: normal;
-  }
-
- .quest-grid.table-layout td::before {
-    content: attr(data-header);
-    font-size: 16px;
-    color: #333;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 100%;
-    padding: 0 3px;
+    input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
   }
 }

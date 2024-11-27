@@ -276,33 +276,38 @@ const handleForIDAttributes = (forIDElementArray) => {
     forIDElement.setAttribute('forid', parentID);
 
     // Update the parent displayif attribute if it exists.
-    const outerSpan = forIDElement.closest(".displayif");
-    if (outerSpan) {
-      const parentDisplayIf = outerSpan.getAttribute('displayif').replace(forid, parentID);
-      outerSpan.setAttribute('displayif', parentDisplayIf)
+    const closestDisplayIf = forIDElement.closest(".displayif");
+    if (closestDisplayIf) {
+      const parentDisplayIf = closestDisplayIf.getAttribute('displayif').replace(forid, parentID);
+      closestDisplayIf.setAttribute('displayif', parentDisplayIf)
     }
 
   } else {
-    forIDElementArray.forEach(element => {
-      const forid = decodeURIComponent(element.getAttribute("forid"));
+    forIDElementArray.forEach(forIDElement => {
+      const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
+      let parentID = null;
 
       let foundValue = appState.findResponseValue(forid);
       if (foundValue == null) {
-        const parentID = resolveAttributeToParentID(forid, appState);
+        parentID = resolveAttributeToParentID(forid, appState);
         foundValue = appState.findResponseValue(parentID);
       }
 
-      toggleElementVisibility(element, foundValue);
+      if (typeof foundValue === 'object') {
+        foundValue = null;
+      }
+
+      toggleElementVisibility(forIDElement, foundValue, forid, parentID);
     });
   }
 }
 
-const toggleElementVisibility = (element, textContent) => {
-  if (textContent) {
-    element.style.display = null;
-    element.textContent = textContent;
+const toggleElementVisibility = (forIDElement, foundValue) => {
+  if (foundValue) {
+    forIDElement.style.display = null;
+    forIDElement.textContent = foundValue;
   } else {
-    element.style.display = "none";
+    forIDElement.style.display = "none";
   }
 }
 
@@ -836,10 +841,6 @@ export async function prepareQuestionDOM(questionElement) {
     // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
     questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
     
-    // TODO: evaluate this.
-    // Batch process questions for large surveys after the current question is displayed.
-    //questionProcessor.processAllQuestions(questionProcessor.lastBatchProcessedQuestionIndex, questionProcessor.lastBatchProcessedQuestionIndex + 50);
-
     handleQuestionBRElements(questionElement);
   }
 }
