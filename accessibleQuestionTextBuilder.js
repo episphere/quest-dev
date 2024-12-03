@@ -1,4 +1,5 @@
 import { moduleParams } from './questionnaire.js';
+import { getStateManager } from './stateManager.js';
 
 /**
  * Initialize the question text and focus management for screen readers.
@@ -181,15 +182,17 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNo
 
 function manageLegendTag(fieldsetEle, questionElements) {
     const existingLegend = fieldsetEle.querySelector('legend');
-    if (existingLegend) return fieldsetEle;
+    if (existingLegend) {
+        // Update the existing displayifs in case the user changed a response.
+        manageLegendDisplayIfs(existingLegend);
+        return fieldsetEle;
+    }
     
     let legendEle = document.createElement('legend');
     legendEle.classList.add('question-text');
 
-    // Add all question elements to the new <legend>.
+    // Add all question elements to the new <legend>, then remove the original nodes.
     questionElements.forEach((el) => legendEle.appendChild(el));
-
-    // Remove the original question elements to prevent duplication.
     questionElements.forEach((el) => {
         const originalNode = Array.from(fieldsetEle.childNodes).find(
             (child) => child.isEqualNode(el)
@@ -199,6 +202,10 @@ function manageLegendTag(fieldsetEle, questionElements) {
         }
     });
 
+    // Manage displayifs in the legend (question text) for summary pages and dynamic questions.
+    manageLegendDisplayIfs(legendEle);
+
+    // The table case: no fieldset exists, create it.
     const table = fieldsetEle.querySelector('table');
     if (table) {
         // Create a new <fieldset> element, then add the <legend> to it.
@@ -218,6 +225,37 @@ function manageLegendTag(fieldsetEle, questionElements) {
         removeBRAfterLegend(fieldsetEle);
         return fieldsetEle;
     }
+}
+
+/**
+ * Displayifs are in the legend (question text) for summary pages and dynamic questions.
+ * E.g. "Are you still experiencing ______ ?" or "Here's the information you gave us:"
+ * Most questions don't have displayifs in the question text.
+ * 
+ * The forid spans are embedded in those displayifs, and the user's previous responses are injected.
+ * Get all the span elements with class="displayif"
+ * Iterate each span, pull the forid, and check & update the value from stateManager
+ * @param {HTMLElement} legend - The legend element containing the question text (and dynamic responses)
+ * @returns {void} - The forid values are updated directly in the legend
+ */
+
+function manageLegendDisplayIfs(legend) {
+    const displayIfSpans = Array.from(legend.querySelectorAll('span.displayif'));
+    if (displayIfSpans.length === 0) return;
+
+    const appState = getStateManager();
+    displayIfSpans.forEach(span => {
+        const forIDSpans = span.querySelectorAll('[forid]');
+        forIDSpans.forEach(forIDSpan => {
+            const forID = forIDSpan.getAttribute('forid');
+            const foundValue = appState.findResponseValue(forID) ?? '';
+
+            foundValue === ''
+                ? forIDSpan.style.display = 'none'
+                : forIDSpan.style.display = null;
+            forIDSpan.textContent = foundValue;
+        });
+    });
 }
 
 function removeBRAfterLegend(fieldsetEle) {

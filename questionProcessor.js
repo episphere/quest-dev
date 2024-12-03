@@ -1338,13 +1338,13 @@ export class QuestionProcessor {
     return `
         <div class="py-0">
             <div class="row d-flex flex-column flex-md-row">
-                <div class="col-md-3 col-sm-12 order-md-3">
+                <div class="col-md-3 col-sm-12 mb-1 mb-md-0 order-md-3">
                     ${nextButton}
                 </div>
-                <div class="col-md-6 col-sm-12 order-md-2">
+                <div class="col-md-6 col-sm-12 mb-1 mb-md-0 order-md-2">
                     ${resetButton}
                 </div>
-                <div class="col-md-3 col-sm-12 order-md-1">
+                <div class="col-md-3 col-sm-12 mb-1 mb-md-0 order-md-1">
                     ${prevButton}
                 </div>
             </div>

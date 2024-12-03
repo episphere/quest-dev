@@ -405,12 +405,17 @@ const createStateManager = (store, initialState = {}) => {
             //  (1) compoundKey when quesitonID is passed in,
             //  (2) responseKey.responseKey for object structures
             //  (3) responseKey for single value responses.
+            let cachedValue;
             if (questionID && Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
-                return foundResponseCache[compoundKey];
+                cachedValue = foundResponseCache[compoundKey];
             } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, `${responseKey}.${responseKey}`)) {
-                return foundResponseCache[`${responseKey}.${responseKey}`];
+                cachedValue = foundResponseCache[`${responseKey}.${responseKey}`];
             } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, responseKey)) {
-                return foundResponseCache[responseKey];
+                cachedValue = foundResponseCache[responseKey];
+            }
+
+            if (cachedValue !== null && cachedValue !== undefined && typeof cachedValue !== 'object') {
+                return cachedValue;
             }
 
             // Check if the responseKey is already in the surveyState object.
