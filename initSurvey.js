@@ -5,31 +5,39 @@ import { QuestionProcessor } from './questionProcessor.js';
 import { getStateManager } from './stateManager.js';
 
 /**
- * Initialize the survey: state manager, precalculated values, mathJS implementation, and questionProcessor
- * moduleParams.renderObj.activate determines if the survey is embedded in an application or found in the included rendering tool.
+ * Initialize the survey: state manager, precalculated values, mathJS implementation, and questionProcessor.
+ * Normalize ids in asyncQuestionsMap for DOM manipulation: [D_761310265?] -> D_761310265.
+ * moduleParams.activate determines if the survey is embedded in an application or found in the included rendering tool.
  * If activate is true, the survey is embedded and the retrieve function and CSS files are fetched.
  * If activate is false, the survey is standalone in the renderer tool.
- * @param {String} contents - The markdown contents of the survey prior to transformation.
+ * @param {String} markdown - The markdown contents of the survey prior to transformation.
  * @returns {Array} - An array containing the transformed contents, questName, and retrievedData.
  */
-export async function initSurvey(contents) {
-    initializeStateManager(moduleParams.renderObj.store);
+export async function initSurvey(markdown) {
+    initializeStateManager(moduleParams.store);
     initializeCustomMathJSFunctions();
 
-    const precalculated_values = getPreCalculatedValues(contents);
-    const questionProcessor = new QuestionProcessor(contents, precalculated_values, moduleParams.i18n);
+    const precalculated_values = getPreCalculatedValues(markdown);
+    const questionProcessor = new QuestionProcessor(markdown, precalculated_values, moduleParams.i18n);
     
     const stateManager = getStateManager();
     stateManager.setQuestionProcessor(questionProcessor);
 
-    return !moduleParams.renderObj?.isRenderer
+    moduleParams.asyncQuestionsMap = Object.fromEntries(
+        Object.entries(moduleParams.asyncQuestionsMap).map(([key, value]) => {
+            const normalizedKey = key.replace(/[[\]]/g, '').replace(/[?!]$/, '');
+            return [normalizedKey, value];
+        })
+    );
+
+    return !moduleParams.isRenderer
         ? await fetchAndProcessResources()
         : null;
 }
 
 /**
  * Fetch and process the resources for the survey. This includes the retrieve function (existing user data) and CSS files.
- * See moduleParams.renderObj for the configuration (replace2.js).
+ * See moduleParams for the configuration (replace2.js).
  * @returns {Object} - The retrieved data from the retrieve function or null.
  */
 async function fetchAndProcessResources() {
@@ -45,20 +53,16 @@ async function fetchAndProcessResources() {
     }
     
     try {
-        const shouldFetchStylesheets = moduleParams.renderObj?.url && moduleParams.renderObj?.activate;
+        const shouldFetchStylesheets = moduleParams.url && moduleParams.activate;
 
         const [retrieveFunctionResponse, cssActiveLogic, cssStyle1] = await Promise.all([
-            moduleParams.renderObj?.retrieve && !moduleParams.renderObj?.surveyDataPrefetch ? moduleParams.renderObj.retrieve() : Promise.resolve(),
-            // TODO: Remove the hardcoded paths and use the basePath from the moduleParams.
-            // shouldFetchStylesheets ? fetch(`./js/quest-dev/ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
-            // shouldFetchStylesheets ? fetch(`./js/quest-dev/Style1.css`).then(response => response.text()) : Promise.resolve(),
+            moduleParams.retrieve && !moduleParams.surveyDataPrefetch ? moduleParams.retrieve() : Promise.resolve(),
             shouldFetchStylesheets ? fetch(`${moduleParams.basePath}ActiveLogic.css`).then(response => response.text()) : Promise.resolve(),
             shouldFetchStylesheets ? fetch(`${moduleParams.basePath}Style1.css`).then(response => response.text()) : Promise.resolve(),
         ]);
 
         // retrievedData is the prefetched user data, the result of the retrieve function, or null (for the renderer or when no retrieve function is provided).
-        // This is used to populate the questionnaire (fillForm).
-        const retrievedData = moduleParams.renderObj?.surveyDataPrefetch || unwrapData(retrieveFunctionResponse?.data);
+        const retrievedData = moduleParams.surveyDataPrefetch || unwrapData(retrieveFunctionResponse?.data);
 
         // Add the stylesheets to the document.
         if (shouldFetchStylesheets) {
@@ -73,7 +77,7 @@ async function fetchAndProcessResources() {
 
         return retrievedData;
     } catch (error) {
-        console.error('Error fetching retrieve function and css:', error);
+        moduleParams.errorLogger('Error fetching retrieve function and css:', error);
         return null;
     }
 }

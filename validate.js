@@ -1,4 +1,4 @@
-import { callExchangeValues } from "./questionnaire.js";
+import { callExchangeValues, moduleParams } from "./questionnaire.js";
 import { translate } from "./common.js";
 import { math } from './customMathJSImplementation.js';
 
@@ -29,10 +29,9 @@ export function validateInput(inputElement) {
 
         handlers[inputElementType](inputElement)
     } else if (["radio", "time"].includes(inputElementType)) {
-        // no validation for radio buttons
+        // no validation for radio buttons or time selectors
     } else {
-        console.log(`no handle for type: ${inputElementType}`)
-        console.log(inputElement)
+        moduleParams.errorLogger(`no handle for type: ${inputElementType}`, inputElement);
     }
 }
 
@@ -154,8 +153,6 @@ function validate_date(inputElement) {
 }
 
 function validate_email(inputElement) {
-    console.log("in validate email", inputElement)
-
     let emailRegEx = /\S+@\S+\.\S+/;
     if (!emailRegEx.test(inputElement.value)) {
         validationError(inputElement, translate("validationEmailAddress"));
@@ -165,8 +162,6 @@ function validate_email(inputElement) {
 }
 
 function validate_telephone(inputElement) {
-    console.log("in validate telephone", inputElement)
-
     if (inputElement.value.length < 12) {
         validationError(inputElement, translate("validationPhoneNumber"));
     } else {
@@ -237,10 +232,14 @@ function validate_text(inputElement) {
     }
 
     let checkConfirmation = "confirm" in inputElement.dataset || "confirmationFor" in inputElement.dataset;
-
+    
     if (checkConfirmation){
+        console.warn('CONFIRMATION (CASE NOT FOUND/HANDLED YET)', checkConfirmation, inputElement);
+        console.warn('INPUT ELEMENT DATASET', inputElement.dataset);
         let otherId = inputElement.dataset.confirm ?? inputElement.dataset.confirmationFor
         let otherElement = document.getElementById(otherId)
+
+        console.warn('CONFIRMATION (CASE NOT FOUND/HANDLED YET) - other element', otherElement);
 
         if (otherElement.value != inputElement.value) {
             validationError(inputElement, translate("validationMismatch"));

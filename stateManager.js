@@ -1,4 +1,10 @@
-import { hideLoadingIndicator, moduleParams, questionQueue, showLoadingIndicator } from './questionnaire.js';
+import { moduleParams, questionQueue } from './questionnaire.js';
+import { hideLoadingIndicator, showLoadingIndicator } from './common.js';
+import { getNextQuestion, getPreviousQuestion } from './questionnaire.js';
+import { resetChildren } from './eventHandlers.js';
+import { clearSelectionAnnouncement } from './accessibleQuestionTextBuilder.js';
+import { restoreResponses } from './restoreResponses.js';
+
 /**
  * State Manager: Quest state manager to centralize state management and syncing to the store.
  * appState is the global state container for the application.
@@ -28,6 +34,13 @@ const createStateManager = (store, initialState = {}) => {
     // Set up the questionProcessor object
     let questionProcessor = null;
 
+    /**
+     * Update the state with the provided value. This is called on input change.
+     * @param {string} value - the response value to update in the state.
+     * @param {string} questionID - the question ID to update in the state. Matches the formID.
+     * @param {string | null} key - the response key for multi-value responses (checkboxes and text responses).
+     */
+
     function updateStateKey(value, questionID, key = null) {
 
         if (!activeQuestionState[questionID]) activeQuestionState[questionID] = {};
@@ -53,17 +66,18 @@ const createStateManager = (store, initialState = {}) => {
      * @param {boolean} removeMultipleKeys - whether to remove all keys for the questionID. This is used for multi-value responses when 'reset answer' or the 'back' button is clicked.
      * @returns {void}
      */
+
     function deleteStateKey(questionID, key = null, removeMultipleKeys = false) {
 
         if (!activeQuestionState[questionID]) return;
 
         if (typeof questionID !== 'string' || (key && typeof key !== 'string')) {
-            console.error('StateManager -> deleteStateKey: Question ID and Key must be strings');
+            moduleParams.errorLogger('StateManager -> deleteStateKey: Question ID and Key must be strings');
             return;
         }
     
         if ((key || removeMultipleKeys) && typeof activeQuestionState[questionID] !== 'object') {
-            console.error('StateManager -> deleteStateKey: Expected object, got', typeof activeQuestionState[questionID]);
+            moduleParams.errorLogger('StateManager -> deleteStateKey: Expected object, got', typeof activeQuestionState[questionID]);
             return;
         }
         
@@ -96,6 +110,56 @@ const createStateManager = (store, initialState = {}) => {
         }
     }
 
+    /**
+     * Return to the previous question and reset the form elements if the store() operation fails.
+     * @param {object} error - the error object from the store function.
+     * @param {HTMLButtonElement} nextOrPreviousButton - the most recent button clicked by the user (Next or Back).
+     * @param {object} previousSurveyState - the survey state before the failed store operation.
+     * @param {object} previousActiveQuestionState - the active question state before the failed store operation.
+     */
+
+    function handleStoreError(error, nextOrPreviousButton, previousSurveyState, previousActiveQuestionState) {
+        moduleParams.errorLogger('StateManager -> syncToStore: Error syncing state to store', error);
+
+        // Clear the selection announcement since the user is returning to the previous question.
+        clearSelectionAnnouncement();
+
+        // Revert the state
+        if (Object.keys(previousSurveyState).length > 0) {
+            surveyState = { ...previousSurveyState };
+        }
+
+        if (Object.keys(previousActiveQuestionState).length > 0) {
+            activeQuestionState = { ...previousActiveQuestionState };
+        }
+
+        // Reset the form and return to the previous question.
+        const clickType = nextOrPreviousButton.getAttribute('data-click-type');
+        if (clickType === 'next') {
+            resetChildren(document.querySelector('.question'));
+            getPreviousQuestion(nextOrPreviousButton, true);
+
+        } else if (clickType === 'previous') {
+            getNextQuestion(nextOrPreviousButton, true);
+
+        } else {
+            moduleParams.errorLogger('Invalid click type (handleStoreError):', clickType);
+        }
+
+        restoreResponses(surveyState, Object.keys(activeQuestionState)[0]);
+        showStoreErrorModal();
+    }
+
+    function showStoreErrorModal() {
+        const modal = new bootstrap.Modal(document.getElementById("storeErrorModal"));
+        modal.show();
+
+        // Automatically close the modal after 5 seconds.
+        setTimeout(() => {
+            modal.hide();
+        }, 5000);
+    }
+
     const stateManager = {
         // Set a response as the user updates form inputs. This is called on input change.
         // Single value responses are stored directly in the activeQuestionState object (case 1), multi-value responses are stored in an object (default case).
@@ -114,8 +178,6 @@ const createStateManager = (store, initialState = {}) => {
             } else {
                 updateStateKey(value, questionID, shouldIncludeKey ? key : null);
             }
-        
-            console.log('StateManager -> setResponse: activeQuestionState:', activeQuestionState); // Temp for debugging
         },
 
         getItem: (questionID) => {
@@ -151,8 +213,6 @@ const createStateManager = (store, initialState = {}) => {
             } else {
                 throw new Error('StateManager -> removeItem: Key not found');
             }
-
-            console.log('StateManager -> removeResponseItem: activeQuestionState:', activeQuestionState); // Temp for debugging
         },
 
         // Remove responses from the activeQuestionState. Triggered on 'back' button click or 'reset answer' click.
@@ -166,8 +226,6 @@ const createStateManager = (store, initialState = {}) => {
             // Check if the response is a single value or an object with multiple keys.
             const removeMultipleKeysBool = typeof activeQuestionState[questionID] === 'object' && !Array.isArray(activeQuestionState[questionID]);
             deleteStateKey(questionID, null, removeMultipleKeysBool);
-            
-            console.log('StateManager -> removeResponse: activeQuestionState:', activeQuestionState); // Temp for debugging
         },
 
         clearAllState: () => {
@@ -206,40 +264,55 @@ const createStateManager = (store, initialState = {}) => {
         },
 
         // Sync changed items to the store alongside updated treeJSON. questionID is the form's id property.
-        syncToStore: async () => {
-            try {
-                // check loopData in case it's a loop-controlling question
-                if (Object.keys(activeQuestionState).length ===1) {
-                    const keyToCheck = Object.keys(activeQuestionState)[0];
-                    const valueToCheck = Object.values(activeQuestionState)[0];
-                    questionProcessor.checkLoopMaxData(keyToCheck, valueToCheck);
-                }
+        /**
+         * Sync changes to the store function. This is called on the 'Next' and 'Back' button clicks.
+         * If the store operation fails, revert to the previous question.
+         * Handle store errors by reverting the survey to the question that was active when the store() write failed.
+         * @param {HTMLButtonElement} nextOrPreviousButton - the button clicked by the user (Next or Back).
+         */
 
-                activeQuestionState['treeJSON'] = updateTreeJSON();
-                
-                const changedState = {};
-                Object.keys(activeQuestionState).forEach((key) => {
-                    changedState[`${moduleParams.questName}.${key}`] = activeQuestionState[key];
-                });
+        syncToStore: (nextOrPreviousButton) => {
+            let previousSurveyState = {};
+            let previousActiveQuestionState = {};
 
-                if (typeof store === 'function') {
-                    showLoadingIndicator();
-                    
-                    // TODO: update store function to return a response. Check response to handle errors & navigation.
-                    /*const response = await*/ store(changedState);
-                } else {
-                    delete activeQuestionState['treeJSON'];
-                }
-                
-                surveyState = { ...surveyState, ...activeQuestionState };
-                activeQuestionState = {};
+            // check loopData in case it's a loop-controlling question
+            if (Object.keys(activeQuestionState).length === 1) {
+                const keyToCheck = Object.keys(activeQuestionState)[0];
+                const valueToCheck = Object.values(activeQuestionState)[0];
+                questionProcessor.checkLoopMaxData(keyToCheck, valueToCheck);
+            }
 
-                console.log('StateManager -> syncToStore: SURVEY STATE:', surveyState); // Temp for debugging. NOTE: keep for renderer -> check with `if (!store)`
-            } catch (error) {
-                console.error('StateManager -> syncToStore: Error syncing state to store', error);
-                throw error;
-            } finally {
-                hideLoadingIndicator();
+            activeQuestionState['treeJSON'] = updateTreeJSON();
+            
+            const changedState = {};
+            Object.keys(activeQuestionState).forEach((key) => {
+                changedState[`${moduleParams.questName}.${key}`] = activeQuestionState[key];
+            });
+
+            // Store previous state for possible reversion on error
+            previousSurveyState = { ...surveyState };
+            previousActiveQuestionState = { ...activeQuestionState };
+
+            // Update the survey state with the active question state.
+            surveyState = { ...surveyState, ...activeQuestionState };
+            activeQuestionState = {};
+
+            if (moduleParams.isRenderer) console.log('StateManager -> SURVEY STATE:', surveyState); 
+
+            // Use .then() instead of await to avoid blocking the UI.
+            // On error: revert to the previous question and restore the previous state (handleStoreError()).
+            if (typeof store === 'function') {                
+                store(changedState)
+                    .then((storeResponse) => {
+                        if (storeResponse?.code !== 200) {
+                            handleStoreError(storeResponse, nextOrPreviousButton, previousSurveyState, previousActiveQuestionState);
+                        }
+                    })
+                    .catch((error) => {
+                        handleStoreError(error, nextOrPreviousButton, previousSurveyState, previousActiveQuestionState);
+                    });
+            } else {
+                delete activeQuestionState['treeJSON'];
             }
         },
 
@@ -264,11 +337,20 @@ const createStateManager = (store, initialState = {}) => {
                 surveyState = { ...surveyState, ...changedState };
                 activeQuestionState = {};
             } catch (error) {
-                console.error('StateManager -> submitSurvey: Error submitting survey', error);
+                moduleParams.errorLogger('StateManager -> submitSurvey: Error submitting survey', error);
                 throw error;
             } finally {
                 hideLoadingIndicator();
             }
+        },
+
+        getQuestionHTMLByID: (questionID) => {
+            if (typeof questionID !== 'string') {
+                throw new Error('StateManager -> getQuestionHTMLByID: Key must be a string');
+            }
+
+            const { question } = questionProcessor.findQuestion(questionID);
+            return question;
         },
 
         setQuestionProcessor: (processor) => {
@@ -309,20 +391,31 @@ const createStateManager = (store, initialState = {}) => {
             if (typeof responseKey !== 'string' || (questionID && typeof questionID !== 'string')) {
                 throw new Error('StateManager -> findResponseValue: Key(s) must be strings');
             }
-
+            
             // If the responseKey is a number, and not a conceptID, return it directly.
             if (!isNaN(parseFloat(responseKey)) && (responseKey < 100000000 || responseKey > 999999999)) {
-                //console.log('RETURNING (parseInt):', responseKey); // Temp for debugging
                 return responseKey;
             }
-
+            
             const compoundKey = questionID
                 ? `${responseKey}.${questionID}`
                 : responseKey;
+            
+            // Check the cache first for a found response value in this order:
+            //  (1) compoundKey when quesitonID is passed in,
+            //  (2) responseKey.responseKey for object structures
+            //  (3) responseKey for single value responses.
+            let cachedValue;
+            if (questionID && Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
+                cachedValue = foundResponseCache[compoundKey];
+            } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, `${responseKey}.${responseKey}`)) {
+                cachedValue = foundResponseCache[`${responseKey}.${responseKey}`];
+            } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, responseKey)) {
+                cachedValue = foundResponseCache[responseKey];
+            }
 
-            // Check the cache first for a found response value.
-            if (Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
-                return foundResponseCache[compoundKey];
+            if (cachedValue !== null && cachedValue !== undefined && typeof cachedValue !== 'object') {
+                return cachedValue;
             }
 
             // Check if the responseKey is already in the surveyState object.
@@ -332,57 +425,50 @@ const createStateManager = (store, initialState = {}) => {
 
                 // If the value is a string, return it.
                 if (typeof existingResponse === 'string') {
-                    //console.log('RETURNING (string):', compoundKey, existingResponse); // Temp for debugging
                     value = existingResponse;
                     
                 // Checkbox groups are saved as arrays. If the value exists in the array, it was checked.
                 } else if (Array.isArray(existingResponse)) {
-                    //console.log('RETURNING (array):', compoundKey, existingResponse); // Temp for debugging
                     value = existingResponse;
                 
                 // If the value is an object, it's stored as { key: { key: value }} return the value of the inner key.
                 // There may be two inner keys. The unmatched key is for 'other' text fields. Return the object when multiple keys exist. 
                 } else if (typeof existingResponse === 'object') {
                     if (Object.keys(existingResponse).length === 1) {
-                        //console.log('RETURNING (one key in object):', compoundKey, existingResponse[Object.keys(existingResponse)[0]]); // Temp for debugging
                         value = existingResponse[Object.keys(existingResponse)[0]];
                     } else {
-                        //console.log('RETURNING (nested object):', compoundKey, existingResponse[compoundKey]); // Temp for debugging
                         value = existingResponse[compoundKey];
                     }
                 }
-
+                
                 if (value != null) {
                     foundResponseCache[compoundKey] = value;
                     return value;
                 }
-
-                //console.warn('RETURNING (default):', existingResponse); // Temp for debugging
+                
                 foundResponseCache[compoundKey] = existingResponse;
                 return existingResponse;
             }
-
+            
             // Check the previous results for known keys (these keys are accesesed on survey load for some surveys).
             if (Object.prototype.hasOwnProperty.call(moduleParams.previousResults, responseKey)) {
-                //console.log('RETURNING (previousResults):', responseKey, moduleParams.previousResults[responseKey]); // Temp for debugging
                 return moduleParams.previousResults[responseKey].toString();
             }
-
+            
             // If that fails, use the responseToQuestionMappingObj to find the full path to the value in surveyState.
             // Combine the responseKey and questionID if questionID is provided, then get the full path from the mapping object.
             let pathToData;
             let foundKey;
 
             if (!questionID) {
-                // TODO: TEMP FOR TESTING. Ensure no conflicts with this method. Remove after testing.
                 const foundKeyArray = Object.keys(responseToQuestionMappingObj).filter((key) => key.startsWith(compoundKey));
+                
                 if (foundKeyArray.length > 1) {
-                    console.error('StateManager -> findResponseValue: (MULTIPLE FOUND - searching with startsWith):', compoundKey);
+                    moduleParams.errorLogger('StateManager -> findResponseValue: (MULTIPLE FOUND - searching with startsWith):', compoundKey);
                 }
 
-                foundKey = Object.keys(responseToQuestionMappingObj).find((key) => key.startsWith(compoundKey));
+                foundKey = foundKeyArray[0]
                 if (!foundKey) {
-                    //console.log('StateManager -> findResponseValue: (not found - searching with startsWith):', compoundKey); // Temp for debugging
                     return undefined;
                 }
                 pathToData = responseToQuestionMappingObj[foundKey];
@@ -404,7 +490,6 @@ const createStateManager = (store, initialState = {}) => {
                 }
             }
 
-            //console.log('RETURNING (found by path):', foundKey ?? compoundKey, value); // Temp for debugging
             foundKey
                 ? foundResponseCache[foundKey] = value
                 : foundResponseCache[compoundKey] = value;
@@ -421,6 +506,7 @@ const createStateManager = (store, initialState = {}) => {
  * @param {Function} store - the store function passed into Quest. 
  * @param {Object} initialState - the initial state to be set in the state manager.
  */
+
 export function initializeStateManager(store, initialState = {}) {
     if (!appState) {
         appState = createStateManager(store, initialState);
@@ -437,7 +523,12 @@ export function getStateManager(isRenderer = false) {
     return appState;
 }
 
-// Update the tree in StateManager. This is called when the next button is clicked, before syncToStore().
+/**
+ * Update the tree in StateManager. Legacy survey question tracking. Continued compatibility is essential.
+ * This is called before the syncToStore() write operation.
+ * The treeJSON is updated with the current question queue.
+ */
+
 function updateTreeJSON() {
     return moduleParams.questName && questionQueue
         ? questionQueue.toJSON()
@@ -458,7 +549,7 @@ function generateResponseKeyToQuestionIDMapping(surveyState) {
 
     function traverse(obj, parentPath = []) {
         if (visited.has(obj)) {
-            console.error('Error: Circular reference found in QuestionIDMapping -> traverse()');
+            moduleParams.errorLogger('Error: Circular reference found in QuestionIDMapping -> traverse()');
             return;
         }
         visited.add(obj);
@@ -479,7 +570,7 @@ function generateResponseKeyToQuestionIDMapping(surveyState) {
                 const uniqueKey = parentPath && parentPath.length > 0 ? `${responseKey}.${parentPath.join('.')}` : `${responseKey}`;
 
                 if (responseToQuestionMapping[uniqueKey]) {
-                    console.error(`Error: The responseKey "${uniqueKey}" is already mapped to "${responseToQuestionMapping[uniqueKey]}" and cannot be remapped to "${fullPath}"`);
+                    moduleParams.errorLogger(`Error: The responseKey "${uniqueKey}" is already mapped to "${responseToQuestionMapping[uniqueKey]}" and cannot be remapped to "${fullPath}"`);
                 } else {
                     responseToQuestionMapping[uniqueKey] = fullPath;
                 }

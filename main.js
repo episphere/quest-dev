@@ -1,7 +1,7 @@
 import { questionQueue, moduleParams, rbAndCbClick, showAllQuestions, swapVisibleQuestion } from "./questionnaire.js";
 import { restoreResponses } from "./restoreResponses.js";
 import { addEventListeners } from "./eventHandlers.js";
-import { ariaLiveAnnouncementRegions, responseRequestedModal, responseRequiredModal, responseErrorModal, submitModal  } from "./common.js";
+import { ariaLiveAnnouncementRegions, progressBar, responseRequestedModal, responseRequiredModal, responseErrorModal, storeErrorModal, submitModal  } from "./common.js";
 import { initSurvey } from "./initSurvey.js";
 import { getStateManager } from "./stateManager.js";
 
@@ -11,53 +11,52 @@ import es from "./i18n/es.js";
 export let transform = function () { /* init */ };
 transform.rbAndCbClick = rbAndCbClick;
 
-// TODO: wrap with error handling.
 transform.render = async (obj, divID, previousResults = {}) => {
+  try {
+    // Set the global moduleParams object with data needed for different parts of the app.
+    setModuleParams(obj, divID, previousResults);
+    
+    // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
+    const markdown = moduleParams.text || await fetch(moduleParams.url).then(response => response.text());
+    
+    // Initialize the survey and start processing the questions in the background.
+    const retrievedData = await initSurvey(markdown);
 
-  // Set the global moduleParams object with data needed for different parts of the app.
-  setModuleParams(obj, divID, previousResults);
-  
-  // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
-  const markdown = moduleParams.renderObj?.text || await fetch(moduleParams.renderObj?.url).then(response => response.text());
+    // Get the state manager and load the initial state. This prepares the state manager for use throughout the survey.
+    const appState = getStateManager();
+    appState.loadInitialSurveyState(retrievedData);
+    const initialUserData = appState.getSurveyState();
+    const questionProcessor = appState.getQuestionProcessor();
 
-  // Initialize the survey and start processing the questions in the background.
-  const retrievedData = await initSurvey(markdown);
+    // Load the question queue from the tree JSON.
+    loadQuestionQueue(initialUserData?.treeJSON);
 
-  // Get the state manager and load the initial state. This prepares the state manager for use throughout the survey.
-  const appState = getStateManager();
-  appState.loadInitialSurveyState(retrievedData);
-  const initialUserData = appState.getSurveyState();
-  const questionProcessor = appState.getQuestionProcessor();
+    // Support the renderer tool before the survey is activated. The renderer tool's primary setting lists all questions at the same time.
+    if (moduleParams.renderFullQuestionList) {
+      questionProcessor.processAllQuestions();
+    }
 
-  // Load the question queue from the tree JSON.
-  loadQuestionQueue(initialUserData?.treeJSON);
+    // Initialize the active question, activate it, and display it.
+    const activeQuestionID = getActiveQuestionID(questionProcessor.questions);
 
-  // Support the renderer tool before the survey is activated. The renderer tool's primary setting lists all questions at the same time.
-  if (moduleParams.renderObj?.renderFullQuestionList) {
-    questionProcessor.processAllQuestions();
-  }
+    // Set the active question in the DOM on survey startup and restore existing responses.
+    const activeQuestionEle = setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initialUserData);
 
-  // Initialize the active question, activate it, and display it.
-  const activeQuestionID = getActiveQuestionID(questionProcessor.questions);
+    // If the active question is not found, and it's an embedded use case, log an error and return false.
+    // Note: Fail silently for the renderer tool since users are actively editing and testing markdown.
+    if (!activeQuestionEle && !moduleParams.isRenderer) {
+      moduleParams.errorLogger('Active question not found for:', activeQuestionID);
+      return false;
+    }
 
-  // Set the active question in the DOM on survey startup and restore existing responses.
-  const activeQuestionEle = setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initialUserData);
+    // Add the event listeners to the parent div.
+    addEventListeners();
 
-  // If the active question is not found, and it's an embedded use case, log an error and return false.
-  // Note: Fail silently for the renderer tool since users are actively editing and testing markdown.
-  if (!activeQuestionEle && !moduleParams.isRenderer) {
-    console.error('Active question not found for:', activeQuestionID);
+    return true;
+  } catch (error) {
+    moduleParams.errorLogger(error);
     return false;
   }
-  
-  // TODO: test loading/unloading/back button for soccer
-  // If the soccer function is defined, call it. This is used for external listeners in the PWA.
-  if (moduleParams.soccer instanceof Function) moduleParams.soccer();
-
-  // Add the event listeners to the parent div.
-  addEventListeners();
-
-  return true;
 };
 
 /**
@@ -74,7 +73,7 @@ function loadQuestionQueue(treeJSON) {
     try {
       questionQueue.loadFromJSON(treeJSON);
     } catch (error) {
-      console.error('Error loading tree from JSON:', error);
+      moduleParams.errorLogger('Error loading tree from JSON:', error);
       questionQueue.clear();
     }
   } else {
@@ -90,8 +89,7 @@ function loadQuestionQueue(treeJSON) {
 
 function getActiveQuestionID(questionsArray) {
   if (questionsArray.length === 0) {
-    // TODO: handle eager execution inefficiency in renderer.
-    if (moduleParams.renderObj.isRenderer) console.error('No questions found in the survey.');
+    if (moduleParams.isRenderer) moduleParams.errorLogger('No questions found in the survey.');
     return;
   }
 
@@ -122,11 +120,11 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
 
   const questionEle = questionProcessor.loadInitialQuestionOnStartup(activeQuestionID);
   if (!questionEle) {
-    console.error('Active question not found:', activeQuestionID, questionEle);
+    moduleParams.errorLogger('Active question not found:', activeQuestionID, questionEle);
     return;
   }
 
-  moduleParams.renderObj?.renderFullQuestionList
+  moduleParams.renderFullQuestionList
     ? showAllQuestions(questionProcessor.getAllProcessedQuestions())
     : swapVisibleQuestion(questionEle);
 
@@ -136,39 +134,34 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
 }
 
 function setModuleParams(obj, divID, previousResults) {
-  moduleParams.renderObj = obj; // future todo: we have some duplication between moduleParams.obj, moduleParams.renderObj, and obj throughout the code.
-  moduleParams.renderObj.renderFullQuestionList = moduleParams.renderObj?.isRenderer && !moduleParams.renderObj?.activate;
-  moduleParams.previousResults = expandPreviousResults(previousResults);//previousResults; // TODO: tepporary -- needs more accurate fix in ConnectApp.
+  moduleParams.url = obj.url;
+  moduleParams.text = obj.text || '';
+  moduleParams.store = obj.store;
+  moduleParams.retrieve = obj.retrieve;
+  moduleParams.questVersion = obj.questVersion || '';
+  moduleParams.surveyDataPrefetch = obj.surveyDataPrefetch;
+  moduleParams.isRenderer = obj.isRenderer || false;
+  moduleParams.activate = obj.activate || false;
+  moduleParams.renderFullQuestionList = moduleParams.isRenderer && !moduleParams.activate;
+  moduleParams.previousResults = previousResults;
   moduleParams.soccer = obj.soccer;
-  moduleParams.delayedParameterArray = obj.delayedParameterArray;
+  moduleParams.showProgressBarInQuest = obj.showProgressBarInQuest || false;
+  moduleParams.asyncQuestionsMap = obj.asyncQuestionsMap || {};
+  moduleParams.fetchAsyncQuestion = obj.fetchAsyncQuestion;
+  moduleParams.delayedParameterArray = obj.delayedParameterArray || [];
   moduleParams.i18n = obj.lang === 'es' ? es : en;
   moduleParams.isWindowsEnvironment = isWindowsEnvironment();
   moduleParams.isFirefoxBrowser = isFirefoxBrowser();
   moduleParams.isLocalDevelopment = isLocalDevelopment();
   moduleParams.questDiv = document.getElementById(divID);
-  moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal();
+  moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + progressBar() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal() + storeErrorModal();
+  moduleParams.errorLogger = obj.errorLogger || defaultErrorLogger;
 
-  // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.renderObj?.questVersion}/`)
+  // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.questVersion}/`)
   // Set the base path for the module. This is used to fetch the stylesheets in init -> .
-  moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.renderObj?.questVersion
+  moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.questVersion
     ? 'https://episphere.github.io/quest-dev/'
     : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
-}
-
-// Expand the previous results object with additional fields for the survey.
-// TODO: update to handle this in ConnectApp where we have more detailed D.O.B. Information to handle 'RCRTUP_YOB_V1R0'. Then delete this function.
-// This is off-by-one for many cases, but it's a quick fix for the current implementation.
-function expandPreviousResults(previousResults) {
-  if (!previousResults) return {};
-  if (previousResults['RCRTUP_YOB_V1R0']) return previousResults;
-
-  const age = parseInt(previousResults['age'] || previousResults['AGE']);
-  if (age) {
-    const currentYear = new Date().getFullYear();
-    previousResults['RCRTUP_YOB_V1R0'] = currentYear - age; // Calculate the year of birth from the age.
-  }
-
-  return previousResults;
 }
 
 function isLocalDevelopment() {
@@ -186,4 +179,8 @@ function isWindowsEnvironment() {
 // InstallTrigger is a global object in Firefox that is not present in other browsers.
 function isFirefoxBrowser() {
   return typeof InstallTrigger !== 'undefined';
+}
+
+function defaultErrorLogger(error) {
+  console.error(error);
 }

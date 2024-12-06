@@ -9,6 +9,8 @@ const es = {
     "responseRequiredLabel": "Respuesta Requerida",
     "responseErrorLabel": "Respuesta Solicitada",
     "responseErrorBody": "Hay un error en esta respuesta. ¿Es correcta?",
+    "storeErrorLabel": "Error al guardar la respuesta",
+    "storeErrorBody": "Hubo un error al guardar su respuesta. Por favor, inténtelo de nuevo.",
     "submitLabel": "Enviar Respuestas",
     "submitBody": "¿Está seguro de que desea enviar sus respuestas?",
     "continueWithoutAnsweringButton": "Continuar Sin Responder",
@@ -17,6 +19,7 @@ const es = {
     "incorrectButton": "Incorrecto",
     "submitButton": "Enviar",
     "cancelButton": "Cancelar",
+    "closeButton": "Cerrar",
 
     "yes": "Sí",
     "no": "No",
@@ -49,13 +52,15 @@ const es = {
     "validationTextShort": "El texto ingresado es demasiado corto (debe tener al menos {0} caracteres)",
     "validationTextLong": "El texto ingresado es demasiado largo (debe tener como máximo {0} caracteres)",
     "validationMismatch": "Los valores no coinciden",
-    "validationCountMore": "Ha seleccionado {0} elementos. Seleccione al menos {1}",
-    "validationCountLess": "Ha seleccionado {0} elementos. Seleccione no más de {1}",
+    "validationCountMore": "Ha seleccionado {0} elementos. Seleccione al menos {1}.",
+    "validationCountLess": "Ha seleccionado {0} elementos. Seleccione no más de {1}.",
 
     "months": ["Ene", "Feb", "Mar", "Abr", "Mayo", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
 
     "example": "Ejemplo",
-    "enterValue": "Introduzca un valor"
+    "enterValue": "Introduzca un valor",
+
+    "loading": "Cargando...",
 }
 
 export default es;

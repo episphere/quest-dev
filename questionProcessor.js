@@ -1,6 +1,7 @@
-import { evaluateCondition, hideLoadingIndicator, moduleParams, showLoadingIndicator } from './questionnaire.js';
+import { moduleParams } from './questionnaire.js';
 import { parseGrid } from './buildGrid.js';
 import { translate } from './common.js';
+import { evaluateCondition } from "./evaluateConditions.js";
 import { getStateManager } from './stateManager.js';
 
 const questionSeparatorRegex = /\[([A-Z_][A-Z0-9_#]*[?!]?)(?:\|([^,|\]]+)\|?)?(,.*?)?\](.*?)(?=$|\[[A-Z_]|<form)/gs;
@@ -53,6 +54,17 @@ export class QuestionProcessor {
     // Remove comments from the markdown
     markdown = this.removeMarkdownComments(markdown);
 
+    // TODO: remove (this is a temporary fix for the yob issue)
+    //replace all instances of RCRTUP_YOB_V1R0 with yob
+    markdown = markdown.replace(/RCRTUP_YOB_V1R0/g, 'yob');
+
+    // Search for items in delayedParameterArray and add 'Loading...' placeholder text so it's parsed correctly
+    if (Object.keys(moduleParams.asyncQuestionsMap).length > 0) {
+      Object.keys(moduleParams.asyncQuestionsMap).forEach((key) => {
+        markdown = markdown.replace(key, `${key} ${moduleParams.i18n.loading}`);
+      });
+    };
+
     // Replace grids with placeholders and store grid content for later processing
     let gridPlaceholders = [];
     const gridButtonDiv = this.getButtonDiv(true)
@@ -63,7 +75,7 @@ export class QuestionProcessor {
       return placeholder;
     });
 
-    // TODO: consider unrolling after user has input the response that determines number of loops.
+    // Future improvement: Consider unrolling after user has input the response that determines number of loops.
     // This would lighten the initial load considerably. Would need to handle insertions to the array.
     // Would also need to handle removing generated loop eles on back button click and/or change of the trigger response.
     // Current loop process unrolls all possible responses to n=loopMax (25).
@@ -173,12 +185,12 @@ export class QuestionProcessor {
     });
 
     [...newQuestionEle.querySelectorAll("[data-confirm]")].forEach((element) => {
+      console.warn('TODO: REMOVE? NOT FOUND in DOM (this previously used document access): confirm element found:', element.dataset.confirm);
       if (!newQuestionEle.querySelector(`#${element.dataset.confirm}`)) {
-        console.warn('TODO: TEST (this previously used document access): confirm element not found:', element.dataset.confirm);
         delete element.dataset.confirm
       }
       const otherElement = newQuestionEle.querySelector(`#${element.dataset.confirm}`);
-      console.warn('TODO: TEST (this previously used document access): confirm element found:', otherElement);
+      console.warn('TODO: REMOVE? NOT FOUND in DOM (this previously used document access): confirm element found (otherElement):', otherElement);
       otherElement.dataset.confirmationFor = element.id;
     });
 
@@ -205,7 +217,7 @@ export class QuestionProcessor {
    */
   setCurrentQuestionIndex(updateType, value) {
     if (typeof updateType !== 'string') {
-      console.error('Error (setCurrentQuestionIndex). updateType must be a string')
+      moduleParams.errorLogger('Error (setCurrentQuestionIndex). updateType must be a string')
     }
     
     switch(updateType) {
@@ -219,13 +231,13 @@ export class QuestionProcessor {
       
       case 'update':
         if (typeof value !== 'number') {
-          console.error('Error (setCurrentQuestionIndex). value must be a number for update operations.')
+          moduleParams.errorLogger('Error (setCurrentQuestionIndex). value must be a number for update operations.')
         }
         this.currentQuestionIndex = value;
         break;
 
       default:
-        console.error('Error (setCurrentQuestionIndex): unhandled updateType', updateType, value);
+        moduleParams.errorLogger('Error (setCurrentQuestionIndex): unhandled updateType', updateType, value);
     }
   }
 
@@ -237,7 +249,7 @@ export class QuestionProcessor {
 
   findQuestion(questionID) {
     if (!questionID) {
-      console.error('Error, findQuestion (no questionID provided):', questionID); 
+      moduleParams.errorLogger('Error, findQuestion (no questionID provided):', questionID); 
     }
 
     let index;
@@ -253,13 +265,13 @@ export class QuestionProcessor {
     if (index !== -1) {
       const foundQuestion = this.processQuestion(index);
       if (!foundQuestion) {
-        console.error('Error: (findQuestion): question not found at index', index)
+        moduleParams.errorLogger('Error: (findQuestion): question not found at index', index)
       }
 
       return { question: foundQuestion, index: index };
     }
 
-    console.error(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
+    moduleParams.errorLogger(`Error, findQuestion (question not found): ${moduleParams.questName}, question: ${questionID}`);
     return { question: null, index: -1 };
   }
 
@@ -272,13 +284,13 @@ export class QuestionProcessor {
 
   loadInitialQuestionOnStartup(questionID) {
     if (this.questions.length === 0) {
-      console.error('Error during initialization (loadInitialQuestion): no questions found', this.questions);
+      moduleParams.errorLogger('Error during initialization (loadInitialQuestion): no questions found', this.questions);
       return null;
     }
 
     const { question, index } = this.findQuestion(questionID);
     if (!question) {
-      console.error('Error during initialization (loadInitialQuestion): question not found', questionID);
+      moduleParams.errorLogger('Error during initialization (loadInitialQuestion): question not found', questionID);
       return null;
     }
 
@@ -303,7 +315,7 @@ export class QuestionProcessor {
       return nextQuestion.id;
     }
 
-    console.error(`Error, getNextSequentialQuestion (no next question to load): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+    moduleParams.errorLogger(`Error, getNextSequentialQuestion (no next question to load): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
     return null;
   }
 
@@ -316,7 +328,7 @@ export class QuestionProcessor {
 
   loadPreviousQuestion(previousQuestionID) {
     if (this.currentQuestionIndex <= 0) {
-      console.error(`Error, loadPreviousQuestion (Unhandled case: no previous question to load): ${moduleParams.questName}, question: ${previousQuestionID}`);
+      moduleParams.errorLogger(`Error, loadPreviousQuestion (Unhandled case: no previous question to load): ${moduleParams.questName}, question: ${previousQuestionID}`);
       return null;
     }
 
@@ -339,7 +351,7 @@ export class QuestionProcessor {
 
   loadNextQuestion(questionID) {
     if (this.currentQuestionIndex + 1 > this.questions.length) {
-      console.error(`Error, loadNextQuestion (unhandled case: at end of survey): ${moduleParams.questName}, question: ${questionID}, index: ${this.currentQuestionIndex}, length: ${this.questions.length}`);
+      moduleParams.errorLogger(`Error, loadNextQuestion (unhandled case: at end of survey): ${moduleParams.questName}, question: ${questionID}, index: ${this.currentQuestionIndex}, length: ${this.questions.length}`);
       return null;
     }
 
@@ -361,7 +373,7 @@ export class QuestionProcessor {
 
   getCurrentQuestion() {
     if (this.currentQuestionIndex > this.questions.length || this.currentQuestionIndex < 0) {
-      console.error(`Error, getCurrentQuestion (index out of range): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+      moduleParams.errorLogger(`Error, getCurrentQuestion (index out of range): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
       return null;
     }
 
@@ -445,7 +457,7 @@ export class QuestionProcessor {
 
   manageActiveQuestionClass(questionToLoad, questionToUnload) {
     if (!questionToLoad) {
-      console.error('Error, manageActiveQuestionClass (no question to load):', questionToLoad, questionToUnload);
+      moduleParams.errorLogger('Error, manageActiveQuestionClass (no question to load):', questionToLoad, questionToUnload);
       return null;
     }
 
@@ -476,7 +488,7 @@ export class QuestionProcessor {
       }
     }
 
-    console.error(`Error, findGridInputElement (element not found): ${moduleParams.questName}, elementID: ${elementID}`);
+    moduleParams.errorLogger(`Error, findGridInputElement (element not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
   }
 
@@ -540,14 +552,14 @@ export class QuestionProcessor {
     // If the loopMax questionID is found, update the loopData object with the new response.
     const loopDataIndex = this.loopDataArr.findIndex(loopData => loopData.loopMaxQuestionID === questionID);
     if (loopDataIndex === -1) {
-      console.error(`Error, checkLoopMaxData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
+      moduleParams.errorLogger(`Error, checkLoopMaxData (loopData not found): ${moduleParams.questName}, loopMaxQuestionID: ${questionID}`);
       return;
     }
 
     // update the loopData object with the new response
     const updatedLoopMaxResponse = parseInt(response, 10);
     if (isNaN(updatedLoopMaxResponse)) {
-      console.error(`Error, checkLoopMaxData (invalid response): ${moduleParams.questName}, response: ${response}`);
+      moduleParams.errorLogger(`Error, checkLoopMaxData (invalid response): ${moduleParams.questName}, response: ${response}`);
       return;
     }
 
@@ -566,7 +578,7 @@ export class QuestionProcessor {
     const loopIndexRegex = /_(\d+)_(\d+)$/;
     const loopIndexMatch = questionID.match(loopIndexRegex);
     if (!loopIndexMatch && loopIndexMatch[1] && loopIndexMatch[2]) {
-      console.error(`Error, findQuestion (loop index not found): ${moduleParams.questName}, question: ${questionID}`);
+      moduleParams.errorLogger(`Error, findQuestion (loop index not found): ${moduleParams.questName}, question: ${questionID}`);
       return null;
     }
 
@@ -575,7 +587,7 @@ export class QuestionProcessor {
 
     const loopData = this.getLoopData();
     if (!loopData) {
-      console.error(`Error, findQuestion (loop data not found): ${moduleParams.questName}, question: ${questionID}`);
+      moduleParams.errorLogger(`Error, findQuestion (loop data not found): ${moduleParams.questName}, question: ${questionID}`);
       return null;
     }
 
@@ -586,7 +598,6 @@ export class QuestionProcessor {
     // Else, find the first question for the next loop iteration.
     } else {
       const nextIterationFirstQuestionID = `${loopData.loopFirstQuestionID}_${nextLoopIterationIndex}_${nextLoopIterationIndex}`;
-      console.log('TODO: TEST (questionQueue management) NEXT ITERATION START ID:', nextIterationFirstQuestionID);
       return this.findQuestion(nextIterationFirstQuestionID);
     }
   }
@@ -602,7 +613,7 @@ export class QuestionProcessor {
     });
 
     if (endOfLoopIndex === -1) {
-      console.error(`Error, findEndOfLoop (no end of loop found): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
+      moduleParams.errorLogger(`Error, findEndOfLoop (no end of loop found): ${moduleParams.questName}, index: ${this.currentQuestionIndex}`);
       return { question: null, index: -1 }
     }
 
@@ -631,11 +642,9 @@ export class QuestionProcessor {
       }
     }
 
-    console.error(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
+    moduleParams.errorLogger(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
     return null;
   }
-
-  // TODO: consider moving the parsing functions to a separate file for better organization.
 
   replaceDateTags(content) {
     const replacements = [
@@ -698,9 +707,9 @@ export class QuestionProcessor {
     if (hardBool || softBool) {
       questionID = questionID.slice(0, -1);
       if (hardBool) {
-        target = "data-target='#hardModal'";
+        target = "data-bs-target='#hardModal'";
       } else {
-        target = "data-target='#softModal'";
+        target = "data-bs-target='#softModal'";
       }
     }
 
@@ -739,7 +748,6 @@ export class QuestionProcessor {
       text = text.replace(/\|tel\|(?:([^|<]+[^|]+)\|)?/g, fPhone);
       text = text.replace(/\|SSN\|(?:([^|<]+[^|]+)\|)?/g, fSSN);
       text = text.replace(/\|state\|(?:([^|<]+[^|]+)\|)?/g, fState);
-      //text = text.replace(/\((\d*)(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+\))?)?\)(.*?)(?=(?:\(\d)|\n|<br>|$)/g, fRadio); // TODO: rm if unused
       text = text.replace(/\[(\d*)(\*)?(?::(\w+))?(?:\|(\w+))?(?:,(displayif=.+?\))?)?\]\s*(.*?)\s*(?=(?:\[\d)|\n|<br>|$)/g, fCheck);
       text = text.replace(/\[text\s?box(?:\s*:\s*(\w+))?\]/g, fTextBox);
       text = text.replace(/\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?\s*(.*?)/g, fText);
@@ -778,8 +786,6 @@ export class QuestionProcessor {
     questText = questText.replace(/\|date\|(?:([^\|\<]+[^\|]+)\|)?/g, fDate);
     questText = questText.replace(/\|month\|(?:([^\|]+)\|)?/g, fMonth);
 
-    // TODO: does this have the same DOM ID / input ID mismatch issue as month inputs (resolved in fMonth)?
-    // If yes, refactor to combine and use the fMonth approach.
     function fDate(fullmatch, opts) {
       let type = fullmatch.match(/[^|]+/);
       let { options, elementId } = guaranteeIdSet(opts, type);
@@ -802,7 +808,7 @@ export class QuestionProcessor {
   
       // Adding placeholders and aria-describedby attributes in one line
       options += ` placeholder='Select ${type}' aria-describedby='${elementId}-desc' aria-label='Select ${type}'`;
-      return `<input type='${type}' ${options}><span id='${elementId}-desc' class='sr-only'>${descText}</span>`;
+      return `<input type='${type}' ${options}><span id='${elementId}-desc' class='visually-hidden'>${descText}</span>`;
     }
 
     function fMonth(fullmatch, opts) {
@@ -832,7 +838,7 @@ export class QuestionProcessor {
       const descText = "Enter the month and year in format: four digit year - two digit month. YYYY-MM";
       const finalOptions = `${updatedOptions} ${unevaluatedDates.join(' ')} placeholder='Select month' aria-describedby='${elementId}-desc' aria-label='Select month'`;
 
-      return `<input type='${type}' ${finalOptions}><span id='${elementId}-desc' class='sr-only'>${descText}</span>`;
+      return `<input type='${type}' ${finalOptions}><span id='${elementId}-desc' class='visually-hidden'>${descText}</span>`;
     }
 
     // replace |tel| with phone input
@@ -1041,12 +1047,12 @@ export class QuestionProcessor {
     function fTime(x, opts) {
       const { options, elementId } = guaranteeIdSet(opts, "time");
       return `
-        <label for='${elementId}' class='sr-only'>Enter Time</label>
+        <label for='${elementId}' class='visually-hidden'>Enter Time</label>
         <input type='time' id='${elementId}' ${options} aria-label='Enter Time'>
       `;
     }
 
-    // TODO: General: format for number input boxes needs adjustment for screen readers (description text first or aria description)
+    // TODO: (future): format for number input boxes needs adjustment for screen readers (description text first or aria description)
     // replace |__|__|  with a number box...
     questText = questText.replace(/\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g, fNum);
 
@@ -1104,7 +1110,7 @@ export class QuestionProcessor {
 
       //onkeypress forces whole numbers
       return `<input type='number' aria-label='${value}' step='any' onkeypress='return (event.charCode == 8 || event.charCode == 0 || event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57' name='${questionID}' ${options}>
-              <div id="${elementId}-desc" class="sr-only">${descriptionText}</div><br>`;
+              <div id="${elementId}-desc" class="visually-hidden">${descriptionText}</div><br>`;
     }
 
     // replace |__| or [text box:xxx] with an input box...
@@ -1142,7 +1148,7 @@ export class QuestionProcessor {
         elId = z1;
       }
 
-      return `<label for="${elId}" class="sr-only"></label>
+      return `<label for="${elId}" class="visually-hidden"></label>
         <textarea id='${elId}' name='${elId}' style="resize:auto;" aria-label='Enter your response'></textarea>`;
     }
 
@@ -1150,7 +1156,7 @@ export class QuestionProcessor {
     questText = questText.replace(
       /#YNP/g,
       `<div role="radiogroup" aria-labelledby="yesNoDontKnowLabel">
-        <label id="yesNoDontKnowLabel" class="sr-only">Select "Yes," "No," or "Prefer not to answer" to answer the question.</label>
+        <label id="yesNoDontKnowLabel" class="visually-hidden">Select "Yes," "No," or "Prefer not to answer" to answer the question.</label>
         <ul>
           <li class='response'>
             <input type='radio' id="${questionID}_1" name="${questionID}" value="yes">
@@ -1173,7 +1179,7 @@ export class QuestionProcessor {
     questText = questText.replace(
       /#YN/g,
       `<div role="radiogroup" aria-labelledby="yesNoLabel">
-        <div id="yesNoLabel" class="sr-only">Select "Yes" or "No" to answer the question.</div>
+        <div id="yesNoLabel" class="visually-hidden">Select "Yes" or "No" to answer the question.</div>
         <ul>
           <li class='response'>
             <input type='radio' id="${questionID}_1" name="${questionID}" value="yes">
@@ -1316,7 +1322,7 @@ export class QuestionProcessor {
         : `<button type='submit' class='next w-100' ${target} aria-label='Next question' data-click-type='next'>${this.buttonTextObj.next}</button>`;
     
     const resetButton = (questionID === 'END')
-        ? `<button type='submit' class='reset' id='submitButton' aria-label='Submit your survey' data-click-type='submitSurvey'>${this.buttonTextObj.submit}</button>`
+        ? `<button type='submit' class='reset w-100' id='submitButton' aria-label='Submit your survey' data-click-type='submitSurvey'>${this.buttonTextObj.submit}</button>`
         : hasInputField
             ? `<button type='submit' class='reset w-100' aria-label='Reset this answer' data-click-type='reset'>${this.buttonTextObj.reset}</button>`
             : "";
@@ -1332,13 +1338,13 @@ export class QuestionProcessor {
     return `
         <div class="py-0">
             <div class="row d-flex flex-column flex-md-row">
-                <div class="col-md-3 col-sm-12 order-md-3">
+                <div class="col-md-3 col-sm-12 mb-1 mb-md-0 order-md-3">
                     ${nextButton}
                 </div>
-                <div class="col-md-6 col-sm-12 order-2">
+                <div class="col-md-6 col-sm-12 mb-1 mb-md-0 order-md-2">
                     ${resetButton}
                 </div>
-                <div class="col-md-3 col-sm-12 order-md-1">
+                <div class="col-md-3 col-sm-12 mb-1 mb-md-0 order-md-1">
                     ${prevButton}
                 </div>
             </div>

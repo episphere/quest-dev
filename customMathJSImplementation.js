@@ -1,5 +1,6 @@
 import { getStateManager } from './stateManager.js';
 import { create, all } from 'https://cdn.skypack.dev/pin/mathjs@v13.0.3-l5exVmFmmRoBpcv9HZ2w/mode=imports,min/optimized/mathjs.js';
+import { moduleParams } from './questionnaire.js';
 export const math = create(all);
 
 // Strip '_<num>' when an id that _0, _1, _2, etc. as a suffix.
@@ -70,7 +71,7 @@ export const customMathJSFunctions = {
       case 'undefined':
         return false;
       default:
-        console.error(`unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
+        moduleParams.errorLogger(`unhandled case in EXISTS check. Error: ${x} is not a valid response type.`);
         return false;
     }
   },
@@ -94,7 +95,6 @@ export const customMathJSFunctions = {
   },
 
   getKeyedValue: function(x) {
-    console.warn('TODO: GET KEYED VALUE', x);
     const array = x.toString().split('.');
     const key = array.shift();
     const obj = this._value(key);
@@ -295,61 +295,32 @@ export const customMathJSFunctions = {
     let responseValue = this._value(questionId);
 
     if (Array.isArray(responseValue) || Array.isArray(responseValue[name])) {
-      // Note: haven't found an instance of this case yet.
-      console.error('TODO: (selectionCount) remove DOM access and use stateManager', x, countReset);
       responseValue = Array.isArray(responseValue) ? responseValue : responseValue[name]
 
       if (countReset){
         return responseValue.length;
       }
 
-      // BUG FIX:  if the data-reset ("none of the above") is selected
-      let questionElement = document.getElementById(questionId)
-      // there is a chance that nothing is selected (v.length==0) in that case you will the 
+      // (legacy notes) BUG FIX:  if the data-reset ("none of the above") is selected
+      // there is a chance that nothing is selected (v.length==0) in that case you will the
       // selector will find nothing.  Use the "?" because you cannot find the dataset on a null object.
-      return questionElement.querySelector(`input[type="checkbox"][name="${name}"]:checked`)?.dataset["reset"]?0:responseValue.length
+      const questionHTML = this.appState.getQuestionHTMLByID(questionId);
+      if (questionHTML) {
+        // Find the checked input and check if it has the dataset["reset"] attribute
+        const inputs = Array.from(questionHTML.querySelectorAll('input'));
+        const inputChecked = inputs
+          .filter(input => input.name === name && input.checked && input.dataset?.reset !== undefined)
+          .find(input => input.dataset?.reset);
+
+        return inputChecked ? 0 : responseValue.length;
+      }
+
+      return responseValue.length;
     }
 
-    // if we want object to return the number of keys
-    // Object.keys(v).length
-    // otherwise:
     return 0;
   },
 
-  // TODO: remove if unused
-  // // For a question in a loop, does the value of the response
-  // // for ANY ITERATION equal a value from a given set. 
-  // loopQuestionValueIsOneOf: function (id, ...values) {
-  //   // Loops append _n_n to the id, where n is an
-  //   // integer starting from 1...
-  //   for (let i = 1; ; i = i + 1) {
-  //     let tmp_qid = `${id}_${i}_${i}`
-  //     // the Id does not exist, we've gone through
-  //     // all potential question and have not found
-  //     // a value in the set of "acceptable" values...
-  //     if (this.doesNotExist(tmp_qid)) return false;
-  //     if (this.valueIsOneOf(tmp_qid, ...values)) return true
-  //   }
-  // },
-  // gridQuestionsValueIsOneOf: function (gridId, ...values) {
-  //   if (this.doesNotExist(gridId)) return false
-  //   console.warn('TODO: (gridQuestionsValueIsOneOf) remove DOM access and use stateManager', gridId, ...values);
-  //   let gridElement = document.getElementById(gridId)
-  //   if (! "grid" in gridElement.dataset) return false
-
-  //   values = values.map(v => v.toString())
-  //   let gridValues = this._value(gridId)
-  //   for (const gridQuestionId in gridValues) {
-  //     // even if there is only one value, force it into
-  //     // an array.  flatten it to make sure that it's a 1-d array
-  //     let test_values = [gridValues[gridQuestionId]].flat()
-  //     if (test_values.some(v => values.includes(v.toString()))) {
-  //       return true;
-  //     }
-
-  //   }
-  //   return false;
-  // },
   yearMonth: function (str) {
     let isYM = /^(\d+)-(\d+)$/.test(str)
     if (isYM) {

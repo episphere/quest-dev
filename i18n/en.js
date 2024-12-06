@@ -9,6 +9,8 @@ const en = {
     "responseRequiredLabel": "Response Required",
     "responseErrorLabel": "Response Requested",
     "responseErrorBody": "There is an error with this response. Is this correct?",
+    "storeErrorLabel": "Error saving response",
+    "storeErrorBody": "There was an error saving your response. Please try again.",
     "submitLabel": "Submit Answers",
     "submitBody": "Are you sure you want to submit your answers?",
     "continueWithoutAnsweringButton": "Continue Without Answering",
@@ -17,6 +19,7 @@ const en = {
     "incorrectButton": "Incorrect",
     "submitButton": "Submit",
     "cancelButton": "Cancel",
+    "closeButton": "Close",
 
     "yes": "Yes",
     "no": "No",
@@ -49,13 +52,15 @@ const en = {
     "validationTextShort": "Entered text is too short (should have at least {0} characters)",
     "validationTextLong": "Entered text is too long (should have at most {0} characters)",
     "validationMismatch": "Values do not match",
-    "validationCountMore": "You have selected {0} items.  Please select at least {1}",
-    "validationCountLess": "You have selected {0} items.  Please select no more than {1}",
+    "validationCountMore": "You have selected {0} items.  Please select at least {1}.",
+    "validationCountLess": "You have selected {0} items.  Please select no more than {1}.",
 
     "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
 
     "example": "Example",
-    "enterValue": "Enter a value"
+    "enterValue": "Enter a value",
+
+    "loading": "Loading...",
 }
 
 export default en;

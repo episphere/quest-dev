@@ -14,9 +14,7 @@ export const knownFunctions = {
       return tmpVal;
     }
 
-    const tmpVal2 = appState.findResponseValue(tmpVal);
-    console.warn('TODO TEST: (use state update): tmpVal2 - IS THIS HANDLED CORRECTLY?', tmpVal2);
-    return tmpVal2 ?? y;
+    return appState.findResponseValue(tmpVal) ?? y;
   },
 
   isNotDefined: function (x) {

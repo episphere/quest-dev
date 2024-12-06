@@ -26,7 +26,6 @@ export class Tree {
       child.setParent(this.currentNode);
       this.currentNode.addChild(child);
     });
-    //console.log(this.currentNode.children, this.rootNode.children);
   }
 
   hasNext() {
