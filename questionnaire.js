@@ -816,6 +816,13 @@ export async function prepareQuestionDOM(questionElement) {
     [...questionElement.querySelectorAll("div.response")].forEach((responseElement) => {
       responseElement.setAttribute("tabindex", "0");
     });
+
+    [...questionElement.querySelectorAll("td.response")].forEach((responseElement) => {
+      const radioOrCheckbox = responseElement.querySelector('input[type="checkbox"], input[type="radio"]');
+      if (radioOrCheckbox) {
+        radioOrCheckbox.setAttribute("tabindex", "0");
+      }
+    });
   }
 
   // Remove the reset answer button if there are no response inputs
@@ -865,12 +872,12 @@ function updateProgressBar(questionProcessor) {
     if (currentQuestionIndex === totalQuestions - 1) {
       completionPercentage = 100;
     } else {
-      completionPercentage = (currentQuestionIndex / totalQuestions * 100).toFixed(fixedVal);
+      completionPercentage = parseFloat((currentQuestionIndex / totalQuestions * 100).toFixed(fixedVal));
     }
 
     progressBar.style.width = `${completionPercentage}%`;
-    progressBar.setAttribute('aria-valuenow', completionPercentage);
-    progressText.textContent = `${completionPercentage}% Complete`;
+    progressBar.setAttribute('aria-valuenow', `${Math.round(completionPercentage)}%`);
+    progressText.textContent = `${Math.round(completionPercentage)}%`;
   }
 }
 

@@ -18,7 +18,7 @@ export function manageAccessibleQuestion(fieldsetEle, questionFocusSet) {
 
         // Focus the hidden, focusable element
         setTimeout(() => {
-            focusableEle.focus();
+            focusableEle.focus({ preventScroll: true });
         }, 500);
 
         questionFocusSet = true;
@@ -103,7 +103,7 @@ function buildQuestionText(fieldsetEle) {
 
     // Handle cases where no split point is found.
     if (!focusNode) {
-        focusNode = childNodes[childNodes.length - 1];
+        focusNode = fieldsetEle.querySelector('legend') || fieldsetEle.lastChild || fieldsetEle;
     } else {
         handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, focusNode);
     }
@@ -401,23 +401,31 @@ export function handleRadioCheckboxListEvents(event) {
     }, 100);
 }
 
-// Function to handle radio button clicks and changes in tables.
+// JAWS/Windows function to handle radio button clicks and changes in tables.
 // For accessibility. Focus management is seamless in VoiceOver (MAC) but flawed in JAWS (Windows).
 // This manages the screen reader's table focus with a hidden element inside a table cell.
 // The element moves to the cell when a radio button is clicked.
+
 export function handleRadioCheckboxTableEvents(event) {
+    event.preventDefault();
     const radioOrCheckbox = event.target;
     const responseCell = radioOrCheckbox.closest('.response');
 
     if (responseCell) {
-        const currentRow = responseCell.closest('tr');
+        let currentRow = responseCell.closest('tr');
 
         switch (radioOrCheckbox.type) {
             // If it's a radio click, focus the hidden element on the next question (the first column of the next row).
             case 'radio': {
 
-                const nextRow = currentRow.nextElementSibling;
-                // If next row exists, focus the question (the first cell in the next row).
+                // Handle hidden rows and the end of the table.
+                let nextRow = currentRow.nextElementSibling;
+                do {
+                    if (!nextRow) break;
+                    nextRow = nextRow.getAttribute('data-hidden') === 'true' ? nextRow.nextElementSibling : nextRow;
+                } while (nextRow && nextRow.getAttribute('data-hidden') === 'true');
+
+                // If next row exists and it's visible, focus the question (the first cell in the next row).
                 // Otherwise, focus the next question button so the user can continue.
                 nextRow
                     ? focusNextTableRowQuestion(nextRow)
@@ -428,7 +436,6 @@ export function handleRadioCheckboxTableEvents(event) {
 
             // If it's a checkbox click, focus the hidden element on the selection so the user can continue making selections.
             // If middle of row, place focus back on the checkbox.
-            // If end of row, focus the next question button so the user can continue.
             // If end of last row, focus the next question button so the user can continue.
             case 'checkbox': {
                 updateAriaLiveSelectionAnnouncerTable(responseCell);
@@ -470,7 +477,7 @@ export function updateAriaLiveSelectionAnnouncer(responseDiv) {
 
     setTimeout(() => {
         liveRegion.textContent = announcementText;
-    }, 250);
+    }, 100);
 }
 
 // Update the aria-live region with the current selection announcement in a table (for screen readers).
@@ -510,7 +517,7 @@ function focusNextTableRowQuestion(nextRow) {
     }, 100);
 }
 
-// Focus the next question button after a selection is made.
+// JAWS/Windows function to focus the next question button after a selection is made.
 // This handles the last row's selection in a radio table and the final selectable cell in a checkbox table.
 function focusNextQuestionButton() {
     setTimeout(() => {
@@ -534,6 +541,7 @@ function focusNextQuestionButton() {
     }, 100);
 }
 
+// JAWS/Windows function to re-focus a checkbox in a table after it is selected.
 function focusSelectedCheckbox(responseCell) {
     setTimeout(() => {
         const focusHelper = getFocusHelper();
@@ -544,6 +552,7 @@ function focusSelectedCheckbox(responseCell) {
     }, 100);
 }
 
+// JAWS/Windows function for accessible focus management.
 function getFocusHelper() {
     const focusHelper = moduleParams.questDiv.querySelector('#srFocusHelper');
     if (!focusHelper) {
@@ -554,6 +563,7 @@ function getFocusHelper() {
     return focusHelper;
 }
 
+// Clear the selection accnouncer when a user is navigating between questions (next/back buttons)
 export function clearSelectionAnnouncement() {
     const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
     if (liveRegion) {
