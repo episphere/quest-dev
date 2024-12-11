@@ -157,11 +157,11 @@ function setModuleParams(obj, divID, previousResults) {
   moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + progressBar() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal() + storeErrorModal();
   moduleParams.errorLogger = obj.errorLogger || defaultErrorLogger;
 
-  // TODO: THE !isDev (falsy) PATH SHOULD BE SET TO THE NEW CDN PATH FOR STAGE and PROD!!! (e.g. `https://cdn.jsdelivr.net/gh/episphere/quest-dev@v${moduleParams.questVersion}/`)
-  // Set the base path for the module. This is used to fetch the stylesheets in init -> .
+  // TODO: update this path to the CDN once available.
+  // Set the base path for the module. This is used to fetch the stylesheets in initSurvey().
   moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.questVersion
     ? 'https://episphere.github.io/quest-dev/'
-    : './js/quest-dev/' //`https://episphere.github.io/quest-dev/`;
+    : 'https://episphere.github.io/quest-dev/' //`https://cdn.jsdelivr.net/gh/episphere/quest@v${moduleParams.questVersion}/`;
 }
 
 function isLocalDevelopment() {
