@@ -157,11 +157,10 @@ function setModuleParams(obj, divID, previousResults) {
   moduleParams.questDiv.innerHTML = ariaLiveAnnouncementRegions() + progressBar() + responseRequestedModal() + responseRequiredModal() + responseErrorModal() + submitModal() + storeErrorModal();
   moduleParams.errorLogger = obj.errorLogger || defaultErrorLogger;
 
-  // TODO: update this path to the CDN once available.
   // Set the base path for the module. This is used to fetch the stylesheets in initSurvey().
   moduleParams.basePath = !moduleParams.isLocalDevelopment && moduleParams.questVersion
-    ? 'https://episphere.github.io/quest-dev/'
-    : 'https://episphere.github.io/quest-dev/' //`https://cdn.jsdelivr.net/gh/episphere/quest@v${moduleParams.questVersion}/`;
+    ? `https://cdn.jsdelivr.net/gh/episphere/quest@v${moduleParams.questVersion}/`
+    : 'https://episphere.github.io/quest-dev/'
 }
 
 function isLocalDevelopment() {
