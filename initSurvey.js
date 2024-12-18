@@ -37,7 +37,7 @@ export async function initSurvey(markdown) {
 
 /**
  * Fetch and process the resources for the survey. This includes the retrieve function (existing user data) and CSS files.
- * See moduleParams for the configuration (replace2.js).
+ * See moduleParams for the configuration (main.js).
  * @returns {Object} - The retrieved data from the retrieve function or null.
  */
 async function fetchAndProcessResources() {

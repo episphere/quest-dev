@@ -1,4 +1,4 @@
-import { transform } from "./replace2.js";
+import { transform } from "./main.js";
 import { moduleParams, questionQueue } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
 
