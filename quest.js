@@ -27,9 +27,9 @@ class QuestRenderer {
   async startUp() {
     await this.initializeLocalForage();
     this.setInitialUIState();
-    this.handleURLParams();
+    await this.handleURLParams();
     this.setUpEventListeners();
-    this.setUpDebouncedRendering();
+    await this.setUpDebouncedRendering();
   }
 
   async initializeLocalForage() {
@@ -61,7 +61,7 @@ class QuestRenderer {
     this.setStylingAndLogic();
   }
 
-  handleURLParams() {
+  async handleURLParams() {
     // Handle previous results from URL parameters
     this.searchParams.forEach((value, key) => {
       if (!["run", "style", "url"].includes(key)) {
@@ -72,15 +72,15 @@ class QuestRenderer {
 
     // Load previous results from local storage if not provided in URL
     if (Object.keys(this.previousResults).length === 0) {
-      this.loadPreviousResultsFromStorage();
+      await this.loadPreviousResultsFromStorage();
     }
 
-    this.jsonInput.innerText = JSON.stringify(this.previousResults, null, 3);
+    this.jsonInput.value = JSON.stringify(this.previousResults, null, 3);
 
     // Handle URL parameters and fragment identifiers
     const fragmentUrl = decodeURIComponent(location.hash.substring(1));
     if (fragmentUrl.length > 0) {
-      this.loadModule(fragmentUrl);
+      await this.loadModule(fragmentUrl);
 
       window.history.replaceState(
         {},
@@ -90,7 +90,7 @@ class QuestRenderer {
 
     } else if (this.searchParams.has("url")) {
       const url = this.searchParams.get("url");
-      this.loadModule(url);
+      await this.loadModule(url);
 
       // Update the URL to remove ?url=... and add #url
       window.history.replaceState(
@@ -101,7 +101,8 @@ class QuestRenderer {
     }
 
     if (this.searchParams.has("config")) {
-      this.loadModule(confirm.markdown);
+      console.warn('TESTING: Loading config from URL', confirm.markdown);
+      await this.loadModule(confirm.markdown);
     }
 
     if (this.searchParams.has("style")) {
@@ -119,7 +120,7 @@ class QuestRenderer {
 
   async loadModule(url) {
     this.markupTextAreaEle.value = await this.fetchModule(url);
-    this.renderMarkup();
+    await this.renderMarkup();
   }
 
   async loadPreviousResultsFromStorage() {
@@ -170,19 +171,19 @@ class QuestRenderer {
     document.getElementById("viewCurrentResponses").addEventListener("click", this.buildCurrentResponseTable.bind(this));
 
     // JSON input handling for the renderer "Settings" tab
-    document.getElementById("updater").addEventListener("click", () => {
-      this.updatePreviousResults();
+    document.getElementById("updater").addEventListener("click", async () => {
+      await this.updatePreviousResults();
     });
   }
 
   setUpDebouncedRendering() {
-    this.markupTextAreaEle.addEventListener("keyup", () => {
-      this.renderMarkup();
+    this.markupTextAreaEle.addEventListener("keyup", async () => {
+      await this.renderMarkup();
     });
   }
 
-  renderMarkup() {
-    this.debounce((previousResults) => {
+  async renderMarkup() {
+    this.debounce(async (previousResults) => {
       const renderObj = {
         text: this.markupTextAreaEle.value,
         lang: document.getElementById("langSelect").value,
@@ -190,7 +191,7 @@ class QuestRenderer {
         isRenderer: true,
       };
 
-      transform.render(renderObj, "rendering", previousResults);
+      await transform.render(renderObj, "rendering", previousResults);
     });
   }
 
@@ -257,19 +258,16 @@ class QuestRenderer {
     cell.innerText = message;
   }
 
-  clearLocalForage() {
-    localforage
-      .clear()
-      .then(() => {
-        this.loadDisplay.innerHTML = "local forage cleared";
-      })
-      .catch((err) => {
-        this.loadDisplay.innerHTML = "caught error" + err;
-        moduleParams.errorLogger("Error while clearing local forage:", err);
-      });
+  async clearLocalForage() {
+    try {
+      await localforage.clear();
+      this.loadDisplay.innerHTML = "local forage cleared";
+    } catch (err) {
+      this.loadDisplay.innerHTML = "caught error" + err;
+      moduleParams.errorLogger("Error while clearing local forage:", err);
+    }
 
     questionQueue.clear();
-
     this.previousResults = {};
   }
 
@@ -296,14 +294,14 @@ class QuestRenderer {
     this.debounceTimeout = setTimeout(() => func(this.previousResults), tt);
   }
 
-  updatePreviousResults() {
+  async updatePreviousResults() {
     let txt = "";
     try {
       this.previousResults =
         this.jsonInput.value.length > 0
           ? JSON.parse(this.jsonInput.value)
           : {};
-      this.questLocalForage.setItem("previousResults", this.jsonInput.value);
+      await this.questLocalForage.setItem("previousResults", this.jsonInput.value);
       txt = "Added JSON successfully.";
     } catch (err) {
       txt = "Caught error: " + err;
@@ -313,9 +311,9 @@ class QuestRenderer {
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
     const questRenderer = new QuestRenderer();
-    questRenderer.startUp();
+    await questRenderer.startUp();
   });
 } else {
   const questRenderer = new QuestRenderer();
