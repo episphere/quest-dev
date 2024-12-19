@@ -267,20 +267,29 @@ const handleForIDAttributes = (forIDElementArray) => {
   if (forIDElementArray.length === 1) {
     const forIDElement = forIDElementArray[0];
     const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
-    const parentID = resolveAttributeToParentID(forid, appState);
-
-    const defaultValue = forIDElement.getAttribute("optional");
-    const updatedValue = math.valueOrDefault(parentID, defaultValue);
     
-    forIDElement.textContent = updatedValue;
-    forIDElement.setAttribute('forid', parentID);
+    // Parent ID will be the result in most cases. Caveat: Multi-response questions (Arrays).
+    const parentID = resolveAttributeToParentID(forid, appState);
+    const defaultValue = forIDElement.getAttribute("optional");
 
-    // Update the parent displayif attribute if it exists.
-    const closestDisplayIf = forIDElement.closest(".displayif");
-    if (closestDisplayIf) {
-      const parentDisplayIf = closestDisplayIf.getAttribute('displayif').replace(forid, parentID);
-      closestDisplayIf.setAttribute('displayif', parentDisplayIf)
+    // Get the updated value from the state manager. But check for an object (array) type.
+    // When that exists, there's an 'other' text input reponse field in the question. Do not resolve to the parent for those cases.
+    // The value is either resolved as a string response in the valueOrDefault() call or it's an empty string (Participant left field empty).
+    let updatedValue = math.valueOrDefault(parentID, defaultValue);
+    if (typeof updatedValue === 'object' && Array.isArray(updatedValue)) {
+      updatedValue = '';
+    } else {
+      forIDElement.setAttribute('forid', parentID);
+
+      // Update the parent displayif attribute if it exists.
+      const closestDisplayIf = forIDElement.closest(".displayif");
+      if (closestDisplayIf) {
+        const parentDisplayIf = closestDisplayIf.getAttribute('displayif').replace(forid, parentID);
+        closestDisplayIf.setAttribute('displayif', parentDisplayIf)
+      }
     }
+
+    forIDElement.textContent = updatedValue;
 
   } else {
     forIDElementArray.forEach(forIDElement => {
@@ -1121,7 +1130,7 @@ function handleUserScrollLocation() {
     rootElement = document.documentElement;
   }
 
-  rootElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  rootElement.scrollIntoView({ behavior: 'smooth' });
 }
 
 export function isMobileDevice() {
