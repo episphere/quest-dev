@@ -1130,7 +1130,7 @@ function handleUserScrollLocation() {
     rootElement = document.documentElement;
   }
 
-  rootElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  rootElement.scrollIntoView({ behavior: 'smooth' });
 }
 
 export function isMobileDevice() {
