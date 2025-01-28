@@ -311,8 +311,22 @@ const handleForIDAttributes = (forIDElementArray) => {
   }
 }
 
+/**
+ * Used with forid attributes only. Toggle the forId element's visibility based on the found forid value.
+ * If a conceptID is found, the forid element should remain visible and return an empty string.
+ * Note: forid should remain visible if a concept ID is found to prevent the 'Other' input from disappearing.
+ * @param {HTMLElement} forIDElement - the element to toggle visibility.
+ * @param {string} foundValue - the value found in the state manager.
+ */
+
 const toggleElementVisibility = (forIDElement, foundValue) => {
   if (foundValue) {
+    // Return empty string for concept IDs. Case: 'Other' input with no response.
+    // Example: COVID survey - empty 'Other' input for vaccine manufacturer.
+    if (/^\d{9}$/.test(foundValue)) {
+      foundValue = ''
+    }
+
     forIDElement.style.display = null;
     forIDElement.textContent = foundValue;
   } else {
@@ -800,6 +814,9 @@ export function showAllQuestions(allProcessedQuestionsMap) {
   modalEle
     ? questDiv.insertBefore(fragment, modalEle)
     : questDiv.appendChild(fragment);
+
+  // Popovers get initialized last, after all other DOM and accessibility operations, to ensure they are in the DOM and visible (Bootstrap 5 requirement).
+  initializePopovers();
 }
 
 // Manage the text builder for screen readers (only build when necessary)
@@ -859,6 +876,9 @@ export async function prepareQuestionDOM(questionElement) {
     
     handleQuestionBRElements(questionElement);
   }
+  
+  // Popovers get initialized last, after all other DOM and accessibility operations, to ensure they are in the DOM and visible (Bootstrap 5 requirement).
+  initializePopovers();
 }
 
 /**
@@ -1135,6 +1155,21 @@ function handleUserScrollLocation() {
 
 export function isMobileDevice() {
   return window.matchMedia('(max-width: 576px)').matches;
+}
+
+/**
+ * Initialize the popovers in the questionnaire after they are appended to the DOM.
+ * Required for Bootstrap 5 popovers to function correctly.
+ */
+
+function initializePopovers() {
+  const questDiv = moduleParams.questDiv;
+
+  [...questDiv.querySelectorAll('[data-bs-toggle="popover"]')].forEach(popoverTriggerEl => {
+    if (!bootstrap.Popover.getInstance(popoverTriggerEl)) {
+      new bootstrap.Popover(popoverTriggerEl);
+    }
+  });
 }
 
 // Check whether the browser supports "month" input type.
