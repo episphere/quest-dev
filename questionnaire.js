@@ -1107,7 +1107,19 @@ function handleQuestionInputAttributes(questionElement) {
   }
 }
 
+/**
+ * Traverse the question DOM and handle <br> elements.
+ * @param {HTMLElement} questionElement - The question element to handle.
+ * @param {number} maxBrs - The maximum number of <br> elements between HTMLElements.
+ * @returns 
+ */
 function handleQuestionBRElements(questionElement, maxBrs = 3) {
+  //special handling for summary pages
+  const isSummaryPage = questionElement.id.includes('SUM');
+  if (isSummaryPage) {
+    maxBrs = 1;
+  }
+
   let consecutiveBrs = [];
 
   // Traverse the DOM tree to find all <br> elements
@@ -1129,10 +1141,12 @@ function handleQuestionBRElements(questionElement, maxBrs = 3) {
     consecutiveBrs.slice(maxBrs).forEach((extraBr) => extraBr.remove());
   }
 
-  //Sets the brs after non-displays to not show as well
-  [...questionElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
-    e.style = "display: none"
-  });
+  //Set the brs after non-displays to not show as well
+  if (!isSummaryPage) {
+    [...questionElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
+      e.style = "display: none"
+    });
+  }
 
   // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
   [...questionElement.querySelectorAll("br")].forEach((br) => {
