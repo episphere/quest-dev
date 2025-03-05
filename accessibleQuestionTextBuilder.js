@@ -86,6 +86,12 @@ function buildQuestionText(fieldsetEle) {
                 break;
             }
 
+            // Stop collecting for legend if we hit text + number input node.
+            if (node.nodeType === Node.TEXT_NODE && nodeIndex + 1 < childNodes.length && childNodes[nodeIndex + 1] && childNodes[nodeIndex + 1].tagName === 'INPUT' && childNodes[nodeIndex + 1].type === 'number') {
+                focusNode = node;
+                break;
+            }
+
             questionElements.push(node.cloneNode(true));
             
             // Stop looping if the text contains the 'a summary' text (otherwise the summary prompts get compressed).
@@ -276,7 +282,7 @@ function manageLegendDisplayIfs(legend) {
             forIdSpan.textContent = foundValue;
         });
     }
-    
+
     // If the legend contains displayifs, manage those first.
     const displayIfSpans = Array.from(legend.querySelectorAll('span.displayif'));
     if (displayIfSpans.length > 0) {
@@ -284,14 +290,54 @@ function manageLegendDisplayIfs(legend) {
             const forIdSpans = span.querySelectorAll('[forid]');
             manageForIdSpans(forIdSpans);
         });
+
+        resolveDisplayIfLegendWhitespace(legend);
         return;
     }
-    
+
     // If no displayifs are found, check for raw forIds.
     const forIdSpans = Array.from(legend.querySelectorAll('[forid]'));
     if (forIdSpans.length > 0) {
         manageForIdSpans(forIdSpans);
     }
+}
+
+/**
+ * Resolve extra whitespace in the legend text when many falsey displayifs are present.
+ * Targeted: only normalizes text nodes between displayif spans.
+ * E.G. Module4: [HOMEADD4_1] -> "Here is the information you gave us for this location"
+ * @param {HTMLElement} legend - The legend element containing the question text (and dynamic responses)
+ */
+function resolveDisplayIfLegendWhitespace(legend) {
+    const textNodes = [];
+
+    // Collect text nodes. Only process text nodes between displayif spans.
+    for (let i = 0; i < legend.childNodes.length; i++) {
+        const node = legend.childNodes[i];
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            const prevElem = node.previousElementSibling;
+            const nextElem = node.nextElementSibling;
+
+            if ((prevElem && prevElem.classList?.contains('displayif') && prevElem.style.display === 'none') || (nextElem && nextElem.classList?.contains('displayif') && nextElem.style.display === 'none')) {
+                textNodes.push(node);
+            }
+        }
+    }
+
+    // Normalize collected nodes: replace sequences of whitespace with a single space
+    textNodes.forEach(textNode => {
+        textNode.textContent = textNode.textContent.replace(/\s+/g, ' ');
+
+        if (textNode.textContent.trim() === '') {
+            const nextElement = textNode.nextElementSibling;
+            if (nextElement &&
+                nextElement.classList?.contains('displayif') &&
+                nextElement.style.display === 'none') {
+                textNode.textContent = '';
+            }
+        }
+    });
 }
 
 function removeBRAfterLegend(fieldsetEle) {
