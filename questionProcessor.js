@@ -1089,10 +1089,10 @@ export class QuestionProcessor {
       const descriptionText = `This field accepts numbers. Please enter a whole number ${min && max ? `between ${min} and ${max}` : ''}.`;
       const defaultPlaceholder = `placeholder="${moduleParams.i18n.enterValue}"`;
 
-      // Use default placeholder when min to max range is a large distribution, e.g. max weight (999) and max age (125).
+      // Use default placeholder when min to max range is a large distribution, e.g. max weight (999) and max age (125), max pills (100).
       // Same for min == 0. Show default placeholder for those cases.
       let placeholder;
-      if (max && max > 100) {
+      if (max && max >= 50) {
         placeholder = defaultPlaceholder;
       } else if (min && max) {
         const avgValue = Math.floor((parseInt(min, 10) + parseInt(max, 10)) / 2);
