@@ -1,5 +1,4 @@
 import { moduleParams, questionQueue } from './questionnaire.js';
-import { hideLoadingIndicator, showLoadingIndicator } from './common.js';
 import { getNextQuestion, getPreviousQuestion } from './questionnaire.js';
 import { resetChildren } from './eventHandlers.js';
 import { clearSelectionAnnouncement } from './accessibleQuestionTextBuilder.js';
@@ -321,26 +320,16 @@ const createStateManager = (store, initialState = {}) => {
         getCache: () => ({ ...foundResponseCache }),
 
         // Submit the survey by setting the COMPLETED flag to true and updating the COMPLETED_TS.
+        // Errors are caught by the caller to avoid conflict with host app.
         submitSurvey: async () => {
-            try {
-                const changedState = {
-                    [`${moduleParams.questName}.treeJSON`]: updateTreeJSON(),
-                    [`${moduleParams.questName}.COMPLETED`]: true,
-                    [`${moduleParams.questName}.COMPLETED_TS`]: new Date(),
-                };
-                
-                if (typeof store === 'function') {
-                    showLoadingIndicator();
-                    await store(changedState);
-                }
+            const changedState = {
+                [`${moduleParams.questName}.treeJSON`]: updateTreeJSON(),
+                [`${moduleParams.questName}.COMPLETED`]: true,
+                [`${moduleParams.questName}.COMPLETED_TS`]: new Date(),
+            };
 
-                surveyState = { ...surveyState, ...changedState };
-                activeQuestionState = {};
-            } catch (error) {
-                moduleParams.errorLogger('StateManager -> submitSurvey: Error submitting survey', error);
-                throw error;
-            } finally {
-                hideLoadingIndicator();
+            if (typeof store === 'function') {
+                return await store(changedState);
             }
         },
 
