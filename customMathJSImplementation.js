@@ -3,6 +3,18 @@ import { create, all } from 'https://cdn.skypack.dev/pin/mathjs@v13.0.3-l5exVmFm
 import { moduleParams } from './questionnaire.js';
 export const math = create(all);
 
+// provide Dates with locale dependent formatting
+Date.prototype.formatDate = function (locale = navigator.languages[0]) {
+  return Intl.DateTimeFormat(locale, { timeZone: "UTC" }).format(this)
+}
+Date.prototype.formatYearMonth = function (locale = navigator.languages[0]) {
+  return Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "numeric",
+    timeZone: "UTC"
+  }).format(this)
+}
+
 // Strip '_<num>' when an id that _0, _1, _2, etc. as a suffix.
 export const stripIDSuffixRegex = /^([a-zA-Z0-9]+_[a-zA-Z0-9]+)_\d+$/
 
@@ -54,13 +66,13 @@ export class YearMonth {
 export const customMathJSFunctions = {
   exists: function (x) {
     if (x == null || x === '') return false;
-    
+
     if (typeof x === 'number') return true;
 
     if (x.toString().includes('.')) {
       return !math.isUndefined(this.getKeyedValue(x));
     }
-    
+
     const existingResponse = this.appState.findResponseValue(x);
     switch (typeof existingResponse) {
       case 'object':
@@ -93,13 +105,13 @@ export const customMathJSFunctions = {
     return ids.every(id => this.exists(id))
   },
 
-  getKeyedValue: function(x) {
+  getKeyedValue: function (x) {
     // handle keys with dot notation. E.g. valueOrDefault("D_378988419.D_807765962")
     if (!x.toString().includes('.')) {
       console.error('invalid use of getKeyedValue (called on key without dot notation');
       return undefined;
     }
-    
+
     // Skip sentences and other non-key values such as multi-sentence survey text & responses
     if (!/^[A-Za-z0-9_.]+$/.test(x)) {
       return undefined;
@@ -108,7 +120,7 @@ export const customMathJSFunctions = {
     const array = x.toString().split('.');
     const key = array.shift();
     const obj = this._value(key);
-    
+
     // Return early if the initial object is undefined
     if (math.isUndefined(obj)) return undefined;
 
@@ -117,16 +129,26 @@ export const customMathJSFunctions = {
       return prev[curr] ?? undefined;
     }, obj);
   },
-
+  format: function (x) {
+    // By default dates are YYYY-MM-DD
+    if (/^\d{4}-\d{2}(?:-\d{2})?$/.test(x)) {
+      let dte = new Date(x)
+      if (x.length > 7) {
+        return dte.formatDate()
+      }
+      return dte.formatYearMonth()
+    }
+    return x
+  },
   _value: function (x) {
     // x is a hardcoded number in some cases. E.g. valueOrDefault("D_378988419","D_807765962",125)
     if (typeof x === 'number') return x;
 
     if (!this.exists(x)) return null
 
-    if (x.toString().includes('.')) return this.getKeyedValue(x);
-    
-    return this.appState.findResponseValue(x);
+    if (x.toString().includes('.')) return this.format(this.getKeyedValue(x));
+
+    return this.format(this.appState.findResponseValue(x));
   },
 
   valueEquals: function (id, value) {
@@ -144,8 +166,8 @@ export const customMathJSFunctions = {
     return (element_value == value)
   },
 
-  equals: function(id, value){
-    return this.valueEquals(id,value)
+  equals: function (id, value) {
+    return this.valueEquals(id, value)
   },
 
   valueIsOneOf: function (id, ...values) {
@@ -223,12 +245,12 @@ export const customMathJSFunctions = {
   // if the value of id is a string
   // return the string length, otherwise
   // return -1
-  valueLength: function(id){
+  valueLength: function (id) {
     // if id is not passed in return FALSE
     if (this.doesNotExist(id)) return false;
     let element_value = this._value(id);
 
-    if (typeof element_value === 'string'){
+    if (typeof element_value === 'string') {
       return element_value.length
     }
     return -1;
@@ -257,10 +279,10 @@ export const customMathJSFunctions = {
     if (!cellInputValue) {
       return false;
     }
-    
+
     const match = radioOrCheckboxID.match(stripIDSuffixRegex);
     if (!match || !match[1]) return false;
-    
+
     const baseRadioCheckboxID = match[1];
     const responseValue = this.appState.findResponseValue(baseRadioCheckboxID);
 
@@ -275,7 +297,7 @@ export const customMathJSFunctions = {
     return (ids.some(id => this.isSelected(id)))
   },
 
-  noneSelected: function(...ids){
+  noneSelected: function (...ids) {
     return (!ids.some(id => this.isSelected(id)))
   },
   // defaultValue accepts an Id and a value or a Id/Value
@@ -291,13 +313,13 @@ export const customMathJSFunctions = {
       v = this._value(defaultValue[indx])
       if (v == null) indx++
     }
-    
+
     if (v == null) v = defaultValue[defaultValue.length - 1]
 
     return (v);
   },
 
-  selectionCount: function(x, countReset=false) {
+  selectionCount: function (x, countReset = false) {
     let [questionId, name] = x.split(':')
     name = name ?? questionId
 
@@ -307,7 +329,7 @@ export const customMathJSFunctions = {
     if (Array.isArray(responseValue) || Array.isArray(responseValue[name])) {
       responseValue = Array.isArray(responseValue) ? responseValue : responseValue[name]
 
-      if (countReset){
+      if (countReset) {
         return responseValue.length;
       }
 
@@ -366,8 +388,8 @@ const add = math.typed('add', {
     return dte.add(m);
   },
 
-  'number, number': function (a, b) { 
-    return a + b; 
+  'number, number': function (a, b) {
+    return a + b;
   },
 
   'string, string': function (a, b) {
@@ -388,8 +410,8 @@ const subtract = math.typed('subtract', {
     return dte2.subMonth(dte1);
   },
 
-  'number, number': function (a, b) { 
-    return a - b; 
+  'number, number': function (a, b) {
+    return a - b;
   },
 
   'string, string': function (a, b) {
