@@ -5,7 +5,6 @@ export const math = create(all);
 
 // provide Dates with locale dependent formatting
 Date.prototype.formatDate = function (locale = navigator.languages[0]) {
-  console.log(locale)
   return Intl.DateTimeFormat(locale, { timeZone: "UTC" }).format(this)
 }
 Date.prototype.formatYearMonth = function (locale = navigator.languages[0]) {
