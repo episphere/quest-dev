@@ -310,17 +310,6 @@ function manageFieldsetConditionals(fieldset, returnToQuestion = false) {
                 }
             }
 
-            // TODO: this may be the correct case?
-            // Clean text nodes that are adjacent to a hidden element with the displayif attribute.
-            // do not use hasupdate attribute for text nodes. They may need to change value based on responses.
-            // if (node.nodeType === Node.TEXT_NODE) {
-            //     if ((prevElem && prevElem.classList.contains('response') && prevElem.hasAttribute('displayif') && prevElem.style.display === 'none') ||
-            //         (nextElem && nextElem.classList.contains('response') && prevElem.hasAttribute('displayif') && nextElem.style.display === 'none')) {
-            //         const cleaned = node.textContent.replace(/\s+/g, ' ');
-            //         // Set its content to the cleaned version
-            //         node.textContent = cleaned.trim() ? cleaned : '';
-            //     }
-            // }
             if (node.nodeType === Node.TEXT_NODE) {
                 if ((prevElem && prevElem.classList.contains('response') && prevElem.hasAttribute('displayif') && prevElem.style.display === 'none') ||
                     (nextElem && nextElem.classList.contains('response') && nextElem.hasAttribute('displayif') && nextElem.style.display === 'none')) {
