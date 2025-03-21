@@ -276,7 +276,6 @@ function addSubmitSurveyListener() {
     try {
       const appState = getStateManager();  
       const submitSurveyResponse = await appState.submitSurvey();
-      console.log('submitSurveyResponse (in Quest)', submitSurveyResponse);
       if (submitSurveyResponse?.code !== 200) {
         throw new Error('Submit survey failed');
       }

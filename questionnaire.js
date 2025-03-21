@@ -259,9 +259,10 @@ const resolveRuntimeConditions = (attribute) => {
  * For questions where one response exists, we need to evaluate the parent ID (mismatch to the response ID).
  * When multiple responses exist, we evaluate the response ID directly.
  * @param {Array<Node>} forIDElementArray - the array of 'forid' elements to evaluate.
+ * @param {boolean} [returnToQuestion=false] - re-evaluation of the question: may need to inspect the original forid value for changed responses.
  * @returns {void} - updates the DOM with the evaluated values.
  */
-const handleForIDAttributes = (forIDElementArray) => {
+export const handleForIDAttributes = (forIDElementArray, returnToQuestion = false) => {
   const appState = getStateManager();
 
   if (forIDElementArray.length === 1) {
@@ -280,6 +281,11 @@ const handleForIDAttributes = (forIDElementArray) => {
       updatedValue = '';
     } else {
       forIDElement.setAttribute('forid', parentID);
+      
+      // Store the original value in case the user changes their response.
+      if (!forIDElement.hasAttribute('original-forid')) {
+        forIDElement.setAttribute('original-forid', forid);
+      }
 
       // Update the parent displayif attribute if it exists.
       const closestDisplayIf = forIDElement.closest(".displayif");
@@ -289,48 +295,70 @@ const handleForIDAttributes = (forIDElementArray) => {
       }
     }
 
+    if (returnToQuestion && /^\d{9}$/.test(updatedValue)) {
+      const originalForIDValue = appState.findResponseValue(forIDElement.getAttribute('original-forid'));
+      if (originalForIDValue && originalForIDValue !== updatedValue) {
+        updatedValue = originalForIDValue;
+      }
+    }
+
+    if (/^\d{9}$/.test(updatedValue)) {
+      updatedValue = '';
+    }
+
     forIDElement.textContent = updatedValue;
 
   } else {
+    // Some forID elements are directly wrapped with a displayif container, 1:1.
+    // Other forID elements are grouped and wrapped with a single displayif container, 1:n.
+    const displayIfContainerMap = new Map();
+
     forIDElementArray.forEach(forIDElement => {
       const forid = decodeURIComponent(forIDElement.getAttribute("forid"));
-      let parentID = null;
+      let parentID = '';
 
       let foundValue = appState.findResponseValue(forid);
       if (foundValue == null) {
         parentID = resolveAttributeToParentID(forid, appState);
-        foundValue = appState.findResponseValue(parentID);
+        if (parentID) {
+          foundValue = appState.findResponseValue(parentID);
+        }
       }
 
-      if (typeof foundValue === 'object') {
-        foundValue = null;
+      if (!foundValue || typeof foundValue === 'object' || /^\d{9}$/.test(foundValue)) {
+        foundValue = '';
       }
 
-      toggleElementVisibility(forIDElement, foundValue, forid, parentID);
+      // Update the forIDElement's content and display.
+      if (foundValue !== '') {
+        forIDElement.style.display = '';
+        forIDElement.textContent = foundValue;
+      } else {
+        forIDElement.style.display = 'none';
+      }
+
+      // Check if the forIDElement is directly wrapped in a displayif.
+      const parentDisplayIf = forIDElement.parentElement;
+      const isDirectDisplayif = parentDisplayIf && parentDisplayIf.classList.contains('displayif');
+
+      if (isDirectDisplayif) {
+        // Group the current forIDElement's truthy state by container.
+        if (!displayIfContainerMap.has(parentDisplayIf)) {
+          displayIfContainerMap.set(parentDisplayIf, []);
+        }
+        displayIfContainerMap.get(parentDisplayIf).push(foundValue !== '');
+      }
     });
-  }
-}
 
-/**
- * Used with forid attributes only. Toggle the forId element's visibility based on the found forid value.
- * If a conceptID is found, the forid element should remain visible and return an empty string.
- * Note: forid should remain visible if a concept ID is found to prevent the 'Other' input from disappearing.
- * @param {HTMLElement} forIDElement - the element to toggle visibility.
- * @param {string} foundValue - the value found in the state manager.
- */
-
-const toggleElementVisibility = (forIDElement, foundValue) => {
-  if (foundValue) {
-    // Return empty string for concept IDs. Case: 'Other' input with no response.
-    // Example: COVID survey - empty 'Other' input for vaccine manufacturer.
-    if (/^\d{9}$/.test(foundValue)) {
-      foundValue = ''
-    }
-
-    forIDElement.style.display = null;
-    forIDElement.textContent = foundValue;
-  } else {
-    forIDElement.style.display = "none";
+    // Process each displayif container.
+    displayIfContainerMap.forEach((truthyStates, container) => {
+      // If any forID element is truthy, show the container. Otherwise, hide it.
+      if (truthyStates.some(state => state)) {
+        container.style.display = '';
+      } else {
+        container.style.display = 'none';
+      }
+    });
   }
 }
 
@@ -873,10 +901,7 @@ export async function prepareQuestionDOM(questionElement) {
     // Handle accessibility features after the question renders.
     // The question text is at the opening fieldset tag OR at the top of the nextElement form for tables.
     questionFocusSet = manageAccessibleQuestion(questionElement.querySelector('fieldset') || questionElement, questionFocusSet);
-    
-    handleQuestionBRElements(questionElement);
   }
-  
   // Popovers get initialized last, after all other DOM and accessibility operations, to ensure they are in the DOM and visible (Bootstrap 5 requirement).
   initializePopovers();
 }
@@ -974,7 +999,6 @@ function removeLoadingTextNode(fieldset) {
 
 // Legacy operations: resolve attributes from markdown to HTML
 function handleQuestionDisplayIfs(questionElement) {
-
   // When the input ID isn't the quesiton ID (e.g. YYYY-MM input), find the parent question ID
   const forIDElementArray = questionElement.querySelectorAll("span[forid]");
   if (forIDElementArray.length > 0) handleForIDAttributes(forIDElementArray);
@@ -985,38 +1009,15 @@ function handleQuestionDisplayIfs(questionElement) {
     elm.style.display = f ? null : "none";
   });
 
-  // check for displayif spans...
+  // check for displayif spans and divs...
   [...questionElement.querySelectorAll("span[displayif],div[displayif]")].forEach(elm => {
-    const conditionFunctionRegex = /\b\w+\s*\(\s*["']?.*?["']?\s*(,\s*["']?.*?["']?\s*)*\)/;
-    const innerHTML = elm.innerHTML;
-    const textHasFunction = conditionFunctionRegex.test(innerHTML);
-
-    if (elm.getAttribute('data-fallback') === null) {
-      elm.setAttribute('data-fallback', !textHasFunction ? innerHTML : '');
-    }
-
-    const displayIfAttribute = elm.getAttribute("displayif");
-    let f = evaluateCondition(displayIfAttribute);
-    if (f) {
-      elm.style.display = null;
-
-      let displayIfText = resolveRuntimeConditions(displayIfAttribute) ?? elm.getAttribute('data-fallback');
-      if (displayIfText) {
-        if (innerHTML.startsWith(',')) {
-          displayIfText = ', ' + displayIfText;
-        }
-        elm.innerHTML = displayIfText;
-      }
-    } else {
-      elm.style.display = "none";
-    }
+    manageDisplayIfSpansAndDivs(elm);
   });
 
   [...questionElement.querySelectorAll("span[data-encoded-expression]")].forEach(elm => {
     let f = evaluateCondition(decodeURIComponent(elm.dataset.encodedExpression))
     elm.innerText = f;
   });
-
   // ISSUE: 403
   // update {$e:}/{$u} and and {$} elements in grids when the user displays the question ...
   [...questionElement.querySelectorAll("[data-gridreplace]")].forEach((e) => {
@@ -1038,6 +1039,42 @@ function handleQuestionDisplayIfs(questionElement) {
       elm.style.display = "";
     }
   });
+}
+
+export function manageDisplayIfSpansAndDivs(elm) {  
+  const conditionFunctionRegex = /\b\w+\s*\(\s*["']?.*?["']?\s*(,\s*["']?.*?["']?\s*)*\)/;
+  const innerHTML = elm.innerHTML;
+  const textHasFunction = conditionFunctionRegex.test(innerHTML);
+
+  const displayIfAttribute = elm.getAttribute("displayif");
+  let conditionBool = evaluateCondition(displayIfAttribute);
+
+  if (conditionBool) {
+    if (elm.getAttribute('data-fallback') === null) {
+      elm.setAttribute('data-fallback', !textHasFunction ? innerHTML : '');
+    }
+
+    // Resolve runtime conditions and handle case (where the 'other' concept id is returned without response text)
+    let displayIfText = resolveRuntimeConditions(displayIfAttribute) ?? elm.getAttribute('data-fallback');
+    if (/^>\d{9}<$/.test(displayIfText)) {
+      conditionBool = false;
+      elm.removeAttribute('data-fallback');
+    }
+
+    if (conditionBool) {
+      elm.style.display = null;
+
+      let displayIfText = resolveRuntimeConditions(displayIfAttribute) ?? elm.getAttribute('data-fallback');
+      if (displayIfText) {
+        if (innerHTML.startsWith(',')) {
+          displayIfText = ', ' + displayIfText;
+        }
+        elm.innerHTML = displayIfText;
+      }
+    } else {
+      elm.style.display = "none";
+    }
+  }
 }
 
 // Legacy operations: resolve attributes from markdown to HTML
@@ -1105,53 +1142,6 @@ function handleQuestionInputAttributes(questionElement) {
       input.setAttribute('placeholder', 'YYYY-MM');
     });
   }
-}
-
-/**
- * Traverse the question DOM and handle <br> elements.
- * @param {HTMLElement} questionElement - The question element to handle.
- * @param {number} maxBrs - The maximum number of <br> elements between HTMLElements.
- * @returns 
- */
-function handleQuestionBRElements(questionElement, maxBrs = 3) {
-  //special handling for summary pages
-  const isSummaryPage = questionElement.id.includes('SUM');
-  if (isSummaryPage) {
-    maxBrs = 1;
-  }
-
-  let consecutiveBrs = [];
-
-  // Traverse the DOM tree to find all <br> elements
-  questionElement.querySelectorAll('br').forEach((br) => {
-    if (consecutiveBrs.length > 0 && consecutiveBrs[consecutiveBrs.length - 1].nextElementSibling === br) {
-      consecutiveBrs.push(br);
-    } else {
-      if (consecutiveBrs.length > maxBrs) {
-        // Remove all but the first two <br> elements
-        consecutiveBrs.slice(maxBrs).forEach((extraBr) => extraBr.remove());
-      }
-      // Reset the array to start tracking a new sequence
-      consecutiveBrs = [br];
-    }
-  });
-
-  // Final check in case the last sequence of <br>s is at the end of the document
-  if (consecutiveBrs.length > maxBrs) {
-    consecutiveBrs.slice(maxBrs).forEach((extraBr) => extraBr.remove());
-  }
-
-  //Set the brs after non-displays to not show as well
-  if (!isSummaryPage) {
-    [...questionElement.querySelectorAll(`[style*="display: none"]+br`)].forEach((e) => {
-      e.style = "display: none"
-    });
-  }
-
-  // Add aria-hidden to all remaining br elements. This keeps the screen reader from reading them as 'Empty Group'.
-  [...questionElement.querySelectorAll("br")].forEach((br) => {
-    br.setAttribute("aria-hidden", "true");
-  });
 }
 
 // Scroll higher on tablets and computers to show the site header.

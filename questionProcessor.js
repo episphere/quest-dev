@@ -632,13 +632,17 @@ export class QuestionProcessor {
       if (question) {
         const foundElement = question.querySelector(`#${elementID}`);
         if (foundElement) {
+          // If the found element is hidden, it is not a valid result.
+          if (foundElement.style.display === 'none') {
+            return '';
+          }
           return question.id;
         }
       }
     }
 
     moduleParams.errorLogger(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
-    return null;
+    return '';
   }
 
   replaceDateTags(content) {
