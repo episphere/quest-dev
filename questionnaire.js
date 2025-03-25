@@ -178,6 +178,7 @@ function exchangeValue(element, attrName, newAttrName) {
  */
 
 function resolveAttributeToParentID(attribute, appState) {
+  if (!attribute) return '';
   const decodedAttribute = decodeURIComponent(attribute);
 
   // If item found in state, no further evaluation needed.
@@ -189,7 +190,21 @@ function resolveAttributeToParentID(attribute, appState) {
   const questionProcessor = appState.getQuestionProcessor();
   const foundFormID = questionProcessor.findRelatedFormID(decodedAttribute);
 
-  return foundFormID ?? decodedAttribute;
+  // Sanity Check the foundFormID is in the surveyState. Check Object keys (compound responses) and string keys (simple responses).
+  // Handles edge case where formID references a summary page or anothter set of responses.
+  if (foundFormID) {
+    const foundResponse = appState.getItem(foundFormID);
+    if (foundResponse) {
+        if (typeof foundResponse === 'object' && foundResponse[decodedAttribute]) {
+          return foundFormID;
+        } else if (typeof foundResponse === 'string') {
+          return foundFormID;
+        }
+    }
+    return '';
+  }
+
+  return decodedAttribute;
 }
 
 /**
@@ -329,7 +344,7 @@ export const handleForIDAttributes = (forIDElementArray, returnToQuestion = fals
         foundValue = '';
       }
 
-      // Update the forIDElement's content and display.
+      // Update the forIDElement's content and display values.
       if (foundValue !== '') {
         forIDElement.style.display = '';
         forIDElement.textContent = foundValue;
@@ -337,24 +352,44 @@ export const handleForIDAttributes = (forIDElementArray, returnToQuestion = fals
         forIDElement.style.display = 'none';
       }
 
-      // Check if the forIDElement is directly wrapped in a displayif.
+      // Handle the case where a forID element is directly wrapped in a displayif container.
       const parentDisplayIf = forIDElement.parentElement;
       const isDirectDisplayif = parentDisplayIf && parentDisplayIf.classList.contains('displayif');
-
       if (isDirectDisplayif) {
-        // Group the current forIDElement's truthy state by container.
+        // Initialize the container with an object holding truthyStates and parentIDs.
         if (!displayIfContainerMap.has(parentDisplayIf)) {
-          displayIfContainerMap.set(parentDisplayIf, []);
+          displayIfContainerMap.set(parentDisplayIf, {
+            truthyStates: [],
+            parentIDs: []
+          });
         }
-        displayIfContainerMap.get(parentDisplayIf).push(foundValue !== '');
+
+        // Push the truthy state.
+        const containerData = displayIfContainerMap.get(parentDisplayIf);
+        containerData.truthyStates.push(foundValue !== '');
+        // Store parentID if it's available.
+        if (parentID) {
+          containerData.parentIDs.push(parentID);
+        }
       }
     });
 
     // Process each displayif container.
-    displayIfContainerMap.forEach((truthyStates, container) => {
+    displayIfContainerMap.forEach((containerData, container) => {
       // If any forID element is truthy, show the container. Otherwise, hide it.
+      const { truthyStates, parentIDs } = containerData;
       if (truthyStates.some(state => state)) {
-        container.style.display = '';
+        let conditionEval;
+        const displayIfAttribute = container.getAttribute('displayif');
+        if (displayIfAttribute) {
+          conditionEval = evaluateCondition(displayIfAttribute);
+        }
+
+        // If conditionEval is truthy or parentID exists, display the container.
+        // Handles case where a displayif / parentID mismatch occurs after searching for the parentID.
+        (conditionEval || parentIDs.length)
+          ? container.style.display = ''
+          : container.style.display = 'none';
       } else {
         container.style.display = 'none';
       }
