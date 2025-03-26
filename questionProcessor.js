@@ -619,7 +619,7 @@ export class QuestionProcessor {
   /**
    * For some input elements, the input ID and the form ID are different.
    * This is a legacy case, where we need to continue supporting existing surveys.
-   * Process: Search questions for the elementID. If found, return the parent formID.
+   * Process: Search questions for the elementID. If found, evaluate the found element.
    * This supports 'forid' replacement and displayif conditionals.
    * @param {string} elementID - The ID of the input element to find.
    * @returns {string} - The ID of the input element's form, required for evaluating some conditionals, or null if not found.
@@ -632,13 +632,43 @@ export class QuestionProcessor {
       if (question) {
         const foundElement = question.querySelector(`#${elementID}`);
         if (foundElement) {
+          const displayIfAttribute = foundElement.getAttribute('displayif');
+          if (displayIfAttribute) {
+            if (!this.evaluateConditionInFormSearch(displayIfAttribute)) {
+              return '';
+            }
+          }
+          // If the found element is hidden, it is not a valid result.
+          if (foundElement.style.display === 'none') {
+            return '';
+          }
           return question.id;
+        // If the elementID matches the questionID, there's no new property to replace/return.
+        } else if (question.id === elementID) {
+          return '';
         }
       }
     }
 
     moduleParams.errorLogger(`Error, findRelatedFormID (formID not found): ${moduleParams.questName}, elementID: ${elementID}`);
-    return null;
+    return '';
+  }
+
+  // This can be extended to handle other speficic conditionals in the form search for complex cases.
+  // The doesNotExist case handles multi-page dependencies (e.g. address entry where the user is asked to enter missing values actoss multiple questions in Module 3).
+  evaluateConditionInFormSearch(displayIfAttribute) {
+    if (displayIfAttribute.includes('doesNotExist')) {
+      const idRegex = /"(D_\d+(?:_\d+)*)"/;
+      const match = displayIfAttribute.match(idRegex);
+      if (match && match[1]) {
+          const appState = getStateManager();
+          const foundValue = appState.findResponseValue(match[1]);
+          if (foundValue == null || foundValue === '') {
+            return false;
+          }
+      }
+    }
+    return true;
   }
 
   replaceDateTags(content) {
