@@ -278,6 +278,7 @@ export class QuestionProcessor {
    */
 
   loadInitialQuestionOnStartup(questionID) {
+    console.log('loadInitialQuestionOnStartup:', questionID);
     if (this.questions.length === 0) {
       moduleParams.errorLogger('Error during initialization (loadInitialQuestion): no questions found', this.questions);
       return null;
@@ -332,7 +333,9 @@ export class QuestionProcessor {
 
     this.setCurrentQuestionIndex('update', index);
 
-    this.manageActiveQuestionClass(question, questionToUnload);
+    if (!moduleParams.renderFullQuestionList) {
+      this.manageActiveQuestionClass(question, questionToUnload);
+    }
 
     return question;
   }
@@ -355,7 +358,9 @@ export class QuestionProcessor {
 
     this.setCurrentQuestionIndex('update', index);
 
-    this.manageActiveQuestionClass(question, questionToUnload);
+    if (!moduleParams.renderFullQuestionList) {
+      this.manageActiveQuestionClass(question, questionToUnload);
+    }
     
     return question;
   }
