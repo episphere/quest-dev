@@ -278,7 +278,6 @@ export class QuestionProcessor {
    */
 
   loadInitialQuestionOnStartup(questionID) {
-    console.log('loadInitialQuestionOnStartup:', questionID);
     if (this.questions.length === 0) {
       moduleParams.errorLogger('Error during initialization (loadInitialQuestion): no questions found', this.questions);
       return null;
