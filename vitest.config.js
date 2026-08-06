@@ -7,7 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     environmentOptions: {
       jsdom: {
-        // Match the non-local participant host used by Connect. Tests that
+        // Use a synthetic non-local origin to model Quest embedded in Connect.
         url: 'https://connect.test/',
       },
     },

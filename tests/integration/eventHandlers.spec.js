@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderFreshQuest } from '../helpers/questRuntime.js';
 
 const TEXT_SURVEY = `
@@ -9,10 +9,17 @@ const TEXT_SURVEY = `
 `;
 
 describe('delegated runtime event handling', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('captures input, focusout, Enter, and reset behavior at the Quest container boundary', async () => {
+    vi.useFakeTimers();
     const quest = await renderFreshQuest({ markdown: TEXT_SURVEY });
     const input = quest.root.querySelector('#TEXT_VALUE');
     const form = input.form;
+    vi.clearAllTimers();
 
     const enter = new KeyboardEvent('keydown', {
       bubbles: true,
@@ -26,7 +33,8 @@ describe('delegated runtime event handling', () => {
 
     input.value = 'debounced value';
     input.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'e', inputType: 'insertText' }));
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(250);
     expect(quest.state.getActiveQuestionState()).toEqual({});
 
     input.value = 'focusout value';
@@ -40,6 +48,7 @@ describe('delegated runtime event handling', () => {
   });
 
   it('debounces nested Other text input and keeps its owning checkbox in sync', async () => {
+    vi.useFakeTimers();
     const quest = await renderFreshQuest({ markdown: TEXT_SURVEY });
     const form = quest.root.querySelector('#TEXT');
     form.querySelector('fieldset').innerHTML = `
@@ -54,11 +63,13 @@ describe('delegated runtime event handling', () => {
     quest.state.setNumResponseInputs('TEXT', 2);
     const checkbox = form.querySelector('#OTHER');
     const otherText = form.querySelector('#OTHER_TEXT');
+    vi.clearAllTimers();
 
     otherText.value = 'synthetic detail';
     otherText.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'l', inputType: 'insertText' }));
+    await vi.advanceTimersByTimeAsync(250);
 
-    await vi.waitFor(() => expect(checkbox.checked).toBe(true));
+    expect(checkbox.checked).toBe(true);
     expect(quest.state.getActiveQuestionState().TEXT).toEqual({
       OTHER_GROUP: ['99'],
       OTHER_TEXT: 'synthetic detail',
@@ -66,7 +77,8 @@ describe('delegated runtime event handling', () => {
 
     otherText.value = '';
     otherText.dispatchEvent(new InputEvent('input', { bubbles: true, data: null, inputType: 'deleteContentBackward' }));
-    await vi.waitFor(() => expect(checkbox.checked).toBe(false));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(checkbox.checked).toBe(false);
   });
 
   it('formats SSN and telephone keystrokes through delegated keyup listeners', async () => {
@@ -89,21 +101,19 @@ describe('delegated runtime event handling', () => {
   });
 
   it('updates the live selection announcement without requiring listeners on individual controls', async () => {
+    vi.useFakeTimers();
     const quest = await renderFreshQuest();
     const radio = quest.root.querySelector('#Q1_2');
 
     radio.click();
     radio.dispatchEvent(new Event('change', { bubbles: true }));
-
-    await vi.waitFor(() => {
-      expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toContain('Second answer Selected.');
-    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toContain('Second answer Selected.');
 
     radio.checked = false;
     radio.dispatchEvent(new Event('change', { bubbles: true }));
-    await vi.waitFor(() => {
-      expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toContain('Second answer Unselected.');
-    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toContain('Second answer Unselected.');
   });
 
   it('builds a legend, a single hidden focus stop, and accessible break semantics', async () => {
@@ -118,15 +128,17 @@ describe('delegated runtime event handling', () => {
   });
 
   it('moves focus to the constructed screen-reader stop after a question transition', async () => {
+    vi.useFakeTimers();
     const quest = await renderFreshQuest();
+    vi.clearAllTimers();
+
     quest.root.querySelector('#Q1_1').click();
     quest.root.querySelector('#Q1 .next').click();
+    await vi.advanceTimersByTimeAsync(0);
 
-    await vi.waitFor(() => expect(quest.root.querySelector('form.active')?.id).toBe('Q2'));
-    await vi.waitFor(() => expect(document.activeElement).toBe(quest.root.querySelector('#Q2 .screen-reader-focus')), {
-      timeout: 1_500,
-      interval: 25,
-    });
+    expect(quest.root.querySelector('form.active')?.id).toBe('Q2');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(document.activeElement).toBe(quest.root.querySelector('#Q2 .screen-reader-focus'));
   });
 
   it('keeps host controls outside the delegated event boundary unchanged', async () => {

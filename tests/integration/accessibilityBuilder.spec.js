@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderFreshQuest } from '../helpers/questRuntime.js';
 
 async function loadAccessibilityFixture(markup) {
@@ -120,6 +120,12 @@ describe('accessible question text construction', () => {
 });
 
 describe('accessible selection focus and defensive paths', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('keeps focus on a non-final table checkbox and announces its state', async () => {
     const { quest, accessibility } = await loadAccessibilityFixture(`
       <div class="question active"><button class="next">Next</button></div>
@@ -135,9 +141,11 @@ describe('accessible selection focus and defensive paths', () => {
     accessibility.handleRadioCheckboxTableEvents(event);
 
     expect(event.preventDefault).toHaveBeenCalledOnce();
-    await vi.waitFor(() => expect(document.activeElement).toBe(quest.root.querySelector('#srFocusHelper')));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.activeElement).toBe(quest.root.querySelector('#srFocusHelper'));
     expect(document.activeElement.closest('td')).toBe(input.closest('td'));
-    await vi.waitFor(() => expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toBe('First Selected.'));
+    await vi.advanceTimersByTimeAsync(150);
+    expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toBe('First Selected.');
   });
 
   it('moves focus from the final table checkbox to the active question Next button', async () => {
@@ -154,7 +162,8 @@ describe('accessible selection focus and defensive paths', () => {
     });
 
     const helper = quest.root.querySelector('#srFocusHelper');
-    await vi.waitFor(() => expect(document.activeElement).toBe(helper));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.activeElement).toBe(helper);
     expect(helper.closest('button')).toBe(quest.root.querySelector('button.next'));
   });
 
@@ -175,7 +184,8 @@ describe('accessible selection focus and defensive paths', () => {
       type: 'change',
       preventDefault: vi.fn(),
     });
-    await vi.waitFor(() => expect(quest.errors.some(([message]) => message.includes('Next question cell not found'))).toBe(true));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(quest.errors.some(([message]) => message.includes('Next question cell not found'))).toBe(true);
 
     quest.root.querySelector('#srFocusHelper').remove();
     accessibility.handleRadioCheckboxTableEvents({
@@ -183,7 +193,8 @@ describe('accessible selection focus and defensive paths', () => {
       type: 'change',
       preventDefault: vi.fn(),
     });
-    await vi.waitFor(() => expect(quest.errors.some(([message]) => message.includes('Focus helper not found'))).toBe(true));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(quest.errors.some(([message]) => message.includes('Focus helper not found'))).toBe(true);
   });
 
   it('logs missing active-question and Next-button targets for final selections', async () => {
@@ -194,11 +205,13 @@ describe('accessible selection focus and defensive paths', () => {
     const event = { target: quest.root.querySelector('#ONLY'), type: 'change', preventDefault: vi.fn() };
 
     accessibility.handleRadioCheckboxTableEvents(event);
-    await vi.waitFor(() => expect(quest.errors.some(([message]) => message === 'Active question not found')).toBe(true));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(quest.errors.some(([message]) => message === 'Active question not found')).toBe(true);
 
     quest.root.insertAdjacentHTML('afterbegin', '<div class="question active"></div>');
     accessibility.handleRadioCheckboxTableEvents(event);
-    await vi.waitFor(() => expect(quest.errors.some(([message]) => message === 'Next question button not found')).toBe(true));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(quest.errors.some(([message]) => message === 'Next question button not found')).toBe(true);
   });
 
   it('walks past non-response siblings when ArrowUp leaves a nested text field', async () => {
@@ -210,8 +223,8 @@ describe('accessible selection focus and defensive paths', () => {
     current.focus();
 
     accessibility.handleUpDownArrowKeys({ key: 'ArrowUp', target: current, preventDefault: vi.fn() });
-
-    await vi.waitFor(() => expect(document.activeElement).toBe(quest.root.querySelector('#PREVIOUS')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.activeElement).toBe(quest.root.querySelector('#PREVIOUS'));
   });
 
   it('returns safely when announcer dependencies are absent and clears an existing region', async () => {

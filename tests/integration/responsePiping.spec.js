@@ -141,14 +141,20 @@ describe('response piping through participant runtime state', () => {
     const other = select.querySelector('#CHOICES_99');
     const detail = select.querySelector('#OTHER_TEXT');
 
-    alpha.click();
-    other.click();
-    detail.value = 'Participant detail';
-    detail.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'l', inputType: 'insertText' }));
-    await vi.waitFor(() => expect(quest.state.getActiveQuestionState().SELECT).toEqual({
-      CHOICES: ['1', '99'],
-      OTHER_TEXT: 'Participant detail',
-    }));
+    vi.useFakeTimers();
+    try {
+      alpha.click();
+      other.click();
+      detail.value = 'Participant detail';
+      detail.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'l', inputType: 'insertText' }));
+      await vi.advanceTimersByTimeAsync(250);
+      expect(quest.state.getActiveQuestionState().SELECT).toEqual({
+        CHOICES: ['1', '99'],
+        OTHER_TEXT: 'Participant detail',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
 
     await next(quest);
     expect((await activeQuestion(quest, 'SUMMARY')).textContent).toContain('Alpha; Other; Participant detail');

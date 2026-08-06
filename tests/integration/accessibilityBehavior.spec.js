@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderFreshQuest } from '../helpers/questRuntime.js';
 
 const GRID_SURVEY = `
@@ -16,6 +16,12 @@ function treeAt(questionID) {
 }
 
 describe('screen-reader and keyboard behavior', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('uses native list controls while adding Windows-specific refocus and announcements', async () => {
     const quest = await renderFreshQuest();
     quest.moduleParams.isWindowsEnvironment = true;
@@ -24,10 +30,9 @@ describe('screen-reader and keyboard behavior', () => {
     radio.click();
     radio.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
 
-    await vi.waitFor(() => expect(document.activeElement).toBe(radio));
-    await vi.waitFor(() => {
-      expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toContain('Second answer Selected.');
-    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.activeElement).toBe(radio);
+    expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent).toContain('Second answer Selected.');
   });
 
   it('moves the Windows table focus helper to the next visible row after a radio selection', async () => {
@@ -42,7 +47,8 @@ describe('screen-reader and keyboard behavior', () => {
     firstRowChoice.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
 
     const helper = quest.root.querySelector('#srFocusHelper');
-    await vi.waitFor(() => expect(document.activeElement).toBe(helper));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.activeElement).toBe(helper);
     expect(helper.closest('tr')?.dataset.questionId).toBe('ROW_TWO');
     expect(helper.parentElement.tagName).toBe('TH');
   });
@@ -59,7 +65,8 @@ describe('screen-reader and keyboard behavior', () => {
     finalRowChoice.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
 
     const helper = quest.root.querySelector('#srFocusHelper');
-    await vi.waitFor(() => expect(document.activeElement).toBe(helper));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.activeElement).toBe(helper);
     expect(helper.closest('button')).toBe(quest.root.querySelector('#GRID .next'));
   });
 
@@ -74,9 +81,8 @@ describe('screen-reader and keyboard behavior', () => {
     choice.click();
     choice.dispatchEvent(new Event('change', { bubbles: true }));
 
-    await vi.waitFor(() => {
-      expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent.trim()).toBe('Often Selected.');
-    });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent.trim()).toBe('Often Selected.');
     expect(choice.getAttribute('role')).toBeNull();
   });
 
@@ -94,11 +100,13 @@ describe('screen-reader and keyboard behavior', () => {
 
     secondText.focus();
     secondText.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
-    await vi.waitFor(() => expect(document.activeElement).toBe(fieldset.querySelector('#FIRST_RADIO')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.activeElement).toBe(fieldset.querySelector('#FIRST_RADIO'));
 
     firstText.focus();
     firstText.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
-    await vi.waitFor(() => expect(document.activeElement).not.toBe(firstText));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.activeElement).not.toBe(firstText);
 
     const radio = fieldset.querySelector('#SECOND_RADIO');
     radio.focus();
@@ -110,15 +118,21 @@ describe('screen-reader and keyboard behavior', () => {
   it('reconstructs and restores question focus after closing the soft-response modal', async () => {
     const quest = await renderFreshQuest();
     const modal = quest.root.querySelector('#softModal');
+    const focusTarget = quest.root.querySelector('#Q1 .screen-reader-focus');
+
+    // The initial render already schedules a 500 ms focus. Remove it so a
+    // passing assertion proves the close handler's 100 ms + 500 ms chain.
+    vi.clearAllTimers();
+    expect(document.activeElement).not.toBe(focusTarget);
     modal.style.display = 'block';
 
     modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(modal.style.display).toBe('none');
-    await vi.waitFor(() => expect(document.activeElement).toBe(quest.root.querySelector('#Q1 .screen-reader-focus')), {
-      timeout: 1_000,
-      interval: 25,
-    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.activeElement).not.toBe(focusTarget);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(document.activeElement).toBe(focusTarget);
     expect(quest.root.querySelectorAll('#Q1 .screen-reader-focus')).toHaveLength(1);
   });
 });
