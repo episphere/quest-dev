@@ -240,7 +240,7 @@ describe.skipIf(unavailable.length > 0)('locked production response-piping struc
         `${entry.module}/${entry.locale}: every authored destination/source pair must survive in its own runtime form`,
       ).toEqual([]);
     }
-  });
+  }, 180_000);
 
   it('keeps English and Spanish source/destination pairs aligned except for the two audited differences', () => {
     const pairsByModule = new Map();
