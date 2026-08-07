@@ -113,6 +113,11 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .cache/questionnaire
+          key: questionnaire-${{ runner.os }}-${{ hashFiles('tests/corpus/lock.json') }}
+      - run: npm run corpus:fetch && npm run corpus:verify
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Run canonical, axe, and representative authoring checks
         run: npx playwright test --project=${{ matrix.project }} --grep "@canonical|@axe|@cross-browser-authoring" --grep-invert @known-defect

@@ -124,6 +124,7 @@ test.describe('participant accessibility contract @canonical @windows-a11y', () 
       return;
     }
 
+    await expect(question.locator('.screen-reader-focus')).toBeFocused();
     const input = question.locator('#detail');
     await input.focus();
     await page.keyboard.press('Tab');
