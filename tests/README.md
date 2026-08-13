@@ -11,6 +11,7 @@ existing `transform.render(...)` API.
 3. Run `npx playwright install chromium firefox webkit`.
 4. Run `npm run corpus:fetch` once. The command downloads the immutable
    questionnaire revision in `tests/corpus/lock.json` and verifies its hashes.
+   No GitHub token is required.
 
 ## Useful commands
 

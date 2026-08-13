@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   corpusCacheDirectory,
@@ -15,6 +16,7 @@ import {
 import { DEFAULT_LOCK_PATH, pathExists } from './lib/artifacts.mjs';
 
 const execFileAsync = promisify(execFile);
+const SCRIPT_PATH = fileURLToPath(import.meta.url);
 
 function parseArguments(argv) {
   const options = {
@@ -33,26 +35,19 @@ function parseArguments(argv) {
   return options;
 }
 
-function githubHeaders() {
-  const headers = {
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'quest-corpus-fetcher',
-  };
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
+export function questionnaireArchiveUrl(lock) {
+  return `https://github.com/${lock.repository}/archive/${lock.commit}.tar.gz`;
 }
 
-async function downloadArchive(lock, archivePath) {
-  const url = `https://api.github.com/repos/${lock.repository}/tarball/${lock.commit}`;
-  const response = await fetch(url, {
-    headers: githubHeaders(),
+export async function downloadArchive(lock, archivePath, { fetchImpl = fetch } = {}) {
+  const url = questionnaireArchiveUrl(lock);
+  const response = await fetchImpl(url, {
+    headers: { 'User-Agent': 'quest-corpus-fetcher' },
     redirect: 'follow',
   });
 
   if (!response.ok) {
-    throw new Error(`Immutable GitHub archive fetch failed with HTTP ${response.status}.`);
+    throw new Error(`Public GitHub archive fetch failed with HTTP ${response.status}.`);
   }
   await writeFile(archivePath, Buffer.from(await response.arrayBuffer()));
 }
@@ -138,7 +133,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.cause?.message ?? error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_PATH) {
+  main().catch((error) => {
+    console.error(error.cause?.message ?? error.message);
+    process.exitCode = 1;
+  });
+}

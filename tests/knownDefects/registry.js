@@ -14,8 +14,10 @@ function defect(localDefectId, target, reason, extra = {}) {
 
 /**
  * Existing Quest behavior characterized before production changes resume.
- * These records are intentionally test-only. Expiry is checked in the
- * non-blocking known-defect lane so accepted failures cannot become permanent.
+ * Behavioral reproductions run in the non-blocking known-defect lane. Registry
+ * metadata and expiry are checked in the blocking quality lane so accepted
+ * failures must be fixed, removed, or renewed before they become
+ * permanent.
  */
 export const runtimeDefects = Object.freeze({
   treeDepthFirst: defect('QD-TREE-001', 'Tree.next depth-first traversal across root siblings', 'Traversal stops after the first root branch instead of continuing to later siblings.'),

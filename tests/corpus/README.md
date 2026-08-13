@@ -12,6 +12,11 @@ npm run corpus:verify
 npm run corpus:catalog:verify
 ```
 
+Local and CI fetches use GitHub's public archive URL for the exact locked
+commit. They do not read or require `GITHUB_TOKEN` or `GH_TOKEN`. After the
+download, every selected file is checked against the SHA-256 and Git blob hash
+recorded in `lock.json` before it is installed in the cache.
+
 Verified files are stored under the ignored `.cache/questionnaire/`
 directory. Chromium opens every locked survey in fresh Connect-shaped pages
 twice: once as a participant startup smoke test and once in renderer/full-list
