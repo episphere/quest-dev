@@ -11,6 +11,22 @@ import { restoreResponses } from './restoreResponses.js';
  */
 let appState = null;
 
+// Survey responses can contain nested compound values and checkbox arrays.
+// Keep state boundaries independent so live edits and delayed host callbacks
+// cannot mutate the snapshots used for rollback.
+function cloneStateValue(value, seen = new WeakMap()) {
+    if (value === null || typeof value !== 'object') return value;
+    if (value instanceof Date) return new Date(value.getTime());
+    if (seen.has(value)) return seen.get(value);
+
+    const clone = Array.isArray(value) ? [] : {};
+    seen.set(value, clone);
+    Object.entries(value).forEach(([key, nestedValue]) => {
+        clone[key] = cloneStateValue(nestedValue, seen);
+    });
+    return clone;
+}
+
 /**
  * Create a new state manager with the provided store and initial state.
  * The state manager is an object with survey data and methods to set, get, remove, and clear state.
@@ -20,8 +36,12 @@ let appState = null;
  */
 
 const createStateManager = (store, initialState = {}) => {
+    // The hostStore function belongs to the current render. Rebind it when
+    // the same manager instance is reused for a sequential render.
+    let hostStore = store;
+    let renderGeneration = 0;
     // The complete survey state with all questions.
-    let surveyState = { ...initialState };
+    let surveyState = cloneStateValue(initialState);
     // The active question state with the current question's responses.
     let activeQuestionState = {};
     // The the number of response keys for each question. Memoized to avoid re-calculating on each setFormValue call.
@@ -85,17 +105,18 @@ const createStateManager = (store, initialState = {}) => {
         if (removeMultipleKeys) {
             for (const key in activeQuestionState[questionID]) {
                 const compoundKey = `${key}.${questionID}`;
-                delete responseToQuestionMappingObj[compoundKey];
-                delete foundResponseCache[compoundKey];
+                // Retain an explicit cache tombstone until a newer live value
+                // or render replaces it, so lookups cannot fall back to the
+                // old value.
+                foundResponseCache[compoundKey] = undefined;
             }
             activeQuestionState[questionID] = undefined;
 
         // Clear one key in a multi-value response.
         } else if (key) {
             const compoundKey = `${key}.${questionID}`;
-            activeQuestionState[questionID][key] = undefined;
-            delete responseToQuestionMappingObj[compoundKey];
-            delete foundResponseCache[compoundKey];
+            delete activeQuestionState[questionID][key];
+            foundResponseCache[compoundKey] = undefined;
     
             if (Object.keys(activeQuestionState[questionID]).length === 0) {
                 activeQuestionState[questionID] = undefined;
@@ -104,8 +125,7 @@ const createStateManager = (store, initialState = {}) => {
         // Clear the single value response.
         } else {
             activeQuestionState[questionID] = undefined;
-            delete responseToQuestionMappingObj[questionID];
-            delete foundResponseCache[questionID];
+            foundResponseCache[questionID] = undefined;
         }
     }
 
@@ -113,44 +133,79 @@ const createStateManager = (store, initialState = {}) => {
      * Return to the previous question and reset the form elements if the store() operation fails.
      * @param {object} error - the error object from the store function.
      * @param {HTMLButtonElement} nextOrPreviousButton - the most recent button clicked by the user (Next or Back).
-     * @param {object} previousSurveyState - the survey state before the failed store operation.
-     * @param {object} previousActiveQuestionState - the active question state before the failed store operation.
+     * @param {object} previousSurveyState - the committed survey state before the failed store operation.
+     * @param {object} previousActiveQuestionState - the participant's live response at the time of the failed write.
+     * @param {object} previousResponseMapping - response mappings from before optimistic navigation.
+     * @param {object} previousResponseCache - response cache from before optimistic navigation.
+     * @param {number} expectedRenderGeneration - render that initiated the host write.
      */
 
-    function handleStoreError(error, nextOrPreviousButton, previousSurveyState, previousActiveQuestionState) {
+    async function handleStoreError(
+        error,
+        nextOrPreviousButton,
+        previousSurveyState,
+        previousActiveQuestionState,
+        previousResponseMapping,
+        previousResponseCache,
+        expectedRenderGeneration,
+    ) {
+        if (expectedRenderGeneration !== renderGeneration) return;
         moduleParams.errorLogger('StateManager -> syncToStore: Error syncing state to store', error);
 
         // Clear the selection announcement since the user is returning to the previous question.
         clearSelectionAnnouncement();
 
-        // Revert the state
-        if (Object.keys(previousSurveyState).length > 0) {
-            surveyState = { ...previousSurveyState };
-        }
-
-        if (Object.keys(previousActiveQuestionState).length > 0) {
-            activeQuestionState = { ...previousActiveQuestionState };
-        }
+        // Restore the exact pre-write snapshots, including an intentionally
+        // empty survey. Conditional assignment here left optimistically merged
+        // answers behind whenever the participant had no earlier responses.
+        surveyState = { ...previousSurveyState };
+        activeQuestionState = { ...previousActiveQuestionState };
+        responseToQuestionMappingObj = { ...previousResponseMapping };
+        foundResponseCache = { ...previousResponseCache };
 
         // Reset the form and return to the previous question.
         const clickType = nextOrPreviousButton.getAttribute('data-click-type');
+        const responseQuestionID = Object.keys(previousActiveQuestionState)
+            .find((key) => key !== 'treeJSON');
+        let responsesToRestore = surveyState;
+
+        // A failed Next write should retain the participant's unsaved edit for
+        // retry. A failed Back write should restore the committed response that
+        // Back attempted to delete.
+        if (clickType === 'next' && responseQuestionID) {
+            responsesToRestore = {
+                ...surveyState,
+                [responseQuestionID]: previousActiveQuestionState[responseQuestionID],
+            };
+        }
+
         if (clickType === 'next') {
-            resetChildren(document.querySelector('.question'));
-            getPreviousQuestion(nextOrPreviousButton, true);
+            const currentQuestion = moduleParams.questDiv?.querySelector('.question');
+            if (currentQuestion) resetChildren(currentQuestion);
+            await getPreviousQuestion(nextOrPreviousButton, true);
 
         } else if (clickType === 'previous') {
-            getNextQuestion(nextOrPreviousButton, true);
+            await getNextQuestion(nextOrPreviousButton, true);
 
         } else {
             moduleParams.errorLogger('Invalid click type (handleStoreError):', clickType);
         }
 
-        restoreResponses(surveyState, Object.keys(activeQuestionState)[0]);
+        // A new render can start while awaiting an asynchronous host question. Never restore or open a modal in it.
+        if (expectedRenderGeneration !== renderGeneration) return;
+
+        delete activeQuestionState.treeJSON;
+
+        if (responseQuestionID) {
+            restoreResponses(responsesToRestore, responseQuestionID);
+        }
         showStoreErrorModal();
     }
 
     function showStoreErrorModal() {
-        const modal = new bootstrap.Modal(document.getElementById("storeErrorModal"));
+        const modalElement = moduleParams.questDiv?.querySelector('#storeErrorModal');
+        if (!modalElement) return;
+        const modal = new bootstrap.Modal(modalElement);
         modal.show();
 
         // Automatically close the modal after 5 seconds.
@@ -265,7 +320,22 @@ const createStateManager = (store, initialState = {}) => {
         },
 
         clearAllState: () => {
+            // Invalidate pending host callbacks from the cleared render.
+            renderGeneration += 1;
             surveyState = {};
+            activeQuestionState = {};
+            responseKeysObj = {};
+            responseToQuestionMappingObj = {};
+            foundResponseCache = {};
+            questionProcessor = null;
+        },
+
+        // Reset all state while retaining the manager object's
+        // identity for callers that already hold a reference to it.
+        reinitialize: (nextStore, nextInitialState = {}) => {
+            renderGeneration += 1;
+            hostStore = nextStore;
+            surveyState = cloneStateValue(nextInitialState);
             activeQuestionState = {};
             responseKeysObj = {};
             responseToQuestionMappingObj = {};
@@ -280,7 +350,9 @@ const createStateManager = (store, initialState = {}) => {
             }
 
             if (Object.prototype.hasOwnProperty.call(surveyState, questionID)) {
-                activeQuestionState = { [questionID]: surveyState[questionID] };
+                activeQuestionState = {
+                    [questionID]: cloneStateValue(surveyState[questionID]),
+                };
             }
         },
 
@@ -294,7 +366,7 @@ const createStateManager = (store, initialState = {}) => {
 
         loadInitialSurveyState: (retrievedData) => {
             const initialUserData = retrievedData || {};
-            surveyState = { ...initialUserData };
+            surveyState = cloneStateValue(initialUserData);
             responseToQuestionMappingObj = generateResponseKeyToQuestionIDMapping(surveyState);
             foundResponseCache = mapResponseKeysToCache(responseToQuestionMappingObj, surveyState);
         },
@@ -310,6 +382,8 @@ const createStateManager = (store, initialState = {}) => {
         syncToStore: (nextOrPreviousButton) => {
             let previousSurveyState = {};
             let previousActiveQuestionState = {};
+            let previousResponseMapping = {};
+            let previousResponseCache = {};
 
             // check loopData in case it's a loop-controlling question
             if (Object.keys(activeQuestionState).length === 1) {
@@ -322,12 +396,15 @@ const createStateManager = (store, initialState = {}) => {
             
             const changedState = {};
             Object.keys(activeQuestionState).forEach((key) => {
-                changedState[`${moduleParams.questName}.${key}`] = activeQuestionState[key];
+                // Keep payload that boundary independent from Quest's optimistic state.
+                changedState[`${moduleParams.questName}.${key}`] = cloneStateValue(activeQuestionState[key]);
             });
 
             // Store previous state for possible reversion on error
-            previousSurveyState = { ...surveyState };
-            previousActiveQuestionState = { ...activeQuestionState };
+            previousSurveyState = cloneStateValue(surveyState);
+            previousActiveQuestionState = cloneStateValue(activeQuestionState);
+            previousResponseMapping = cloneStateValue(responseToQuestionMappingObj);
+            previousResponseCache = cloneStateValue(foundResponseCache);
 
             // Update the survey state with the active question state.
             surveyState = { ...surveyState, ...activeQuestionState };
@@ -340,16 +417,34 @@ const createStateManager = (store, initialState = {}) => {
 
             // Use .then() instead of await to avoid blocking the UI.
             // On error: revert to the previous question and restore the previous state (handleStoreError()).
-            if (typeof store === 'function') {                
-                store(changedState)
-                    .then((storeResponse) => {
-                        if (storeResponse?.code !== 200) {
-                            handleStoreError(storeResponse, nextOrPreviousButton, previousSurveyState, previousActiveQuestionState);
-                        }
-                    })
-                    .catch((error) => {
-                        handleStoreError(error, nextOrPreviousButton, previousSurveyState, previousActiveQuestionState);
+            if (typeof hostStore === 'function') {
+                const syncGeneration = renderGeneration;
+                const rollbackStoreFailure = (error) => {
+                    if (syncGeneration !== renderGeneration) return;
+                    handleStoreError(
+                        error,
+                        nextOrPreviousButton,
+                        previousSurveyState,
+                        previousActiveQuestionState,
+                        previousResponseMapping,
+                        previousResponseCache,
+                        syncGeneration,
+                    ).catch((rollbackError) => {
+                        if (syncGeneration !== renderGeneration) return;
+                        moduleParams.errorLogger(
+                            'StateManager -> syncToStore: Error rolling back failed store operation',
+                            rollbackError,
+                        );
                     });
+                };
+
+                hostStore(changedState)
+                    .then((storeResponse) => {
+                        if (syncGeneration !== renderGeneration) return;
+                        if (storeResponse?.code !== 200) {
+                            rollbackStoreFailure(storeResponse);
+                        }
+                    }, rollbackStoreFailure);
             } else {
                 delete activeQuestionState['treeJSON'];
             }
@@ -368,8 +463,8 @@ const createStateManager = (store, initialState = {}) => {
                 [`${moduleParams.questName}.COMPLETED_TS`]: new Date(),
             };
 
-            if (typeof store === 'function') {
-                return await store(changedState);
+            if (typeof hostStore === 'function') {
+                return await hostStore(changedState);
             }
         },
 
@@ -435,17 +530,20 @@ const createStateManager = (store, initialState = {}) => {
             //  (2) responseKey.responseKey for object structures
             //  (3) responseKey for single value responses.
             let cachedValue;
+            let hasCachedValue = false;
             if (questionID && Object.prototype.hasOwnProperty.call(foundResponseCache, compoundKey)) {
                 cachedValue = foundResponseCache[compoundKey];
+                hasCachedValue = true;
             } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, `${responseKey}.${responseKey}`)) {
                 cachedValue = foundResponseCache[`${responseKey}.${responseKey}`];
+                hasCachedValue = true;
             } else if (Object.prototype.hasOwnProperty.call(foundResponseCache, responseKey)) {
                 cachedValue = foundResponseCache[responseKey];
+                hasCachedValue = true;
             }
 
-            if (cachedValue !== null && cachedValue !== undefined && typeof cachedValue !== 'object') {
-                return cachedValue;
-            }
+            // Cache ownership is authoritative.
+            if (hasCachedValue) return cachedValue;
 
             // Check if the responseKey is already in the surveyState object.
             const existingResponse = surveyState[compoundKey];
@@ -524,6 +622,12 @@ const createStateManager = (store, initialState = {}) => {
             } else {
                 pathToData = responseToQuestionMappingObj[compoundKey];
             }
+
+            // Compound live responses are cached under their mapped key before
+            // they reach surveyState. Return that value.
+            if (foundKey && Object.prototype.hasOwnProperty.call(foundResponseCache, foundKey)) {
+                return foundResponseCache[foundKey];
+            }
         
             if (!pathToData) return undefined;
         
@@ -560,7 +664,7 @@ export function initializeStateManager(store, initialState = {}) {
     if (!appState) {
         appState = createStateManager(store, initialState);
     } else {
-        appState.clearAllState();
+        appState.reinitialize(store, initialState);
     }
 }
 

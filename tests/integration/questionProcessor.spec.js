@@ -17,6 +17,8 @@ const PRECALCULATED = {
   firstName: 'Synthetic',
 };
 
+const WHOLE_NUMBER_KEYPRESS_HANDLER = 'return (event.charCode == 8 || event.charCode == 0 || event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57';
+
 async function createProcessor(markdown, initialState = {}, options = {}) {
   vi.resetModules();
   const questionnaire = await import('../../questionnaire.js');
@@ -104,8 +106,278 @@ describe('QuestionProcessor constructs', () => {
     expect(all.querySelector('#STATE_VALUE').querySelectorAll('option').length).toBeGreaterThan(50);
     expect(all.querySelector('#DATE_VALUE').getAttribute('aria-describedby')).toBe('DATE_VALUE-desc');
     expect(all.querySelector('#MONTH_VALUE').dataset.minDateUneval).toBe('2020-01');
-    expect(all.querySelector('#TIME_VALUE').getAttribute('aria-label')).toBe('Enter Time');
+    expect(all.querySelector('#EMAIL_VALUE').getAttribute('aria-label')).toBe('Email');
+    expect(all.querySelector('#PHONE_VALUE').getAttribute('aria-label')).toBe('Phone');
+    expect(all.querySelector('#FULL_SSN').getAttribute('aria-label')).toBe('SSN');
+    expect(all.querySelector('#SMALL_SSN').getAttribute('aria-label')).toBe('Last four');
+    expect(all.querySelector('#ZIP_VALUE').getAttribute('aria-label')).toBe('Zip');
+    expect(all.querySelector('#STATE_VALUE').getAttribute('aria-label')).toBe('State');
+    expect(all.querySelector('#DATE_VALUE').getAttribute('aria-label')).toBe('Date');
+    expect(all.querySelector('#MONTH_VALUE').getAttribute('aria-label')).toBe('Month');
+    const time = all.querySelector('#TIME_VALUE');
+    expect(time.hasAttribute('aria-label')).toBe(false);
+    expect(time.labels).toHaveLength(1);
+    expect(time.labels[0].htmlFor).toBe('TIME_VALUE');
+    expect(time.labels[0].textContent).toBe('Time');
+    expect(all.querySelector('#NUMBER_VALUE').getAttribute('aria-label')).toBe('Number');
+    expect(all.querySelector('#TEXT_VALUE').getAttribute('aria-label')).toBe('Text');
+    expect(all.querySelector('#NOTES').getAttribute('aria-label')).toBe('Notes');
+    expect(all.querySelector('#AREA [data-click-type="reset"]')).not.toBeNull();
     expect(all.querySelector('#HIDDEN_VALUE').dataset.hidden).toBe('true');
+  });
+
+  it('renders Reset for actual textarea tags without matching response-free prose', async () => {
+    const { processor } = await createProcessor(`
+      {"name":"RESET_CONTROL_DETECTION"}
+      [PROSE] Your input will help, but this page has no response control.
+      [UPPERCASE_TEXTAREA?] Enter notes. <TEXTAREA id="UPPER_NOTES"></TEXTAREA>
+      [END,end] Done.
+    `);
+
+    expect(processById(processor, 'PROSE').querySelector('[data-click-type="reset"]')).toBeNull();
+    expect(processById(processor, 'UPPERCASE_TEXTAREA').querySelector('#UPPER_NOTES')).not.toBeNull();
+    expect(processById(processor, 'UPPERCASE_TEXTAREA').querySelector('[data-click-type="reset"]'))
+      .not.toBeNull();
+  });
+
+  it.each([
+    {
+      language: 'en',
+      labels: ['Age at diagnosis', 'Year at diagnosis'],
+      fallbackLabels: {
+        FALLBACK_EMAIL: 'Enter a value',
+        FALLBACK_PHONE: 'Enter a value',
+        FALLBACK_SSN: 'Enter a value',
+        FALLBACK_SSN_LAST_FOUR: 'Enter a value',
+        FALLBACK_ZIP: 'Enter a value',
+        FALLBACK_STATE: 'Choose a State',
+        FALLBACK_DATE: 'Enter a value',
+        FALLBACK_MONTH: 'Enter a value',
+        FALLBACK_TIME: 'Enter a value',
+        FALLBACK_NUMBER: 'Enter a value',
+        FALLBACK_TEXT: 'Enter a value',
+        FALLBACK_TEXTAREA: 'Enter a value',
+      },
+      rangedDescription: 'Value must be greater than or equal to 1. Value must be less than or equal to 10',
+      unboundedDescription: 'Enter a value',
+      dateDescription: 'Enter a value',
+      monthDescription: 'Format should match YYYY-MM',
+    },
+    {
+      language: 'es',
+      labels: ['Edad al momento del diagnóstico', 'Año del diagnóstico'],
+      fallbackLabels: {
+        FALLBACK_EMAIL: 'Introduzca un valor',
+        FALLBACK_PHONE: 'Introduzca un valor',
+        FALLBACK_SSN: 'Introduzca un valor',
+        FALLBACK_SSN_LAST_FOUR: 'Introduzca un valor',
+        FALLBACK_ZIP: 'Introduzca un valor',
+        FALLBACK_STATE: 'Elija un Estado',
+        FALLBACK_DATE: 'Introduzca un valor',
+        FALLBACK_MONTH: 'Introduzca un valor',
+        FALLBACK_TIME: 'Introduzca un valor',
+        FALLBACK_NUMBER: 'Introduzca un valor',
+        FALLBACK_TEXT: 'Introduzca un valor',
+        FALLBACK_TEXTAREA: 'Introduzca un valor',
+      },
+      rangedDescription: 'El valor debe ser mayor o igual a 1. El valor debe ser menor o igual a 10',
+      unboundedDescription: 'Introduzca un valor',
+      dateDescription: 'Introduzca un valor',
+      monthDescription: 'Debe tener el formato AAAA-MM',
+    },
+  ])('gives generated scalar controls distinct names and localized fallback guidance in $language', async ({
+    language,
+    labels,
+    fallbackLabels,
+    rangedDescription,
+    unboundedDescription,
+    dateDescription,
+    monthDescription,
+  }) => {
+    const [ageLabel, yearLabel] = labels;
+    const { processor } = await createProcessor(`
+      {"name":"NUMERIC_NAMES_${language.toUpperCase()}"}
+      [COMPOUND?] Diagnosis details.
+      |__|__|id=AGE_VALUE min=1 max=10| ${ageLabel}
+      |__|__|__|__|id=YEAR_VALUE| ${yearLabel}
+      [FALLBACK?] Prompts on their own lines.
+      |@|id=FALLBACK_EMAIL|
+      |tel|id=FALLBACK_PHONE|
+      |SSN|id=FALLBACK_SSN|
+      |SSNsm|id=FALLBACK_SSN_LAST_FOUR|
+      |zip|id=FALLBACK_ZIP|
+      |state|id=FALLBACK_STATE|
+      |date|id=FALLBACK_DATE|
+      |month|id=FALLBACK_MONTH|
+      |time|id=FALLBACK_TIME|
+      |__|__|id=FALLBACK_NUMBER|
+      |__|id=FALLBACK_TEXT|
+      |___|FALLBACK_TEXTAREA|
+      [END,end] Done.
+    `, {}, { language });
+
+    const compound = processById(processor, 'COMPOUND');
+    const fallback = processById(processor, 'FALLBACK');
+
+    expect(compound.querySelector('#AGE_VALUE')).toMatchObject({
+      type: 'number',
+      name: 'COMPOUND',
+      min: '1',
+      max: '10',
+    });
+    expect(compound.querySelector('#AGE_VALUE').getAttribute('aria-label')).toBe(ageLabel);
+    expect(compound.querySelector('#YEAR_VALUE').getAttribute('aria-label')).toBe(yearLabel);
+    expect(new Set(Array.from(compound.querySelectorAll('input[type="number"]'), (input) => input.getAttribute('aria-label'))).size).toBe(2);
+    expect(compound.querySelector('#AGE_VALUE-desc').textContent).toBe(rangedDescription);
+    expect(compound.querySelector('#YEAR_VALUE-desc').textContent).toBe(unboundedDescription);
+    for (const [id, accessibleName] of Object.entries(fallbackLabels)) {
+      const control = fallback.querySelector(`#${id}`);
+      const nameSource = control.getAttribute('aria-label')
+        || Array.from(control.labels ?? [], (label) => label.textContent).join(' ');
+      expect(nameSource, id).toBe(accessibleName);
+    }
+    expect(fallback.querySelector('#FALLBACK_NUMBER').getAttribute('aria-describedby')).toBe('FALLBACK_NUMBER-desc');
+    expect(fallback.querySelector('#FALLBACK_DATE-desc').textContent).toBe(dateDescription);
+    expect(fallback.querySelector('#FALLBACK_MONTH-desc').textContent).toBe(monthDescription);
+  });
+
+  it('preserves authored accessible names and never mistakes metadata or choice markup for a name', async () => {
+    const { processor } = await createProcessor(`
+      {"name":"SCALAR_NAME_BOUNDARIES"}
+      [NUMBER?] Number.
+      |__|__|id=AUTHORED_NUMBER min=1 max=2 aria-label='Authored number'|
+      [DATE?] <span id="AUTHORED_DATE_LABEL">Authored date</span>
+      |date|id=AUTHORED_DATE aria-labelledby='AUTHORED_DATE_LABEL'|
+      [METADATA?] Metadata is not a label.
+      |__|id=METADATA_TEXT data-aria-label=metadata|
+      [HASH?] Duration.
+      |__|__|id=HASH_NUMBER| # of Hours
+      [RADIO_SCALAR?] Pick one.
+      (1) Email |@|id=CHOICE_EMAIL|
+      [CHECK_SCALAR?] Pick any.
+      [1] Date |date|id=CHOICE_DATE|
+      [PREFIX_NUMBER?] Pick one.
+      (1) times per day |__|__|id=PREFIX_NUMBER_VALUE|
+      [SUFFIX_NUMBER?] Elija una opción.
+      (1) |__|__|id=SUFFIX_NUMBER_VALUE| veces al día
+      [PAREN_CAPTION?] Contact option (1) |@|id=PAREN_EMAIL|
+      [BRACKET_CAPTION?] Appointment [2] |date|id=BRACKET_DATE|
+      [END,end] Done.
+    `);
+
+    const number = processById(processor, 'NUMBER').querySelector('#AUTHORED_NUMBER');
+    expect(number.id).toBe('AUTHORED_NUMBER');
+    expect(number.getAttribute('aria-label')).toBe('Authored number');
+    expect(number.getAttribute('aria-describedby')).toBe('AUTHORED_NUMBER-desc');
+
+    const date = processById(processor, 'DATE').querySelector('#AUTHORED_DATE');
+    expect(date.id).toBe('AUTHORED_DATE');
+    expect(date.hasAttribute('aria-label')).toBe(false);
+    expect(date.getAttribute('aria-labelledby')).toBe('AUTHORED_DATE_LABEL');
+    expect(date.getAttribute('aria-describedby')).toBe('AUTHORED_DATE-desc');
+
+    const metadata = processById(processor, 'METADATA').querySelector('#METADATA_TEXT');
+    expect(metadata.dataset.ariaLabel).toBe('metadata');
+    expect(metadata.getAttribute('aria-label')).toBe('Enter a value');
+
+    const hashNumber = processById(processor, 'HASH').querySelector('#HASH_NUMBER');
+    expect(hashNumber.getAttribute('aria-label')).toBe('# of Hours');
+
+    const choiceEmail = processById(processor, 'RADIO_SCALAR').querySelector('#CHOICE_EMAIL');
+    const choiceDate = processById(processor, 'CHECK_SCALAR').querySelector('#CHOICE_DATE');
+    expect(choiceEmail.getAttribute('aria-label')).toBe('Email');
+    expect(choiceDate.getAttribute('aria-label')).toBe('Date');
+    expect(processById(processor, 'PREFIX_NUMBER').querySelector('#PREFIX_NUMBER_VALUE').getAttribute('aria-label'))
+      .toBe('times per day');
+    expect(processById(processor, 'SUFFIX_NUMBER').querySelector('#SUFFIX_NUMBER_VALUE').getAttribute('aria-label'))
+      .toBe('veces al día');
+    expect(processById(processor, 'PAREN_CAPTION').querySelector('#PAREN_EMAIL').getAttribute('aria-label'))
+      .toBe('Contact option (1)');
+    expect(processById(processor, 'BRACKET_CAPTION').querySelector('#BRACKET_DATE').getAttribute('aria-label'))
+      .toBe('Appointment [2]');
+    expect(`${choiceEmail.getAttribute('aria-label')} ${choiceDate.getAttribute('aria-label')}`).not.toMatch(
+      /<|>|class=|response|label=/i,
+    );
+  });
+
+  it('protects accessible names from later choice parsing', async () => {
+    const { processor } = await createProcessor(`
+      {"name":"AUTHORED_SCALAR_CHOICE_DELIMITERS"}
+      [QUESTA11YOPTION_0_END?] Authored scalar names.
+      |@|id=AUTHORED_EMAIL aria-label='Contact option (1) [2] &amp; more'|
+      |date|id=AUTHORED_DATE aria-label='Appointment [2]'|
+      |time|id=AUTHORED_TIME aria-label='Preferred time (3)'|
+      |__|__|id=AUTHORED_NUMBER aria-label='Amount [4]'|
+      [END,end] Done.
+    `);
+    const question = processById(processor, 'QUESTA11YOPTION_0_END');
+
+    expect(question.querySelector('#AUTHORED_EMAIL').getAttribute('aria-label')).toBe('Contact option (1) [2] & more');
+    expect(question.querySelector('#AUTHORED_DATE').getAttribute('aria-label')).toBe('Appointment [2]');
+    expect(question.querySelector('#AUTHORED_TIME').getAttribute('aria-label')).toBe('Preferred time (3)');
+    expect(question.querySelector('#AUTHORED_NUMBER').getAttribute('aria-label')).toBe('Amount [4]');
+    expect(question.querySelector('#AUTHORED_NUMBER').name).toBe('QUESTA11YOPTION_0_END');
+    expect(question.querySelectorAll('input')).toHaveLength(4);
+    expect(question.querySelectorAll('input[type="radio"], input[type="checkbox"]')).toHaveLength(0);
+    expect(question.querySelectorAll('.response')).toHaveLength(0);
+    expect(question.querySelector('label[for="AUTHORED_TIME"]')).toBeNull();
+  });
+
+  it('includes conditional caption text only when it matches the scalar condition', async () => {
+    const { processor } = await createProcessor(`
+      {"name":"CONDITIONAL_SCALAR_NAMES"}
+      [MATCHED?] Weight history.
+      |displayif=equals(D_TRIGGER,1)|18 years old|
+      |__|__|id=MATCHED_NUMBER displayif=equals(D_TRIGGER,1)||displayif=equals(D_TRIGGER,1)|Pounds|
+      [MISMATCHED?] Stable caption |displayif=equals(D_TRIGGER,1)|optional qualifier| |__|__|id=MISMATCHED_NUMBER displayif=equals(D_TRIGGER,2)|
+      [ALTERNATES?] Number of times |displayif=equals(D_TRIGGER,1)|fills||displayif=equals(D_TRIGGER,2)|filled| |__|__|id=ALTERNATE_NUMBER|
+      [END,end] Done.
+    `);
+
+    expect(processById(processor, 'MATCHED').querySelector('#MATCHED_NUMBER').getAttribute('aria-label'))
+      .toBe('18 years old, Pounds');
+    expect(processById(processor, 'MISMATCHED').querySelector('#MISMATCHED_NUMBER').getAttribute('aria-label'))
+      .toBe('Enter a value');
+    expect(processById(processor, 'ALTERNATES').querySelector('#ALTERNATE_NUMBER').getAttribute('aria-label'))
+      .toBe('Enter a value');
+  });
+
+  it('keeps generated number handlers intact inside authored display conditions', async () => {
+    const { processor } = await createProcessor(`
+      {"name":"CONDITIONAL_NUMBER_HANDLER"}
+      [WEIGHT?] Weight history.
+      |displayif=equals(SHOW_WEIGHT,1)|18 years old|
+      |displayif=equals(SHOW_WEIGHT,1)||__|__|__|id=WEIGHT_VALUE min=0 max=999||displayif=equals(SHOW_WEIGHT,1)|Pounds|
+      [END,end] Done.
+    `);
+
+    const weight = processById(processor, 'WEIGHT');
+    const input = weight.querySelector('#WEIGHT_VALUE');
+    const handler = input.getAttribute('onkeypress');
+
+    expect(handler).toBe(WHOLE_NUMBER_KEYPRESS_HANDLER);
+    expect(input.closest('.displayif')?.getAttribute('displayif')).toBe('equals(SHOW_WEIGHT,1)');
+    expect(weight.querySelectorAll('.displayif')).toHaveLength(3);
+    expect(weight.textContent).not.toContain('|displayif=');
+    expect(weight.textContent).toContain('18 years old');
+    expect(weight.textContent).toContain('Pounds');
+  });
+
+  it('does not add a visible delimiter to an already-closed conditional number', async () => {
+    const { processor } = await createProcessor(`
+      {"name":"CLOSED_CONDITIONAL_NUMBER"}
+      [WEIGHT?] Enter a weight.
+      |displayif=equals(SHOW_WEIGHT,1)||__|__|id=WEIGHT_VALUE||
+      [END,end] Done.
+    `);
+
+    const weight = processById(processor, 'WEIGHT');
+    const input = weight.querySelector('#WEIGHT_VALUE');
+
+    expect(input.getAttribute('onkeypress')).toBe(WHOLE_NUMBER_KEYPRESS_HANDLER);
+    expect(input.getAttribute('aria-label')).toBe('Enter a value');
+    expect(input.closest('.displayif')?.getAttribute('displayif')).toBe('equals(SHOW_WEIGHT,1)');
+    expect(weight.textContent).not.toContain('|');
   });
 
   it('renders radios, checkboxes, reset choices, named groups, labels, and yes/no macros', async () => {
@@ -261,6 +533,7 @@ describe('QuestionProcessor constructs', () => {
     expect(root.querySelector('#CHECKBOX input[data-reset="true"]')).not.toBeNull();
     expect(root.querySelector('#COMBINED_807835037')?.getAttribute('skipto')).toBe('EMAIL');
     expect(root.querySelector('#COMBINED_TEXT')?.type).toBe('text');
+    expect(root.querySelector('#COMBINED_TEXT')?.getAttribute('aria-label')).toBe('Other');
     expect(root.querySelector('#COMBINED_TEXTAREA_GROUP_1')?.getAttribute('skipto')).toBe('EMAIL');
     expect(root.querySelector('#COMBINED_TEXTAREA_VALUE')?.tagName).toBe('TEXTAREA');
     expect(root.querySelector('#CONFIRM_COPY')?.getAttribute('confirm')).toBeNull();

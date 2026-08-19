@@ -21,7 +21,11 @@ For the keyboard-only command guide, see
   `fixture=gridResponsive.txt`; for checkbox-grid focus branches use
   `fixture=gridCheckboxFocus.txt`; for validation use
   `fixture=validation.txt`; for navigation/restoration use
-  `fixture=navigationState.txt`.
+  `fixture=navigationState.txt`; for compound radio subgroups use
+  `fixture=compoundRadioGroups.txt` and repeat with
+  `fixture=compoundRadioGroupsSpanish.txt`; for conditionally displayed
+  radio subgroups use `fixture=conditionalCompoundRadioGroups.txt` and
+  repeat with `fixture=conditionalCompoundRadioGroupsSpanish.txt`.
 - Keep Quest inside `#root > .row > #questionnaireRoot`.
 - Start each scenario from a new browser page. Quest owns module-level state and a second render in the same page is not a supported isolation boundary.
 - Do not enable browser extensions other than the screen reader under test.
@@ -93,12 +97,14 @@ First run with Quick Nav off. Repeat response navigation and activation with Qui
 2. Confirm the survey boundary and the first question are announced once. The question must have a meaningful group/legend name.
 3. Navigate by form controls and by VoiceOver cursor. Each response must expose role, name, and selected/checked state; styled labels alone are insufficient.
 4. Activate a response with the VoiceOver default action (normally VO+Space). Confirm the visual selection, DOM checked state, and polite live announcement all agree.
-5. Navigate forward. Focus must land at the newly active question context after the deliberate delay; it must not remain on a removed button or move to the PWA header/footer.
-6. Use Back. Confirm the earlier response is restored and announced with the correct checked state.
-7. Exercise text, number, select, date, and time controls. Confirm each control has a useful name and browser-native editing still works.
+5. Immediately navigate forward after selecting a response. Focus must land at the newly active question context after the deliberate delay; it must not remain on a removed button or move to the PWA header/footer. The previous response's delayed “Selected” or “Unselected” message must not interrupt or replay over the new question.
+6. Use Back immediately after another selection. Confirm the earlier response is restored and announced with the correct checked state, and that the response announcement from the question being left does not replay.
+7. Exercise text, number, select, date, and time controls. Confirm each control has a useful name and browser-native editing still works. In Module 1 weight history, verify that each field includes its distinct age and unit context; in Spanish question `D_912857732`, type with the physical keyboard and confirm whole numbers are accepted without a browser error while decimal punctuation is filtered. In a Module 4 backup-address form, verify that City, State/Province, Zip code, and Country remain distinguishable.
 8. Trigger required and range validation. Confirm the error is announced, focus remains in the question, and correction clears the error.
 9. Exercise the response grid. Confirm row prompt, column option, and selected state are available together.
 10. Open and close soft-validation and submit dialogs. Confirm dialog name, focus entry, keyboard containment, close action, and return focus.
+11. Open each compound-radio fixture. Enter both activity groups and traverse all answers. Confirm VoiceOver announces the visible activity prompt as the radio-group name, each answer as the radio name, and its checked state. Confirm the activity prompt is not a separate empty or alert stop.
+12. Open each conditional compound-radio fixture. Select both travel modes and continue. Confirm each mode prompt is announced once when entering its group; each answer name and checked state is announced once; and exiting does not repeat the full answer list. Use Back, remove one mode, and continue again. Confirm the removed group is absent, the retained group is still named correctly, and no duplicate, empty, or separate repeated-prompt stop is announced.
 
 ## JAWS with Chrome and Edge — issue #1079
 
@@ -112,8 +118,17 @@ Run each browser once. State explicitly whether each observation occurred in Vir
 6. For radio groups, verify native group exclusivity and arrow behavior while in the appropriate mode.
 7. For “Other” text responses, confirm Up/Down remains native text-editing navigation and Tab/Shift+Tab leaves the field in document order. Quest must not turn editing arrows into response-navigation commands.
 8. Exercise both grid fixtures. In Forms Mode, radio arrows must move only within the current row's native group, and Tab must reach the next row. Selecting a radio or checkbox must not automatically move focus to another row or to Next. Confirm JAWS announces the row prompt, column option, and checked state together.
-9. Repeat Next, Back, validation, state restoration, async success/error, and modal focus scenarios from the VoiceOver matrix.
+9. Repeat Next, Back, validation, state restoration, async success/error, and modal focus scenarios from the VoiceOver matrix, including its scalar-control checks and the immediate-navigation check that an old response announcement never replays on the newly active question.
 10. Exit Forms Mode and confirm the Virtual Cursor resumes at a sensible location in the active question.
+11. Open each compound-radio fixture. In Virtual Cursor and Forms Mode, enter both activity groups and traverse all answers. Confirm JAWS announces the visible activity prompt when entering its group, preserves the concise answer name and checked state, and does not expose the activity prompt as a separate alert or form control.
+12. Open each conditional compound-radio fixture. Select both travel modes and continue. In Virtual Cursor and Forms Mode, confirm each mode prompt is announced once on group entry; each answer name and checked state is announced once; and exiting does not repeat the full answer list. Use Back, remove one mode, and continue again. Confirm the removed group is absent, the retained group remains correctly named, and no duplicate, empty, or separate repeated-prompt stop is exposed.
+
+The conditional fixture follows the WAI-ARIA radio-group contract: the visible
+mode prompt names a `radiogroup`, and `aria-owns` associates native radios that
+cannot safely be moved under that prompt in Quest's established conditional
+layout. See the [radio role](https://www.w3.org/TR/wai-aria/#radio),
+[`aria-owns`](https://www.w3.org/TR/wai-aria/#aria-owns), and the
+[ARIA radio-group pattern](https://www.w3.org/WAI/ARIA/apg/patterns/radio/).
 
 ## Evidence to capture
 

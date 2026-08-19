@@ -4,8 +4,10 @@ import { test, expect } from './support/test.js';
 import {
   activeQuestion,
   expectHealthyHarness,
+  flushHarness,
   goBack,
   goNext,
+  harnessSnapshot,
   openParticipant,
 } from './support/harness.js';
 import { readLockedMarkdown, repositoryRoot, treeAt } from './support/corpus.js';
@@ -286,4 +288,132 @@ test.describe('locked Module 4 rich response markup fidelity @canonical @corpus'
       await expectHealthyHarness(page);
     });
   }
+});
+
+test.describe('locked Module 1 conditional scalar semantics @canonical @corpus', () => {
+  test.beforeEach(async ({}, testInfo) => {
+    test.skip(
+      !DESKTOP_ENGINES.has(testInfo.project.name),
+      'Conditional scalar semantics run in the desktop browser matrix.',
+    );
+  });
+
+  for (const scalarCase of [
+    {
+      language: 'en',
+      names: [
+        'a. 18 years old, Pounds (lbs)',
+        'b. 25 years old, Pounds (lbs)',
+        'c. 35 years old, Pounds (lbs)',
+        'd. 45 years old, Pounds (lbs)',
+        'e. 55 years old, Pounds (lbs)',
+      ],
+    },
+    {
+      language: 'es',
+      names: [
+        'a. 18 años, NÚM. DE LIBRAS (lbs)',
+        'b. 25 años, NÚM. DE LIBRAS (lbs)',
+        'c. 35 años, NÚM. DE LIBRAS (lbs)',
+        'd. 45 años, NÚM. DE LIBRAS (lbs)',
+        'e. 55 años, NÚM. DE LIBRAS (lbs)',
+      ],
+    },
+  ]) {
+    test(`gives every ${scalarCase.language} weight-history field distinct conditional context`, async ({ page }, testInfo) => {
+      await openParticipant(page, {
+        markdown: readLockedMarkdown('module1', scalarCase.language),
+        lang: scalarCase.language,
+        previousResults: {
+          ...profilePersona.previousResults,
+          ...profilePersona.userProfile,
+          age: '60',
+        },
+        persistedData: { treeJSON: treeAt('D_912857732') },
+      });
+
+      const question = activeQuestion(page, 'D_912857732');
+      const weightInputs = question.locator('input[type="number"]:visible');
+      await expect(weightInputs).toHaveCount(scalarCase.names.length);
+      await expect(question).not.toContainText('|displayif=');
+      for (const [index, accessibleName] of scalarCase.names.entries()) {
+        await expect(weightInputs.nth(index)).toHaveAccessibleName(accessibleName);
+      }
+      expect(await weightInputs.evaluateAll((inputs) => (
+        new Set(inputs.map((input) => input.getAttribute('aria-label'))).size
+      ))).toBe(scalarCase.names.length);
+
+      const firstWeight = question.locator('#D_821387277');
+      await firstWeight.pressSequentially('18.5');
+      await expect(firstWeight).toHaveValue('185');
+      await firstWeight.fill('');
+
+      if (testInfo.project.name === 'chromium-desktop') {
+        const thirdWeight = question.locator('#D_950080618');
+        const expectedWeights = {
+          D_821387277: '180',
+          D_950080618: '175',
+        };
+        await firstWeight.pressSequentially('180');
+        await firstWeight.blur();
+        await thirdWeight.pressSequentially('175');
+        await thirdWeight.blur();
+        await flushHarness(page);
+        let snapshot = await harnessSnapshot(page);
+        expect(snapshot.state.active.D_912857732).toEqual(expectedWeights);
+
+        await goNext(page);
+        await flushHarness(page);
+        snapshot = await harnessSnapshot(page);
+        expect(snapshot.state.survey.D_912857732).toEqual(expectedWeights);
+        const responseKey = 'D_726699695_V2.D_912857732';
+        const storeCall = snapshot.logs.storeCalls.find(({ changes }) => (
+          Object.hasOwn(changes, responseKey)
+        ));
+        expect(storeCall?.changes[responseKey]).toEqual(expectedWeights);
+        expect(Object.keys(storeCall.changes)).toEqual(expect.arrayContaining([
+          responseKey,
+          'D_726699695_V2.treeJSON',
+        ]));
+
+        await goBack(page);
+        await expect(activeQuestion(page, 'D_912857732')).toBeVisible();
+        await expect(firstWeight).toHaveValue('180');
+        await expect(thirdWeight).toHaveValue('175');
+      }
+
+      await expectHealthyHarness(page);
+    });
+  }
+
+  test('keeps inapplicable Spanish weight fields hidden while the visible fields accept whole numbers', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium-desktop',
+      'One real-browser condition-boundary check is sufficient. The full naming matrix runs in every desktop engine.',
+    );
+
+    await openParticipant(page, {
+      markdown: readLockedMarkdown('module1', 'es'),
+      lang: 'es',
+      previousResults: {
+        ...profilePersona.previousResults,
+        ...profilePersona.userProfile,
+        age: '30',
+      },
+      persistedData: { treeJSON: treeAt('D_912857732') },
+    });
+
+    const question = activeQuestion(page, 'D_912857732');
+    await expect(question.locator('input[type="number"]:visible')).toHaveCount(2);
+    await expect(question.locator('#D_821387277')).toBeVisible();
+    await expect(question.locator('#D_121646540')).toBeVisible();
+    await expect(question.locator('#D_950080618')).toBeHidden();
+    await expect(question.locator('#D_407167089')).toBeHidden();
+    await expect(question.locator('#D_503154158')).toBeHidden();
+
+    const firstWeight = question.locator('#D_821387277');
+    await firstWeight.pressSequentially('18.5');
+    await expect(firstWeight).toHaveValue('185');
+    await expectHealthyHarness(page);
+  });
 });

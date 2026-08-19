@@ -85,6 +85,10 @@ test.describe('participant responsive layout @responsive @canonical', () => {
     const table = question.locator('table.quest-grid');
     await expect(table).toBeVisible();
     await expect(table).toHaveCSS('margin-top', '10px');
+    const cornerSpacer = table.locator('thead tr > :first-child');
+    await expect(cornerSpacer).toHaveClass(/grid-corner-spacer/);
+    expect(await cornerSpacer.evaluate((element) => element.tagName)).toBe('TD');
+    await expect(table.locator('thead th:not([scope="col"])')).toHaveCount(0);
 
     if (testInfo.project.name === 'chromium-phone') {
       await expect(table.locator('thead')).toHaveCSS('display', 'none');
@@ -129,7 +133,12 @@ test.describe('participant responsive layout @responsive @canonical', () => {
     await goNext(page);
     await page.mouse.move(0, 0);
 
-    const row = activeQuestion(page, 'GRID_RATE').locator('tr[data-question-id="GRID_WALK"]');
+    const question = activeQuestion(page, 'GRID_RATE');
+    const row = question.locator('tr[data-question-id="GRID_WALK"]');
+    await expect(question.getByRole('radio', {
+      name: 'Walking Sometimes',
+      exact: true,
+    })).toHaveCount(1);
     const expectedLabels = ['Never', 'Sometimes', 'Often'];
 
     for (const [index, text] of expectedLabels.entries()) {
@@ -203,6 +212,10 @@ test.describe('participant responsive layout @responsive @canonical', () => {
     await waitInHarness(page, 550);
 
     const question = activeQuestion(page, 'GRID_CHECK');
+    await expect(question.getByRole('checkbox', {
+      name: 'First need Phone',
+      exact: true,
+    })).toHaveCount(1);
     const firstRow = question.locator('tr[data-question-id="GRID_CHECK_ROW_A"]');
     const firstCell = firstRow.locator('td.response').first();
     const firstCheckbox = firstCell.locator('input[type="checkbox"]');

@@ -264,6 +264,38 @@ async function buildSurveyCatalog(record) {
   expect(rendered.root.querySelectorAll('form.question'), `${record.path}: not every runtime entry was appended`)
     .toHaveLength(processor.questions.length);
 
+  const scalarInputTypes = new Set([
+    'date', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url',
+  ]);
+  const scalarControls = Array.from(rendered.root.querySelectorAll('input, select, textarea')).filter((control) => (
+    control.tagName !== 'INPUT'
+    || (scalarInputTypes.has(control.type) && !control.hasAttribute('data-hidden'))
+  ));
+  const explicitLabelTargets = new Set(Array.from(
+    rendered.root.querySelectorAll('label[for]'),
+    (label) => label.htmlFor,
+  ));
+  const implicitlyLabelledControls = new Set(
+    rendered.root.querySelectorAll('label input, label select, label textarea'),
+  );
+  const missingScalarNames = [];
+  const leakedScalarNames = [];
+  scalarControls.forEach((control) => {
+    const ariaLabel = control.getAttribute('aria-label')?.trim() ?? '';
+    const ariaLabelledBy = control.getAttribute('aria-labelledby')?.trim() ?? '';
+    const controlTarget = `${record.path}#${control.id || control.name}`;
+    const hasNativeLabel = explicitLabelTargets.has(control.id)
+      || implicitlyLabelledControls.has(control);
+    if (!ariaLabel && !ariaLabelledBy && !hasNativeLabel) {
+      missingScalarNames.push(controlTarget);
+    }
+    if (ariaLabel && /<|>|\||->|(?:^|\s)(?:displayif|forid)\s*=/i.test(ariaLabel)) {
+      leakedScalarNames.push(`${controlTarget}: ${ariaLabel}`);
+    }
+  });
+  expect(missingScalarNames, `${record.path}: scalar controls without an accessible name source`).toEqual([]);
+  expect(leakedScalarNames, `${record.path}: scalar names containing parser syntax`).toEqual([]);
+
   const survey = buildStructuralCatalogRecord({
     record,
     processor,

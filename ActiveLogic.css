@@ -126,7 +126,8 @@ input[type="text"] {
     word-wrap: break-word;
   }
 
-  .quest-grid.table-layout th.nr {
+  .quest-grid.table-layout th.nr,
+  .quest-grid.table-layout td.grid-corner-spacer {
     padding: clamp(5px, 1vw, 10px);
     text-align: center;
     vertical-align: middle;

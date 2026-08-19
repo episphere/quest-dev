@@ -44,6 +44,14 @@ const POPOVER_SURVEY = `
 [END,end] Done.
 `;
 
+const COMPOUND_DELETION_SURVEY = `
+{"name":"EVENT_COMPOUND_DELETE"}
+[Q1?] Select a response or add detail.
+[1:CHOICE] First response
+|__|id=DETAIL|
+[END,end] Done.
+`;
+
 describe('delegated runtime event handling', () => {
   afterEach(() => {
     vi.clearAllTimers();
@@ -117,6 +125,27 @@ describe('delegated runtime event handling', () => {
     expect(checkbox.checked).toBe(false);
   });
 
+  it('persists a question-level deletion after the final compound response is unchecked', async () => {
+    const quest = await renderFreshQuest({ markdown: COMPOUND_DELETION_SURVEY });
+    const checkbox = quest.root.querySelector('#CHOICE_1');
+
+    checkbox.click();
+    expect(quest.state.getActiveQuestionState()).toEqual({
+      Q1: { CHOICE: ['1'] },
+    });
+
+    checkbox.click();
+    const activeState = quest.state.getActiveQuestionState();
+    expect(Object.prototype.hasOwnProperty.call(activeState, 'Q1')).toBe(true);
+    expect(activeState.Q1).toBeUndefined();
+
+    quest.state.syncToStore(quest.root.querySelector('#Q1 .next'));
+    await vi.waitFor(() => expect(quest.store).toHaveBeenCalledOnce());
+    const payload = quest.store.mock.calls[0][0];
+    expect(payload).toHaveProperty('EVENT_COMPOUND_DELETE.Q1', undefined);
+    expect(payload).toHaveProperty('EVENT_COMPOUND_DELETE.treeJSON', expect.any(String));
+  });
+
   it('formats SSN and telephone keystrokes through delegated keyup listeners', async () => {
     const quest = await renderFreshQuest({ markdown: TEXT_SURVEY });
     const form = quest.root.querySelector('#TEXT');
@@ -162,13 +191,44 @@ describe('delegated runtime event handling', () => {
   it('removes a standalone textarea response when its form is reset programmatically', async () => {
     const quest = await renderFreshQuest({ markdown: NATIVE_ARROW_SURVEY });
     const textarea = quest.root.querySelector('#notes');
+    const resetButton = textarea.form.querySelector('[data-click-type="reset"]');
+    expect(resetButton).not.toBeNull();
     textarea.value = 'Remove this response';
     textarea.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
 
     const { resetChildren } = await import('../../eventHandlers.js');
     expect(() => resetChildren(textarea.form)).not.toThrow();
 
+    expect(textarea.value).toBe('');
     expect(quest.state.getActiveQuestionState().NOTES).toBeUndefined();
+  });
+
+  it('clears a choice-linked textarea together with its owning response', async () => {
+    vi.useFakeTimers();
+    const quest = await renderFreshQuest({ markdown: CHOICE_LINKED_TEXT_SURVEY });
+    const textarea = quest.root.querySelector('#OTHER_TEXT');
+    const choice = quest.root.querySelector('#OTHER_GROUP_1');
+    textarea.value = 'Remove this linked response';
+    textarea.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: 'e',
+      inputType: 'insertText',
+    }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(choice.checked).toBe(true);
+    expect(textarea.dataset.lastValue).toBe('Remove this linked response');
+
+    const { resetChildren } = await import('../../eventHandlers.js');
+    resetChildren(textarea.form);
+
+    expect(choice.checked).toBe(false);
+    expect(textarea.value).toBe('');
+    expect(textarea.dataset).not.toHaveProperty('lastValue');
+    expect(quest.state.getActiveQuestionState().OTHER).toBeUndefined();
+
+    choice.click();
+    expect(choice.checked).toBe(true);
+    expect(textarea.value).toBe('');
   });
 
   it('does not cancel native select navigation, activation, or dismissal keys (CONNECT-1587)', async () => {

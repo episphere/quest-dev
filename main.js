@@ -3,7 +3,8 @@ import { restoreResponses } from "./restoreResponses.js";
 import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, progressBar, responseRequestedModal, responseRequiredModal, responseErrorModal, storeErrorModal, submitModal  } from "./common.js";
 import { initSurvey } from "./initSurvey.js";
-import { getStateManager } from "./stateManager.js";
+import { getStateManager, initializeStateManager } from "./stateManager.js";
+import { clearSelectionAnnouncement } from "./accessibleQuestionTextBuilder.js";
 
 import en from "./i18n/en.js";
 import es from "./i18n/es.js";
@@ -15,8 +16,14 @@ transform.rbAndCbClick = rbAndCbClick;
 
 transform.render = async (obj, divID, previousResults = {}) => {
   try {
+    // Cancel potential delayed announcement updates from the prior render.
+    clearSelectionAnnouncement();
+
     // Set the global moduleParams object with data needed for different parts of the app.
     setModuleParams(obj, divID, previousResults);
+
+    // Rebind render-owned state before the first possible await.
+    initializeStateManager(moduleParams.store);
 
     // if the object has a 'text' field, the contents have been prefetched and passed in. Else, fetch the survey contents.
     const markdown = moduleParams.text || await fetch(moduleParams.url).then(response => response.text());
@@ -129,7 +136,13 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
     ? showAllQuestions(questionProcessor.getAllProcessedQuestions())
     : swapVisibleQuestion(questionEle);
 
-  initialUserData[activeQuestionID] && restoreResponses(initialUserData, activeQuestionID);
+  const persistedResponse = initialUserData[questionEle.id];
+  const hasRestorableResponse = typeof persistedResponse === 'string'
+    || Array.isArray(persistedResponse)
+    || (persistedResponse != null && typeof persistedResponse === 'object');
+  if (hasRestorableResponse) {
+    restoreResponses(initialUserData, activeQuestionID);
+  }
   
   return questionEle;
 }

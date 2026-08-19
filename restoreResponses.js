@@ -78,7 +78,8 @@ function handleObjectResponse(formElement, response) {
     if (handled) return;
 
     if (typeof resObject === "string") {
-      const element = document.getElementById(resKey);
+      const element = formElement.querySelector(`#${CSS.escape(resKey)}`);
+      if (!element) return;
       if (element.tagName == "DIV" || element.tagName == "FORM") {
         const selector = `input[value='${response[resKey]}']`;
         const selectedRadioElement = element.querySelector(selector);
@@ -126,19 +127,27 @@ function handleStringInObjectResponse(questionElement, id, value) {
 export function restoreResponses(results, questionID) {
   const appState = getStateManager();
   appState.clearActiveQuestionState();
-  
-  const formElement = document.querySelector("#" + CSS.escape(questionID));
-  if (!formElement || !results[questionID]) return;
 
-  const response = results[questionID];
+  // The tree stores question tokens, including trailing soft/hard markers.
+  // Rendered form IDs and response keys omit the markers.
+  const normalizedQuestionID = questionID.replace(/[?!]$/, '');
+  const formElement = moduleParams.questDiv?.querySelector(
+    `form.question[id="${CSS.escape(normalizedQuestionID)}"]`,
+  );
+  if (!formElement || !Object.prototype.hasOwnProperty.call(results, normalizedQuestionID)) return;
+
+  const response = results[normalizedQuestionID];
+  // An explicit null/undefined value is the host's deletion tombstone. It is
+  // valid persisted state, but there is no participant response to restore.
+  if (response == null) return;
 
   // CASE 1: The response is a simple string value.
   if (typeof response === "string") {
     handleSimpleStringResponse(formElement, response);
 
   // CASE 2: Array
-  } else if (Array.isArray(results[questionID])) {
-      getFromRbCb(formElement, questionID, results[questionID]);
+  } else if (Array.isArray(response)) {
+      getFromRbCb(formElement, normalizedQuestionID, response);
 
   // CASE 3: Object
   } else if (typeof response === "object") {

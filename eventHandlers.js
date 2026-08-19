@@ -255,8 +255,9 @@ export function resetChildren(target) {
   for (let node of nodes) {
     if (node.type === "radio" || node.type === "checkbox") {
       node.checked = false;
-    } else if (node.type === "text" || node.type === "time" || node.type === "date" || node.type === "month" || node.type === "number") {
+    } else if (node.type === "text" || node.type === "textarea" || node.type === "time" || node.type === "date" || node.type === "month" || node.type === "number") {
       node.value = "";
+      delete node.dataset.lastValue;
       clearValidationError(node)
     }
   }

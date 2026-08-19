@@ -208,6 +208,51 @@ test.describe('native participant keyboard navigation @canonical @keyboard @wind
     expect(state.end).toBe(0);
   });
 
+  test('standalone textarea Reset clears its visible value and active response with native keyboard activation', async ({ page }, testInfo) => {
+    test.skip(!NATIVE_KEYBOARD_PROJECTS.has(testInfo.project.name), 'The textarea Reset contract runs in every desktop engine and the Windows browser branch.');
+
+    await openParticipant(page, {
+      markdown: TEXTAREA_KEYBOARD_MARKDOWN,
+      persistedData: {
+        NOTES: 'Previously stored notes',
+        treeJSON: JSON.stringify({
+          rootNode: { value: null, children: [{ value: 'NOTES?', children: [] }] },
+          currentNode: 'NOTES?',
+        }),
+      },
+    });
+    await waitInHarness(page, 550);
+    const question = activeQuestion(page, 'NOTES');
+    const textarea = question.locator('#notes');
+    const reset = question.getByRole('button', { name: 'Reset this answer' });
+    await expect(textarea).toHaveValue('Previously stored notes');
+
+    for (const [key, value] of [
+      ['Enter', 'Clear this response with Enter'],
+      ['Space', 'Clear this response with Space'],
+    ]) {
+      await textarea.fill(value);
+      await textarea.blur();
+      expect((await harnessSnapshot(page)).state.active.NOTES).toBe(value);
+
+      await reset.focus();
+      await expect(reset).toBeFocused();
+      await page.keyboard.press(key);
+      await expect(textarea).toHaveValue('');
+      await expect(reset).toBeFocused();
+      expect((await harnessSnapshot(page)).state.active.NOTES).toBeUndefined();
+    }
+
+    await goNext(page);
+    await page.getByRole('button', { name: 'Continue Without Answering' }).click();
+    await expect(activeQuestion(page, 'END')).toBeVisible();
+    const snapshot = await expectHealthyHarness(page);
+    const deletion = snapshot.logs.storeCalls.findLast(({ changes }) => (
+      Object.hasOwn(changes, 'TEST_TEXTAREA_KEYBOARD.NOTES')
+    ));
+    expect(deletion.changes['TEST_TEXTAREA_KEYBOARD.NOTES']).toBeUndefined();
+  });
+
   test('choice-linked textarea arrows remain native and move its multiline caret', async ({ page }, testInfo) => {
     test.skip(!NATIVE_KEYBOARD_PROJECTS.has(testInfo.project.name), 'The native textarea contract runs in every desktop engine and the Windows browser branch.');
 
@@ -800,6 +845,9 @@ test.describe('native participant keyboard navigation @canonical @keyboard @wind
     await activeQuestion(page, 'END').getByRole('button', { name: 'Back to the previous section' }).click();
     await expect(activeQuestion(page, 'GRID_RATE')).toBeVisible();
     await expect(activeQuestion(page, 'GRID_RATE').locator('#GRID_WALK_1')).toBeChecked();
+    await expect(activeQuestion(page, 'GRID_RATE').locator('#GRID_WALK_1')).toHaveAccessibleName(
+      'Walking Sometimes',
+    );
   });
 
   test('native checkbox-grid traversal and selection retain native focus', async ({ page }, testInfo) => {

@@ -12,6 +12,7 @@ import {
   renderAuthoringMarkdown,
   waitForAuthoringReady,
 } from './support/authoring.js';
+import { readLockedMarkdown, treeAt } from './support/corpus.js';
 
 async function stabilizeVisual(page, testInfo) {
   testInfo.snapshotSuffix = '';
@@ -123,6 +124,91 @@ test.describe('stable participant styling @visual', () => {
       'participant-keyboard-focus.png',
       screenshotOptions,
     );
+  });
+
+  test('keeps the compound-radio subgroup layout stable', async ({ page }, testInfo) => {
+    await openParticipant(page, {
+      markdown: readLockedMarkdown('moduleQoL'),
+      persistedData: { treeJSON: treeAt('D_284353934') },
+    });
+    const question = activeQuestion(page, 'D_284353934');
+    await question.locator('label[for="D_559540891_367964536"]').click();
+    await expect(question.locator('#D_559540891_367964536')).toBeChecked();
+    await stabilizeVisual(page, testInfo);
+
+    await expect(question).toHaveScreenshot(
+      'participant-compound-radio-layout.png',
+      screenshotOptions,
+    );
+
+    const wrapperLayoutDelta = await question.evaluate((form) => {
+      const capture = () => ({
+        formHeight: form.getBoundingClientRect().height,
+        responses: Array.from(form.querySelectorAll('.response'), (response) => {
+          const rect = response.getBoundingClientRect();
+          return { id: response.querySelector('input')?.id, top: rect.top, height: rect.height };
+        }),
+      });
+      const withGroups = capture();
+      form.querySelectorAll('.compound-radio-group').forEach((group) => {
+        group.replaceWith(...group.children);
+      });
+      const withoutGroups = capture();
+      const responseDelta = Math.max(0, ...withGroups.responses.map((response, index) => (
+        Math.max(
+          Math.abs(response.top - withoutGroups.responses[index].top),
+          Math.abs(response.height - withoutGroups.responses[index].height),
+        )
+      )));
+      return Math.max(responseDelta, Math.abs(withGroups.formHeight - withoutGroups.formHeight));
+    });
+    expect(wrapperLayoutDelta).toBeLessThanOrEqual(0.5);
+  });
+
+  test('keeps conditional compound-radio prompts and responses visually unchanged', async ({ page }, testInfo) => {
+    await openParticipant(page, {
+      markdown: readLockedMarkdown('module4'),
+      persistedData: {
+        D_421586693: ['767755239', '385609081'],
+        treeJSON: treeAt('D_733638576', 'D_421586693'),
+      },
+    });
+    const question = activeQuestion(page, 'D_733638576');
+    await question.locator('label[for="D_583216333_248303092"]').click();
+    await expect(question.locator('#D_583216333_248303092')).toBeChecked();
+    await stabilizeVisual(page, testInfo);
+
+    await expect(question).toHaveScreenshot(
+      'participant-conditional-compound-radio-layout.png',
+      screenshotOptions,
+    );
+
+    const semanticLayoutDelta = await question.evaluate((form) => {
+      const capture = () => ({
+        formHeight: form.getBoundingClientRect().height,
+        elements: Array.from(form.querySelectorAll('.displayif, .response'), (element) => {
+          const rect = element.getBoundingClientRect();
+          return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+        }),
+      });
+      const withSemantics = capture();
+      form.querySelectorAll('[role="radiogroup"][aria-owns]').forEach((group) => {
+        group.removeAttribute('role');
+        group.removeAttribute('aria-label');
+        group.removeAttribute('aria-owns');
+      });
+      const withoutSemantics = capture();
+      return Math.max(
+        Math.abs(withSemantics.formHeight - withoutSemantics.formHeight),
+        ...withSemantics.elements.map((element, index) => Math.max(
+          Math.abs(element.top - withoutSemantics.elements[index].top),
+          Math.abs(element.left - withoutSemantics.elements[index].left),
+          Math.abs(element.width - withoutSemantics.elements[index].width),
+          Math.abs(element.height - withoutSemantics.elements[index].height),
+        )),
+      );
+    });
+    expect(semanticLayoutDelta).toBeLessThanOrEqual(0.5);
   });
 
   test('keeps the authoring workspace layout stable', async ({ page, diagnostics }, testInfo) => {

@@ -788,7 +788,7 @@ export async function getNextQuestion(nextOrPreviousButton, revertOnStoreError =
     questionQueue.next();
   }
 
-  await swapVisibleQuestion(nextQuestionEle);
+  await swapVisibleQuestion(nextQuestionEle, { skipAsyncQuestionLoad: revertOnStoreError });
 }
 
 function exitLoop(nextQuestionEle) {
@@ -832,10 +832,11 @@ function exitLoop(nextQuestionEle) {
  * Update the active question in the DOM.
  * Identifies the existing question and swaps it with the new question.
  * If an existing question is not found (this happens on startup), the new question is appended to the parent div.
- * @param {HTMLElement} questDiv - The parent div housing the Quest UI.
- * @param {string} questionHTMLString - The HTML string of the question to be swapped in.
+ * @param {HTMLElement} questionEle - The prepared question form to activate.
+ * @param {object} [options] - Navigation-only preparation options.
+ * @param {boolean} [options.skipAsyncQuestionLoad=false] - Reuse cached async markup during store rollback.
  */
-export async function swapVisibleQuestion(questionEle) {
+export async function swapVisibleQuestion(questionEle, { skipAsyncQuestionLoad = false } = {}) {
   // return early if the renderer tool is active and displaying the full question list.
   if (moduleParams.renderFullQuestionList) return;
 
@@ -859,7 +860,7 @@ export async function swapVisibleQuestion(questionEle) {
   }
 
   // Ensure the question is appended to the active DOM before calling prepareQuestionDOM for accessibility.
-  await prepareQuestionDOM(questionEle);
+  await prepareQuestionDOM(questionEle, { skipAsyncQuestionLoad });
 
   return questionEle;
 }
@@ -887,14 +888,14 @@ export function showAllQuestions(allProcessedQuestionsMap) {
 
 // Manage the text builder for screen readers (only build when necessary)
 let questionFocusSet;
-export async function prepareQuestionDOM(questionElement) {
+export async function prepareQuestionDOM(questionElement, { skipAsyncQuestionLoad = false } = {}) {
   // Fail gently in the renderer tool.
   if (!questionElement && !moduleParams.activate) return;
   // Reset the questionFocusSet flag to reset accessibility features.
   questionFocusSet = false;
 
   // Handle questions in moduleParams.asyncQuestionsMap. These are fetched externally and appended to the DOM. Uncommon. Connect example: SOCcer.
-  if (Object.keys(moduleParams.asyncQuestionsMap).length > 0 && Object.keys(moduleParams.asyncQuestionsMap).includes(questionElement.id) && moduleParams.fetchAsyncQuestion instanceof Function) {
+  if (!skipAsyncQuestionLoad && Object.keys(moduleParams.asyncQuestionsMap).length > 0 && Object.keys(moduleParams.asyncQuestionsMap).includes(questionElement.id) && moduleParams.fetchAsyncQuestion instanceof Function) {
     const fieldset = questionElement.querySelector('fieldset') || questionElement.querySelector('tbody');
     await manageAsyncQuestionLoad(fieldset, questionElement.id);
   }
@@ -937,7 +938,7 @@ export async function prepareQuestionDOM(questionElement) {
  */
 function updateProgressBar(questionProcessor) {
   const progressBar = moduleParams.questDiv.querySelector('.progress-bar');
-  const progressText = document.getElementById('progressBarText');
+  const progressText = moduleParams.questDiv.querySelector('#progressBarText');
   if (!progressBar || !progressText) return;
   
   let completionPercentage = 0;
@@ -954,7 +955,7 @@ function updateProgressBar(questionProcessor) {
     }
 
     progressBar.style.width = `${completionPercentage}%`;
-    progressBar.setAttribute('aria-valuenow', `${Math.round(completionPercentage)}%`);
+    progressBar.setAttribute('aria-valuenow', String(completionPercentage));
     progressText.textContent = `${Math.round(completionPercentage)}%`;
   }
 }
@@ -1266,6 +1267,8 @@ function isMonthInputSupported() {
 }
 
 export async function getPreviousQuestion(nextOrPreviousButton, revertOnStoreError = false) {
+  const navigationRoot = moduleParams.questDiv;
+
   // Get the previousElement from questionQueue
   let pv = questionQueue.previous();
   while (pv.value.value.substring(0, 9) === "_CONTINUE") {
@@ -1282,7 +1285,12 @@ export async function getPreviousQuestion(nextOrPreviousButton, revertOnStoreErr
   const previousElementID = pv.value.value;
   const previousQuestionEle = questionProcessor.loadPreviousQuestion(previousElementID);
 
-  await swapVisibleQuestion(previousQuestionEle);
+  await swapVisibleQuestion(previousQuestionEle, { skipAsyncQuestionLoad: revertOnStoreError });
+
+  if (moduleParams.questDiv !== navigationRoot || !navigationRoot?.contains(previousQuestionEle)) {
+    return;
+  }
+
   restoreResponses(appState.getSurveyState(), previousElementID);
 }
 

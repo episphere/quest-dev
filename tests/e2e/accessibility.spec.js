@@ -10,7 +10,6 @@ import {
   waitInHarness,
 } from './support/harness.js';
 import { analyzeQuestAxe, unwaivedAxeFindings } from './support/axe.js';
-import { axeDefects } from '../knownDefects/registry.js';
 
 const ACCESSIBILITY_PROJECTS = new Set([
   'chromium-desktop',
@@ -19,29 +18,45 @@ const ACCESSIBILITY_PROJECTS = new Set([
   'chromium-windows-ua',
 ]);
 
+const GRID_SEMANTIC_CASES = [
+  {
+    description: 'English radio',
+    fixture: 'gridResponsive.txt',
+    questionId: 'GRID_RATE',
+    role: 'radio',
+    selectedId: 'GRID_WALK_1',
+    selectedName: 'Walking Sometimes',
+    unselectedName: 'Cycling Often',
+  },
+  {
+    description: 'Spanish radio',
+    fixture: 'gridResponsiveSpanish.txt',
+    lang: 'es',
+    previousResults: { firstName: 'Ana' },
+    questionId: 'GRID_RATE_ES',
+    role: 'radio',
+    selectedId: 'GRID_CAMINAR_1',
+    selectedName: 'Caminar con Ana A veces',
+    unselectedName: 'Andar en bicicleta A menudo',
+  },
+  {
+    description: 'English checkbox',
+    fixture: 'gridCheckboxFocus.txt',
+    questionId: 'GRID_CHECK',
+    role: 'checkbox',
+    selectedId: 'GRID_CHECK_ROW_A_0',
+    selectedName: 'First need Phone',
+    unselectedName: 'Second need Email',
+  },
+];
+
 const AXE_PROJECTS = new Set([
   ...ACCESSIBILITY_PROJECTS,
   'chromium-phone',
   'chromium-tablet',
 ]);
 
-const CURRENT_AXE_BASELINE = [
-  axeDefects.progressbarName,
-  axeDefects.progressbarValue,
-];
-
-const GRID_AXE_BASELINE = [
-  ...CURRENT_AXE_BASELINE,
-  axeDefects.emptyGridHeader,
-];
-
-const VALIDATION_AXE_BASELINE = [
-  ...CURRENT_AXE_BASELINE,
-  axeDefects.validationContrast,
-  axeDefects.validationLabel,
-];
-
-async function expectNoUnwaivedAxeViolations(page, accepted = CURRENT_AXE_BASELINE) {
+async function expectNoUnwaivedAxeViolations(page, accepted = []) {
   const findings = await analyzeQuestAxe(page);
   expect(unwaivedAxeFindings(findings, accepted)).toEqual([]);
 }
@@ -91,6 +106,48 @@ async function traverseHostBoundary(page, key, terminalId, maximumPresses = 20) 
   throw new Error(`Focus did not reach #${terminalId} after ${maximumPresses} ${key} presses: ${JSON.stringify(path)}`);
 }
 
+test.describe('selection announcement navigation lifecycle @canonical', () => {
+  test.beforeEach(async ({}, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium-desktop',
+      'Fake timers cover the browser-neutral scheduling details; Chromium covers the real navigation boundary.',
+    );
+  });
+
+  test('does not replay a delayed response announcement after Next', async ({ page }) => {
+    await openParticipant(page);
+
+    // Keep selection and navigation in one browser: this is a regression test for the delayed-callback race.
+    await page.evaluate(() => {
+      document.querySelector('label[for="CHOICE_1"]').click();
+      document.querySelector('#CHOICE button.next').click();
+    });
+
+    await expect(activeQuestion(page, 'CHECKS')).toBeVisible();
+    await waitInHarness(page, 150);
+    await expect(page.locator('#ariaLiveSelectionAnnouncer')).toHaveText('');
+    await expectHealthyHarness(page);
+  });
+
+  test('does not replay a delayed response announcement after Back', async ({ page }) => {
+    await openParticipant(page);
+    await selectLabeledResponse(page, 'Blue');
+    await waitInHarness(page, 150);
+    await goNext(page);
+    await expect(activeQuestion(page, 'CHECKS')).toBeVisible();
+
+    await page.evaluate(() => {
+      document.querySelector('label[for="CHECKS_1"]').click();
+      document.querySelector('#CHECKS button.previous').click();
+    });
+
+    await expect(activeQuestion(page, 'CHOICE')).toBeVisible();
+    await waitInHarness(page, 150);
+    await expect(page.locator('#ariaLiveSelectionAnnouncer')).toHaveText('');
+    await expectHealthyHarness(page);
+  });
+});
+
 test.describe('participant accessibility contract @canonical @windows-a11y', () => {
   test.beforeEach(async ({}, testInfo) => {
     test.skip(
@@ -103,6 +160,9 @@ test.describe('participant accessibility contract @canonical @windows-a11y', () 
     await openParticipant(page);
 
     const question = activeQuestion(page, 'CHOICE');
+    const progress = page.locator('#progressBar');
+    await expect(progress).toHaveAccessibleName('Survey progress');
+    await expect(progress).toHaveAttribute('aria-valuenow', '0');
     await expect(question.locator('fieldset')).toHaveCount(1);
     await expect(question.locator('legend')).toHaveText('Which color do you prefer?');
     await expect(question.getByRole('button', { name: 'Next question' })).toBeVisible();
@@ -142,6 +202,37 @@ test.describe('participant accessibility contract @canonical @windows-a11y', () 
     await expect(checkboxQuestion.getByRole('checkbox', { name: 'Text message' })).not.toBeChecked();
     await expectHealthyHarness(page);
   });
+
+  for (const scenario of GRID_SEMANTIC_CASES) {
+    test(`${scenario.description} grid choices expose row, option, and checked state`, async ({ page }) => {
+      await openParticipant(page, {
+        fixture: scenario.fixture,
+        lang: scenario.lang,
+        previousResults: scenario.previousResults,
+      });
+      await goNext(page);
+      await waitInHarness(page, 550);
+
+      const question = activeQuestion(page, scenario.questionId);
+      const selected = question.getByRole(scenario.role, {
+        name: scenario.selectedName,
+        exact: true,
+      });
+      const unselected = question.getByRole(scenario.role, {
+        name: scenario.unselectedName,
+        exact: true,
+      });
+
+      await expect(selected).toHaveCount(1);
+      await expect(unselected).toHaveCount(1);
+      await expect(selected).not.toBeChecked();
+      await expect(unselected).not.toBeChecked();
+      await question.locator(`label[for="${scenario.selectedId}"]`).click();
+      await expect(selected).toBeChecked();
+      await expect(unselected).not.toBeChecked();
+      await expectHealthyHarness(page);
+    });
+  }
 
   test('keeps the deliberate action-button tab order on a later question', async ({ page }, testInfo) => {
     await openParticipant(page, { fixture: 'navigationState.txt' });
@@ -198,24 +289,131 @@ test.describe('participant accessibility contract @canonical @windows-a11y', () 
     await expectHealthyHarness(page);
   });
 
-  test('keeps a generated scalar label associated with its input', async ({ page }) => {
-    await openParticipant(page, {
-      markdown: `{"name":"TEST_SCALAR_LABEL"}
+  for (const scalarCase of [
+    {
+      description: 'English',
+      lang: 'en',
+      ageLabel: 'Age at diagnosis',
+      yearLabel: 'Year at diagnosis',
+      streetLabel: 'Street number',
+      cityLabel: 'City',
+      timeLabel: 'Preferred call time',
+      notesLabel: 'Additional notes',
+      emailLabel: 'Email address',
+      phoneLabel: 'Telephone',
+      ssnLabel: 'Full SSN',
+      ssnLastFourLabel: 'Last four SSN digits',
+      zipLabel: 'ZIP code',
+      stateLabel: 'State',
+      dateLabel: 'Visit date',
+      monthLabel: 'Visit month',
+      fallbackLabel: 'Enter a value',
+      fallbackDescription: 'Value must be greater than or equal to 1. Value must be less than or equal to 3',
+    },
+    {
+      description: 'Spanish',
+      lang: 'es',
+      ageLabel: 'Edad al momento del diagnóstico',
+      yearLabel: 'Año del diagnóstico',
+      streetLabel: 'Número de la calle',
+      cityLabel: 'Ciudad',
+      timeLabel: 'Hora preferida para llamar',
+      notesLabel: 'Notas adicionales',
+      emailLabel: 'Correo electrónico',
+      phoneLabel: 'Teléfono',
+      ssnLabel: 'Número de Seguro Social completo',
+      ssnLastFourLabel: 'Últimos cuatro dígitos del Seguro Social',
+      zipLabel: 'Código postal',
+      stateLabel: 'Estado',
+      dateLabel: 'Fecha de la visita',
+      monthLabel: 'Mes de la visita',
+      fallbackLabel: 'Introduzca un valor',
+      fallbackDescription: 'El valor debe ser mayor o igual a 1. El valor debe ser menor o igual a 3',
+    },
+  ]) {
+    test(`gives ${scalarCase.description} generated scalar controls useful names and separate guidance`, async ({ page }) => {
+      await openParticipant(page, {
+        lang: scalarCase.lang,
+        markdown: `{"name":"TEST_SCALAR_LABEL"}
 
-[SCALAR?] At what time should we call?
-|time|id=scalar_time|
+[SCALAR?] Diagnosis details.
+|__|__|id=scalar_age min=1 max=10| ${scalarCase.ageLabel}
+|__|__|__|__|id=scalar_year min=1900 max=2030| ${scalarCase.yearLabel}
+${scalarCase.streetLabel} |__|id=scalar_street|
+${scalarCase.cityLabel} |__|id=scalar_city|
+${scalarCase.timeLabel} |time|id=scalar_time|
+${scalarCase.notesLabel} |___|scalar_notes|
+${scalarCase.emailLabel} |@|id=scalar_email|
+${scalarCase.phoneLabel} |tel|id=scalar_phone|
+${scalarCase.ssnLabel} |SSN|id=scalar_ssn|
+${scalarCase.ssnLastFourLabel} |SSNsm|id=scalar_ssn_last_four|
+${scalarCase.zipLabel} |zip|id=scalar_zip|
+${scalarCase.stateLabel} |state|id=scalar_state|
+${scalarCase.dateLabel} |date|id=scalar_date|
+${scalarCase.monthLabel} |month|id=scalar_month|
+
+[FALLBACK?] Enter a number from 1 through 3.
+|__|__|id=scalar_fallback min=1 max=3|
+
+[END,end] Complete.`,
+      });
+
+      const question = activeQuestion(page, 'SCALAR');
+      await expect(question.locator('#scalar_age')).toHaveAccessibleName(scalarCase.ageLabel);
+      await expect(question.locator('#scalar_year')).toHaveAccessibleName(scalarCase.yearLabel);
+      await expect(question.locator('#scalar_street')).toHaveAccessibleName(scalarCase.streetLabel);
+      await expect(question.locator('#scalar_city')).toHaveAccessibleName(scalarCase.cityLabel);
+      await expect(question.locator('#scalar_time')).toHaveAccessibleName(scalarCase.timeLabel);
+      await expect(question.locator('#scalar_notes')).toHaveAccessibleName(scalarCase.notesLabel);
+      await expect(question.locator('#scalar_email')).toHaveAccessibleName(scalarCase.emailLabel);
+      await expect(question.locator('#scalar_phone')).toHaveAccessibleName(scalarCase.phoneLabel);
+      await expect(question.locator('#scalar_ssn')).toHaveAccessibleName(scalarCase.ssnLabel);
+      await expect(question.locator('#scalar_ssn_last_four')).toHaveAccessibleName(scalarCase.ssnLastFourLabel);
+      await expect(question.locator('#scalar_zip')).toHaveAccessibleName(scalarCase.zipLabel);
+      await expect(question.locator('#scalar_state')).toHaveAccessibleName(scalarCase.stateLabel);
+      await expect(question.locator('#scalar_date')).toHaveAccessibleName(scalarCase.dateLabel);
+      await expect(question.locator('#scalar_month')).toHaveAccessibleName(scalarCase.monthLabel);
+
+      await question.locator('#scalar_age').fill('4');
+      await question.locator('#scalar_age').blur();
+      await goNext(page);
+      const fallback = activeQuestion(page, 'FALLBACK').locator('#scalar_fallback');
+      await expect(fallback).toHaveAccessibleName(scalarCase.fallbackLabel);
+      await expect(fallback).toHaveAccessibleDescription(scalarCase.fallbackDescription);
+      await expectHealthyHarness(page);
+    });
+  }
+
+  test('preserves scalar names that contain choice-like delimiters', async ({ page }) => {
+    await openParticipant(page, {
+      markdown: `{"name":"TEST_AUTHORED_SCALAR_NAMES"}
+
+[QUESTA11YOPTION_0_END?] Scalar names.
+|@|id=authored_email aria-label='Contact option (1) [2] &amp; more'|
+|date|id=authored_date aria-label='Appointment [2]'|
+|time|id=authored_time aria-label='Preferred time (3)'|
+|__|__|id=authored_number aria-label='Amount [4]'|
 
 [END,end] Complete.`,
     });
 
-    const question = activeQuestion(page, 'SCALAR');
-    const label = question.locator('label[for="scalar_time"]');
-    const input = question.locator('#scalar_time');
-    await expect(label).toHaveText('Enter Time');
-    await expect(input).toHaveAccessibleName('Enter Time');
-    expect(await input.evaluate((element) => (
-      [...element.labels].map((candidate) => candidate.getAttribute('for'))
-    ))).toEqual(['scalar_time']);
+    const question = activeQuestion(page, 'QUESTA11YOPTION_0_END');
+    await expect(question.locator('#authored_email')).toHaveAccessibleName('Contact option (1) [2] & more');
+    await expect(question.locator('#authored_date')).toHaveAccessibleName('Appointment [2]');
+    await expect(question.locator('#authored_time')).toHaveAccessibleName('Preferred time (3)');
+    await expect(question.locator('#authored_number')).toHaveAccessibleName('Amount [4]');
+    await expect(question.locator('#authored_number')).toHaveAttribute('name', 'QUESTA11YOPTION_0_END');
+    await expect(question.locator('input')).toHaveCount(4);
+    await expect(question.locator('input[type="radio"], input[type="checkbox"]')).toHaveCount(0);
+    await expect(question.locator('.response')).toHaveCount(0);
+
+    await question.locator('#authored_number').fill('4');
+    await question.locator('#authored_number').blur();
+    expect((await harnessSnapshot(page)).state.active).toEqual({
+      QUESTA11YOPTION_0_END: {
+        authored_number: '4',
+      },
+    });
     await expectHealthyHarness(page);
   });
 
@@ -494,7 +692,7 @@ test.describe('automated accessibility scan @axe', () => {
     await openParticipant(page, { fixture: 'gridResponsive.txt' });
     await goNext(page);
     await expect(activeQuestion(page, 'GRID_RATE')).toBeVisible();
-    await expectNoUnwaivedAxeViolations(page, GRID_AXE_BASELINE);
+    await expectNoUnwaivedAxeViolations(page);
     await expectHealthyHarness(page);
   });
 
@@ -511,7 +709,26 @@ test.describe('automated accessibility scan @axe', () => {
     // Next button. Keep this scan on the validation state, not an accidental
     // and browser-layout-dependent hover state.
     await page.mouse.move(0, 0);
-    await expectNoUnwaivedAxeViolations(page, VALIDATION_AXE_BASELINE);
+    await expectNoUnwaivedAxeViolations(page);
+    await expect(activeQuestion(page).locator('.validation-container > span')).toHaveCSS(
+      'color',
+      'rgb(193, 18, 31)',
+    );
+    await expectHealthyHarness(page);
+  });
+
+  test('retains sufficient action contrast while hovered', async ({ page }, testInfo) => {
+    test.skip(
+      !ACCESSIBILITY_PROJECTS.has(testInfo.project.name),
+      'Pointer-hover contrast is checked in each desktop engine and the Windows user-agent project.',
+    );
+    await openParticipant(page, { fixture: 'validation.txt' });
+    const next = activeQuestion(page, 'BOUNDED').getByRole('button', { name: 'Next question' });
+    await next.hover();
+
+    await expect(next).toHaveCSS('background-color', 'rgb(44, 109, 168)');
+    await expect(next).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expectNoUnwaivedAxeViolations(page);
     await expectHealthyHarness(page);
   });
 

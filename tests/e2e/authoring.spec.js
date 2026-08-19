@@ -494,6 +494,76 @@ test.describe('cross-browser authoring storage and export boundaries @authoring'
     await expect(page.locator('#pagelogic')).toHaveAttribute('href', 'Default.css');
   });
 
+  test('clears previous results after LocalForage initialization falls back @cross-browser-authoring', async ({ page, diagnostics }) => {
+    await installAuthoringRoutes(page, diagnostics, {
+      localForageMode: 'initialization-failure',
+    });
+    await page.goto('/index.html');
+    await waitForAuthoringReady(page);
+    expectAndClearConsoleErrors(diagnostics, [/Failed to initialize LocalForage/]);
+
+    await openAuthoringSettings(page);
+    const jsonInput = page.locator('#jsonInput');
+    await jsonInput.fill('{"CLEAR_ME":true}');
+    await page.getByRole('button', { name: 'Add JSON to Memory' }).click();
+    await expect(page.locator('#loadDisplay')).toHaveText('Added JSON successfully.');
+
+    await page.getByRole('button', { name: 'Clear Memory' }).click();
+
+    await expect(page.locator('#loadDisplay')).toHaveText('Previous results cleared successfully');
+    await expect(jsonInput).toHaveValue('');
+    expectAndClearConsoleWarnings(diagnostics, [
+      /Using memory for getItem \(LF fallback\): previousResults/,
+      /Using memory for setItem \(LF fallback\): previousResults/,
+      /Using memory for removeItem \(LF fallback\): previousResults/,
+    ]);
+  });
+
+  test('clears fallback results when the legacy global store also rejects @cross-browser-authoring', async ({ page, diagnostics }) => {
+    await installAuthoringRoutes(page, diagnostics, {
+      localForageMode: 'initialization-and-clear-failure',
+    });
+    await page.goto('/index.html');
+    await waitForAuthoringReady(page);
+    expectAndClearConsoleErrors(diagnostics, [/Failed to initialize LocalForage/]);
+
+    await openAuthoringSettings(page);
+    const jsonInput = page.locator('#jsonInput');
+    await jsonInput.fill('{"CLEAR_ME":true}');
+    await page.getByRole('button', { name: 'Add JSON to Memory' }).click();
+    await expect(page.locator('#loadDisplay')).toHaveText('Added JSON successfully.');
+    await page.getByRole('button', { name: 'Clear Memory' }).click();
+
+    await expect(page.locator('#loadDisplay')).toHaveText('Previous results cleared successfully');
+    await expect(jsonInput).toHaveValue('');
+    expectAndClearConsoleWarnings(diagnostics, [
+      /Using memory for getItem \(LF fallback\): previousResults/,
+      /Using memory for setItem \(LF fallback\): previousResults/,
+      /Unable to clear global LocalForage; continuing with Quest storage/,
+      /Using memory for removeItem \(LF fallback\): previousResults/,
+    ]);
+  });
+
+  test('keeps validation errors distinguishable without optional participant styling @cross-browser-authoring', async ({ page, diagnostics }) => {
+    await installAuthoringRoutes(page, diagnostics);
+    await page.goto('/index.html');
+    await waitForAuthoringReady(page);
+    await openAuthoringSettings(page);
+    await page.getByRole('switch', { name: 'Activate Logic' }).check();
+    await closeAuthoringSettings(page);
+    await renderAuthoringMarkdown(page, readCanonicalFixture('validation.txt'));
+
+    const question = page.locator('#rendering #BOUNDED');
+    await question.locator('#bounded').fill('9');
+    await question.getByRole('button', { name: 'Next question' }).click();
+
+    await expect(page.locator('#pagestyle')).toHaveAttribute('href', 'Default.css');
+    await expect(question.locator('.validation-container > span')).toHaveCSS(
+      'color',
+      'rgb(193, 18, 31)',
+    );
+  });
+
   test('persists settings/results, rejects invalid JSON, and clears previous results @cross-browser-authoring', async ({ page, diagnostics }) => {
     await installAuthoringRoutes(page, diagnostics);
     await page.goto('/index.html');

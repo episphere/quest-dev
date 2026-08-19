@@ -63,8 +63,6 @@ export function validationError(inputElement, errorMsg) {
         // styling should be performed by CSS
         errDiv.style.minHeight = "30px";
         errSpan.style.height = "inherit";
-        errSpan.style.color = "red";
-
         errDiv.appendChild(errSpan);
         inputElement.insertAdjacentElement("afterend", errDiv);
     }

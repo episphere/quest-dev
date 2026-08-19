@@ -3,6 +3,7 @@ import { handleForIDAttributes, moduleParams } from './questionnaire.js';
 
 const QUESTION_TRANSITION_FOCUS_DELAY_MS = 500;
 const MODAL_RETURN_FOCUS_DELAY_MS = 100;
+let selectionAnnouncementTimeout = null;
 
 /**
  * Initialize the question text and focus management for screen readers.
@@ -59,7 +60,7 @@ function buildQuestionText(fieldsetEle) {
     const textNodeConditional = (node) =>
         node.nodeType === Node.TEXT_NODE ||
         (node.nodeType === Node.ELEMENT_NODE &&
-            !['INPUT', 'BR', 'LABEL', 'LEGEND', 'TABLE'].includes(node.tagName) &&
+            !['INPUT', 'TEXTAREA', 'SELECT', 'BR', 'LABEL', 'LEGEND', 'TABLE'].includes(node.tagName) &&
             !node.classList.contains('response'));
     
     const isTerminalText = (text) => {
@@ -161,7 +162,9 @@ function buildQuestionText(fieldsetEle) {
     // Create the <legend> tag for screen readers and move the question text into it.
     const updatedFieldset = manageAccessibleFieldset(fieldsetEle, questionElements);
     // Create and return the hidden, focusable element for screen reader focus management.
-    return createFocusableElement(updatedFieldset, focusNode);
+    const focusableEle = createFocusableElement(updatedFieldset, focusNode);
+    manageCompoundRadioGroups(updatedFieldset);
+    return focusableEle;
 }
 
 // Find additional questions (e.g. QoL multi-question surveys).
@@ -179,8 +182,8 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, startIn
     for (let i = startIndex; i < childNodes.length; i++) {
         const node = childNodes[i];
 
-        // Stop at the first input/Table/Label node. Multi-question surveys don't have these nodes.
-        if (['INPUT', 'TABLE', 'LABEL'].includes(node.tagName)) {
+        // Stop at the first response control/Table/Label node. Multi-question surveys don't have these nodes.
+        if (['INPUT', 'TEXTAREA', 'SELECT', 'TABLE', 'LABEL'].includes(node.tagName)) {
             break;
         }
 
@@ -239,6 +242,201 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, startIn
             fieldsetEle.removeChild(nodesToRemove[i]);
         }
     });
+}
+
+/**
+ * Give each named radio subgroup in a compound question its own accessible group label.
+ * @param {HTMLElement} fieldsetEle - The fieldset containing the compound form.
+ */
+function manageCompoundRadioGroups(fieldsetEle) {
+    const radioResponses = Array.from(
+        fieldsetEle.querySelectorAll(':scope > .response'),
+    ).map((response) => ({
+        response,
+        input: response.querySelector(':scope > input[type="radio"][name]'),
+    })).filter(({ input }) => input);
+
+    const radioNames = new Set(radioResponses.map(({ input }) => input.name));
+    if (radioNames.size <= 1) return;
+
+    const responseGroups = [];
+    radioResponses.forEach(({ response, input }) => {
+        const currentGroup = responseGroups.at(-1);
+        const previousResponse = currentGroup?.responses.at(-1);
+        if (currentGroup?.name === input.name && responsesSharePrompt(previousResponse, response)) {
+            currentGroup.responses.push(response);
+        } else {
+            responseGroups.push({ name: input.name, responses: [response] });
+        }
+    });
+
+    // Resolve every prompt before changing the DOM (prevents a partially grouped fieldset).
+    if (new Set(responseGroups.map(({ name }) => name)).size !== responseGroups.length) return;
+
+    const labelledGroups = responseGroups.map(({ name, responses }, groupIndex) => {
+        const prompt = findCompoundRadioPrompt(fieldsetEle, responses[0], groupIndex);
+        return {
+            name,
+            responses,
+            prompt,
+            configuration: prompt
+                ? getCompoundRadioGroupConfiguration(prompt, responses)
+                : null,
+        };
+    });
+    if (labelledGroups.some(({ prompt, configuration }) => !prompt || !configuration)) return;
+    if (new Set(labelledGroups.map(({ prompt }) => prompt)).size !== labelledGroups.length) return;
+
+    const groupKinds = new Set(labelledGroups.map(({ configuration }) => configuration.kind));
+    if (groupKinds.size !== 1) return;
+    if (groupKinds.has('static') && fieldsetEle.querySelector('.displayif, [displayif]')) return;
+    if (groupKinds.has('conditional')) {
+        const inputs = labelledGroups.flatMap(({ configuration }) => configuration.inputs);
+        const inputIds = inputs.map(({ id }) => id);
+        if (new Set(inputIds).size !== inputIds.length) return;
+
+        // A connected question must not resolve to another host element with the same ID.
+        if (fieldsetEle.isConnected) {
+            const idCounts = new Map();
+            fieldsetEle.ownerDocument.querySelectorAll('[id]').forEach(({ id }) => {
+                idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+            });
+            if (inputs.some((input) => (
+                idCounts.get(input.id) !== 1
+                || fieldsetEle.ownerDocument.getElementById(input.id) !== input
+            ))) return;
+        }
+    }
+
+    const questionId = fieldsetEle.closest('.question')?.id || 'question';
+    labelledGroups.forEach(({ name, responses, prompt, configuration }) => {
+        if (configuration.kind === 'conditional') {
+            // Conditional response rows must remain direct fieldset children for Quest's display logic and layout.
+            // ARIA ownership provides the group relationship without moving those rows.
+            prompt.setAttribute('role', 'radiogroup');
+            prompt.setAttribute('aria-label', configuration.label);
+            prompt.setAttribute('aria-owns', configuration.inputs.map(({ id }) => id).join(' '));
+            prompt.removeAttribute('aria-labelledby');
+            prompt.removeAttribute('tabindex');
+            return;
+        }
+
+        const labelId = ensureCompoundRadioPromptId(prompt, questionId, name);
+        if (prompt.getAttribute('role') === 'alert') {
+            prompt.removeAttribute('role');
+            if (prompt.getAttribute('tabindex') === '0') {
+                prompt.removeAttribute('tabindex');
+            }
+        }
+
+        const radioGroup = document.createElement('div');
+        radioGroup.classList.add('compound-radio-group');
+        radioGroup.setAttribute('role', 'radiogroup');
+        radioGroup.setAttribute('aria-labelledby', labelId);
+        fieldsetEle.insertBefore(radioGroup, responses[0]);
+        responses.forEach((response) => radioGroup.appendChild(response));
+    });
+}
+
+function getCompoundRadioGroupConfiguration(prompt, responses) {
+    const promptHasCondition = prompt.hasAttribute('displayif');
+    const conditionedResponses = responses.filter((response) => response.hasAttribute('displayif'));
+
+    if (promptHasCondition || conditionedResponses.length > 0) {
+        if (!promptHasCondition || conditionedResponses.length !== responses.length) return null;
+
+        const promptCondition = normalizeCompoundRadioCondition(prompt.getAttribute('displayif'));
+        const responseConditions = responses.map((response) => (
+            normalizeCompoundRadioCondition(response.getAttribute('displayif'))
+        ));
+        if (!promptCondition || responseConditions.some((condition) => condition !== promptCondition)) {
+            return null;
+        }
+
+        const inputs = responses.map((response) => (
+            response.querySelector(':scope > input[type="radio"][name]')
+        ));
+        const inputIds = inputs.map((input) => input?.id).filter(Boolean);
+        if (inputs.length < 2 || inputIds.length !== inputs.length || new Set(inputIds).size !== inputs.length) {
+            return null;
+        }
+
+        const label = prompt.textContent.replace(/\s+/g, ' ').trim();
+        if (!label) return null;
+
+        return { kind: 'conditional', inputs, label };
+    }
+
+    if (responses.some(({ hidden, style }) => hidden || style.display === 'none')) return null;
+    return { kind: 'static' };
+}
+
+function normalizeCompoundRadioCondition(condition) {
+    if (!condition) return '';
+    try {
+        return decodeURIComponent(condition).replace(/\s+/g, ' ').trim();
+    } catch {
+        return condition.replace(/\s+/g, ' ').trim();
+    }
+}
+
+function responsesSharePrompt(previousResponse, currentResponse) {
+    if (!previousResponse) return false;
+
+    for (let node = previousResponse.nextSibling; node && node !== currentResponse; node = node.nextSibling) {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '') continue;
+        if (node.nodeType === Node.ELEMENT_NODE && (
+            node.tagName === 'BR' || node.classList.contains('screen-reader-focus')
+        )) continue;
+        return false;
+    }
+    return true;
+}
+
+function findCompoundRadioPrompt(fieldsetEle, firstResponse, groupIndex) {
+    let previousNode = firstResponse.previousSibling;
+    while (previousNode) {
+        if (previousNode.nodeType === Node.TEXT_NODE && previousNode.textContent.trim() === '') {
+            previousNode = previousNode.previousSibling;
+            continue;
+        }
+
+        if (previousNode.nodeType === Node.ELEMENT_NODE) {
+            if (previousNode.tagName === 'BR' || previousNode.classList.contains('screen-reader-focus')) {
+                previousNode = previousNode.previousSibling;
+                continue;
+            }
+            if (
+                previousNode.getAttribute('role') === 'alert'
+                || previousNode.matches('.displayif[displayif]')
+            ) {
+                return previousNode;
+            }
+            if (previousNode.matches('.response, .compound-radio-group')) {
+                break;
+            }
+        }
+        break;
+    }
+
+    return groupIndex === 0
+        ? fieldsetEle.querySelector(':scope > legend')
+        : null;
+}
+
+function ensureCompoundRadioPromptId(prompt, questionId, radioName) {
+    if (prompt.id) return prompt.id;
+
+    const safeIdPart = (value) => String(value).replace(/[^A-Za-z0-9_-]/g, '-');
+    const baseId = `${safeIdPart(questionId)}-compound-radio-${safeIdPart(radioName)}-label`;
+    let promptId = baseId;
+    let suffix = 2;
+    while (document.getElementById(promptId) && document.getElementById(promptId) !== prompt) {
+        promptId = `${baseId}-${suffix}`;
+        suffix += 1;
+    }
+    prompt.id = promptId;
+    return promptId;
 }
 
 /**
@@ -588,9 +786,28 @@ export function closeModalAndFocusQuestion() {
     }, MODAL_RETURN_FOCUS_DELAY_MS);
 }
 
+function scheduleSelectionAnnouncement(liveRegion, announcementText, delay) {
+    // The selection announcer is shared by every question & control. Only
+    // the latest request can remain valid. Navigation & sequential renders
+    // use the same clear operation to cancel current announcement work.
+    clearSelectionAnnouncement();
+
+    const timeoutId = setTimeout(() => {
+        if (selectionAnnouncementTimeout !== timeoutId) return;
+        selectionAnnouncementTimeout = null;
+
+        const currentLiveRegion = moduleParams.questDiv?.querySelector('#ariaLiveSelectionAnnouncer');
+        if (liveRegion.isConnected && liveRegion === currentLiveRegion) {
+            liveRegion.textContent = announcementText;
+        }
+    }, delay);
+
+    selectionAnnouncementTimeout = timeoutId;
+}
+
 // Update the aria-live region with the current selection announcement in a list (for screen readers).
 export function updateAriaLiveSelectionAnnouncer(responseDiv) {
-    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
+    const liveRegion = moduleParams.questDiv?.querySelector('#ariaLiveSelectionAnnouncer');
     const label = responseDiv.querySelector('label');
     const input = responseDiv.querySelector('input[type="checkbox"], input[type="radio"]');
 
@@ -604,17 +821,13 @@ export function updateAriaLiveSelectionAnnouncer(responseDiv) {
         ? `${actionText}`
         : `${label.textContent} ${actionText}`;
 
-    liveRegion.textContent = '';
-
-    setTimeout(() => {
-        liveRegion.textContent = announcementText;
-    }, 100);
+    scheduleSelectionAnnouncement(liveRegion, announcementText, 100);
 }
 
 // Update the aria-live region with the current selection announcement in a table (for screen readers).
 // Note: cell-specific targeting is required for dependable selection announcements.
 export function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
-    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
+    const liveRegion = moduleParams.questDiv?.querySelector('#ariaLiveSelectionAnnouncer');
     const cell = responseDiv.closest('td'); // Get the closest table cell (td)
     const label = cell?.querySelector('label'); // Find the label within the cell
     const input = cell?.querySelector('input[type="checkbox"], input[type="radio"]');
@@ -626,15 +839,17 @@ export function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
     const actionText = input.checked ? 'Selected.' : 'Unselected.';
     const announcementText = `${label.textContent} ${actionText}`;
 
-    liveRegion.textContent = '';
-    setTimeout(() => {
-        liveRegion.textContent = announcementText;
-    }, 250);
+    scheduleSelectionAnnouncement(liveRegion, announcementText, 250);
 }
 
-// Clear the selection accnouncer when a user is navigating between questions (next/back buttons)
+// Clear the selection announcer and cancel current announcement work.
 export function clearSelectionAnnouncement() {
-    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveSelectionAnnouncer');
+    if (selectionAnnouncementTimeout !== null) {
+        clearTimeout(selectionAnnouncementTimeout);
+        selectionAnnouncementTimeout = null;
+    }
+
+    const liveRegion = moduleParams.questDiv?.querySelector('#ariaLiveSelectionAnnouncer');
     if (liveRegion) {
         liveRegion.textContent = '';
     }

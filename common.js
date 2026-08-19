@@ -23,7 +23,7 @@ export const ariaLiveAnnouncementRegions = () => {
 export const progressBar = () => {
     return moduleParams.showProgressBarInQuest ? `
         <div id="progressBarContainer" class="progress" style="margin-top:25px">
-            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            <div id="progressBar" class="progress-bar" role="progressbar" aria-label="${translate('progressBarLabel')}" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
                 <span class="visually-hidden" id="progressBarText">0% Complete</span>
             </div>
         </div>

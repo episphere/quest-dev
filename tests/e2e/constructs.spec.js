@@ -56,24 +56,29 @@ test.describe('canonical Markdown construct renderer @canonical @constructs', ()
     await expect(root.locator('#CONFIRM #CONFIRM_COPY')).toHaveAttribute('data-confirm', 'CONFIRM_ORIGINAL');
     await expect(root.locator('#CONFIRM #CONFIRM_ORIGINAL')).toHaveAttribute('data-confirmation-for', 'CONFIRM_COPY');
 
-    const scalarTypes = {
-      EMAIL_VALUE: 'email',
-      PHONE_VALUE: 'tel',
-      FULL_SSN_VALUE: 'text',
-      SHORT_SSN_VALUE: 'text',
-      ZIP_VALUE: 'text',
-      DATE_VALUE: 'date',
-      MONTH_VALUE: 'month',
-      TIME_VALUE: 'time',
-      NUMBER_VALUE: 'number',
-      TEXT_VALUE: 'text',
-      TEXTBOX_VALUE: 'text',
+    const scalarControls = {
+      EMAIL_VALUE: { type: 'email', name: 'Email address' },
+      PHONE_VALUE: { type: 'tel', name: 'Telephone' },
+      FULL_SSN_VALUE: { type: 'text', name: 'Full SSN' },
+      SHORT_SSN_VALUE: { type: 'text', name: 'Last four SSN digits' },
+      ZIP_VALUE: { type: 'text', name: 'ZIP code' },
+      DATE_VALUE: { type: 'date', name: 'Date' },
+      MONTH_VALUE: { type: 'month', name: 'Month' },
+      NUMBER_VALUE: { type: 'number', name: 'Number' },
+      TEXT_VALUE: { type: 'text', name: 'Text before, text after.' },
+      TEXTBOX_VALUE: { type: 'text', name: 'Text-box macro' },
     };
-    for (const [id, type] of Object.entries(scalarTypes)) {
+    for (const [id, { type, name }] of Object.entries(scalarControls)) {
       await expect(root.locator(`#${id}`), `${id} should render as ${type}`).toHaveAttribute('type', type);
+      await expect(root.locator(`#${id}`), `${id} should retain its authored caption`).toHaveAttribute('aria-label', name);
     }
+    await expect(root.locator('#TIME_VALUE')).toHaveAttribute('type', 'time');
+    await expect(root.locator('#TIME_VALUE')).not.toHaveAttribute('aria-label');
+    await expect(root.locator('label[for="TIME_VALUE"]')).toHaveText('Time');
     await expect(root.locator('#STATE_VALUE')).toHaveJSProperty('tagName', 'SELECT');
+    await expect(root.locator('#STATE_VALUE')).toHaveAttribute('aria-label', 'State');
     await expect(root.locator('#TEXTAREA_VALUE')).toHaveJSProperty('tagName', 'TEXTAREA');
+    await expect(root.locator('#TEXTAREA_VALUE')).toHaveAttribute('aria-label', 'Long answer');
     await expect(root.locator('#HIDDEN_VALUE')).toHaveAttribute('data-hidden', 'true');
     await expect(root.locator('#YES_NO input[type="radio"]')).toHaveCount(2);
     await expect(root.locator('#YES_NO_PREFER input[type="radio"]')).toHaveCount(3);

@@ -42,8 +42,9 @@ function buildHtmlTable(grid_obj, gridButtonDiv) {
       <div>${grid_text_displayif(shared_text)}</div>
         <table class="quest-grid table-layout table">`;
   
-  // Build the table header row with the question text and response headers. Start with a placeholder for the row header.
-  grid_html += '<thead class="hr" role="rowgroup"><tr><th class="nr hr"></th>';
+  // Build the table header row with the response headers. The first cell is a
+  // visual spacer above the row-header column, not a header of its own.
+  grid_html += '<thead class="hr" role="rowgroup"><tr><td class="nr grid-corner-spacer"></td>';
   grid_obj.responses.forEach((resp) => {
     const header_text = resp.text;
     grid_html += `<th class="hr" scope="col" data-header="${header_text}">${header_text}</th>`;
@@ -68,7 +69,7 @@ function buildHtmlTable(grid_obj, gridButtonDiv) {
     grid_obj.responses.forEach((resp, resp_index) => {
         grid_html += `
           <td class="response" data-question-id="${question.id}" data-header="${resp.text}" role="gridcell">
-            <input type="${resp.type}" name="${question.id}" id="${question.id}_${resp_index}" value="${resp.value}" data-gridcell="true" data-grid="true">
+            <input type="${resp.type}" name="${question.id}" id="${question.id}_${resp_index}" value="${resp.value}" data-gridcell="true" data-grid="true" aria-labelledby="qtext${question.id} label${question.id}_${resp_index}">
             <label for="${question.id}_${resp_index}" id="label${question.id}_${resp_index}" class="custom-label">${resp.text}</label>
           </td>`;
     });
@@ -127,7 +128,9 @@ export function parseGrid(text, ...args) {
       // the value, then evaluate the markdown.
       question_text = grid_replace_piped_variables(question_text)
 
-      let question_obj = { id: match[1], question_text: question_text, displayif: encodeURIComponent(displayIf) };
+      // Keep the expression raw in the parsed model. The HTML
+      // boundary in buildHtmlTable encodes it once for the data attribute.
+      let question_obj = { id: match[1], question_text: question_text, displayif: displayIf };
       grid_obj.questions.push(question_obj);
     }
   

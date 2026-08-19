@@ -138,6 +138,14 @@ describe('Quest MathJS extensions', () => {
     expect(fn.dateCompare(0, 2026, 1, 2026)).toBe(-1);
     expect(fn.dateCompare(1, 2026, 1, 2026)).toBe(0);
     expect(fn.dateCompare(2, 2026, 1, 2026)).toBe(1);
+    expect(fn.dateCompare('0', 2026, '11', 2026)).toBe(-1);
+    expect(fn.dateCompare(11, 2026, 0, 2027)).toBe(-1);
+    expect(() => fn.dateCompare(-1, 2026, 1, 2026)).toThrow('months need to be');
+    expect(() => fn.dateCompare(1, 2026, 12, 2026)).toThrow('months need to be');
+    expect(() => fn.dateCompare('not-a-month', 2026, 1, 2026)).toThrow('months need to be');
+    expect(() => fn.dateCompare(1.5, 2026, 1, 2026)).toThrow('months need to be');
+    expect(() => fn.dateCompare(' ', 2026, 1, 2026)).toThrow('months need to be');
+    expect(() => fn.dateCompare(false, 2026, 1, 2026)).toThrow('months need to be');
     expect(fn.yearMonth('2026-04').toString()).toBe('2026-04');
     expect(fn.yearMonth('not-a-month')).toBe(false);
     expect(fn.isSelected('ROW_VALUE_0')).toBe(false);
