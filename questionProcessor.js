@@ -1510,7 +1510,10 @@ export class QuestionProcessor {
       return `|__|id=${id} name=${questionID}|`;
     }
 
-    questText = questText.replace(/(.*)?\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?(.*)?/g, fText);
+    // Keep text-input parsing on the line that contains the macro |__|.
+    // without these boundaries, Firefox can exhaust its regular-expression stack by
+    // retrying the optional greedy captures across long, pipe-rich prompts.
+    questText = questText.replace(/^(.*)\|(?:__\|)(?:([^\s<][^|<]+[^\s<])\|)?(.*)$/gm, fText);
     function fText(fullmatch, value1, opts, value2, offset, source) {
       let { options } = guaranteeIdSet(opts, "txt");
       options = options.replaceAll(/(min|max)len\s*=\s*(\d+)/g,'data-$1len=$2')

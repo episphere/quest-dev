@@ -1056,4 +1056,44 @@ describe('QuestionProcessor parser boundaries', () => {
     expect(processById(processor, 'DEFAULT_TEXTBOX').querySelector('#DEFAULT_TEXTBOX_text')).not.toBeNull();
     expect(processById(processor, 'DEFAULT_TEXTAREA').querySelector('#DEFAULT_TEXTAREA_ta')).not.toBeNull();
   });
+
+  it('parses production-sized pipe-rich prompts before number and linked-text controls', async () => {
+    const longConditionalLine = '|displayif=equals(D_TRIGGER,1)|<b>home</b>|'.repeat(150);
+    expect(`[LONG_NUMBER?] ${longConditionalLine}`.length).toBeGreaterThan(6_401);
+
+    const { processor, moduleParams } = await createProcessor(`
+      {"name":"LONG_TEXT_INPUT_LINES"}
+      [LONG_NUMBER?] ${longConditionalLine}
+      Year moved out |__|__|__|__|id=LONG_NUMBER_VALUE min=1900 max=2030|
+      [LONG_TEXT?] ${longConditionalLine}
+      (807835037) Other: Please describe |__|id=LONG_TEXT_VALUE|
+      [END,end] Done.
+    `);
+
+    expect(() => processor.processAllQuestions()).not.toThrow();
+
+    const longNumber = processById(processor, 'LONG_NUMBER');
+    expect(longNumber.querySelectorAll('input')).toHaveLength(1);
+    expect(longNumber.querySelector('#LONG_NUMBER_VALUE')).toMatchObject({
+      name: 'LONG_NUMBER',
+      type: 'number',
+    });
+    expect(longNumber.querySelector('#LONG_NUMBER_VALUE').getAttribute('aria-label'))
+      .toBe('Year moved out');
+
+    const longText = processById(processor, 'LONG_TEXT');
+    expect(longText.querySelectorAll('input[type="text"]')).toHaveLength(1);
+    expect(longText.querySelector('#LONG_TEXT_VALUE')).toMatchObject({
+      name: 'LONG_TEXT',
+      type: 'text',
+    });
+    expect(longText.querySelector('#LONG_TEXT_VALUE').getAttribute('aria-label'))
+      .toBe('Other: Please describe');
+    expect(longText.querySelectorAll('input[type="radio"]')).toHaveLength(1);
+    expect(longText.querySelector('input[type="radio"]').labels).toHaveLength(1);
+
+    expect(longNumber.innerHTML).not.toContain('|__|');
+    expect(longText.innerHTML).not.toContain('|__|');
+    expect(moduleParams.errorLogger).not.toHaveBeenCalled();
+  });
 });
