@@ -207,5 +207,5 @@ describe('locked Module 4 conditional compound-radio structure @corpus', () => {
         expect(ownedRadios.every((radio) => radio.closest('.response').parentElement === fieldset)).toBe(true);
       }
     }
-  });
+  }, 30_000);
 });

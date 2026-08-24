@@ -46,16 +46,13 @@ function handleObjectResponse(formElement, response) {
     const resObject = response[resKey];
     const multiq = formElement.querySelector(`input[name='${resKey}'][value='${CSS.escape(resObject)}']`);
 
-    let handled = false;
     if (typeof resObject === 'string') {
       handleStringInObjectResponse(formElement, resKey, resObject);
-      handled = true;
 
     } else if (typeof resObject === 'object') {
       // Handle the array case
       if (Array.isArray(resObject)) {
         getFromRbCb(formElement, resKey, resObject);
-        handled = true;  
       
       // Handle XOR objects
       } else {
@@ -65,34 +62,12 @@ function handleObjectResponse(formElement, response) {
             xorElement.value = resObject[xorElement.id];
           }
         });
-        handled = true;  
       }
     }
 
     // check for mulitple radio buttons on 1 page.
     if (multiq) {
       multiq.checked = true
-      handled = true;
-    }
-
-    if (handled) return;
-
-    if (typeof resObject === "string") {
-      const element = formElement.querySelector(`#${CSS.escape(resKey)}`);
-      if (!element) return;
-      if (element.tagName == "DIV" || element.tagName == "FORM") {
-        const selector = `input[value='${response[resKey]}']`;
-        const selectedRadioElement = element.querySelector(selector);
-        if (selectedRadioElement) {
-          selectedRadioElement.checked = true;
-        } else {
-          moduleParams.errorLogger("RESTORE RESPONSE: Problem with DIV/FORM:", element);
-        }
-        radioAndCheckboxUpdate(selectedRadioElement);
-      } else {
-        element.value = resObject;
-        textboxinput(element, false);
-      }
     }
   });
 }

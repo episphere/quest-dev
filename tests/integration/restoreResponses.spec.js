@@ -93,6 +93,11 @@ describe('response restoration', () => {
     expect(quest.root.querySelector('#CHECK_GROUP_2').checked).toBe(true);
     expect(quest.root.querySelector('#RADIO_GROUP_8').checked).toBe(true);
     expect(quest.root.querySelector('#DETAIL').value).toBe('restored detail');
+    expect(quest.state.getActiveQuestionState().MULTI).toEqual({
+      CHECK_GROUP: ['1', '2'],
+      RADIO_GROUP: '8',
+      DETAIL: 'restored detail',
+    });
   });
 
   it('restores XOR object values into XOR controls', async () => {
