@@ -117,23 +117,78 @@ describe('screen-reader and keyboard behavior', () => {
     expect(nativeArrow.defaultPrevented).toBe(false);
   });
 
-  it.each(['softModal', 'hardModal'])('restores question focus after closing %s', async (modalId) => {
+  it.each(['softModal', 'hardModal', 'storeErrorModal'])('restores question focus when %s finishes closing', async (modalId) => {
     const quest = await renderFreshQuest();
     const modal = quest.root.querySelector(`#${modalId}`);
     const focusTarget = quest.root.querySelector('#Q1 .screen-reader-focus');
 
-    // The initial render already schedules a 500 ms focus. Remove it so a
-    // passing assertion proves the hidden-modal handler itself restores focus.
+    // Remove the initial scheduled handoff so a passing assertion proves the
+    // hidden-modal handler restores focus.
     vi.clearAllTimers();
     expect(document.activeElement).not.toBe(focusTarget);
 
     modal.dispatchEvent(new Event('hidden.bs.modal'));
 
-    await vi.advanceTimersByTimeAsync(99);
-    expect(document.activeElement).not.toBe(focusTarget);
-    await vi.advanceTimersByTimeAsync(1);
     expect(document.activeElement).toBe(focusTarget);
     expect(quest.root.querySelectorAll('#Q1 .screen-reader-focus')).toHaveLength(1);
+  });
+
+  it('does not reclaim focus after the participant acts when a modal finishes closing', async () => {
+    const quest = await renderFreshQuest();
+    const modal = quest.root.querySelector('#softModal');
+    const response = quest.root.querySelector('#Q1_1');
+
+    vi.clearAllTimers();
+    modal.dispatchEvent(new Event('hidden.bs.modal'));
+    expect(quest.root.querySelector('#Q1 .screen-reader-focus')).toBe(document.activeElement);
+
+    response.focus();
+    response.click();
+    await vi.runAllTimersAsync();
+
+    expect(document.activeElement).toBe(response);
+    expect(response.checked).toBe(true);
+  });
+
+  it('respects focus that already moved outside a modal before its hidden event', async () => {
+    const quest = await renderFreshQuest();
+    const modal = quest.root.querySelector('#softModal');
+    const hostControl = document.createElement('button');
+    document.body.appendChild(hostControl);
+
+    vi.clearAllTimers();
+    hostControl.focus();
+    modal.dispatchEvent(new Event('hidden.bs.modal'));
+
+    expect(document.activeElement).toBe(hostControl);
+    expect(document.activeElement).not.toBe(quest.root.querySelector('#Q1 .screen-reader-focus'));
+  });
+
+  it('ignores a hidden event from a detached obsolete modal', async () => {
+    const quest = await renderFreshQuest();
+    const modal = quest.root.querySelector('#storeErrorModal');
+    const focusTarget = quest.root.querySelector('#Q1 .screen-reader-focus');
+
+    vi.clearAllTimers();
+    modal.remove();
+    modal.dispatchEvent(new Event('hidden.bs.modal'));
+
+    expect(modal.isConnected).toBe(false);
+    expect(document.activeElement).not.toBe(focusTarget);
+  });
+
+  it('does not restore question focus while a modal is being disposed for a sequential render', async () => {
+    const quest = await renderFreshQuest();
+    const modal = quest.root.querySelector('#softModal');
+    const focusTarget = quest.root.querySelector('#Q1 .screen-reader-focus');
+    const focusSpy = vi.spyOn(focusTarget, 'focus');
+
+    vi.clearAllTimers();
+    modal._questRenderDisposal = true;
+    modal.dispatchEvent(new Event('hidden.bs.modal'));
+
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(focusTarget);
   });
 
   it('leaves a missing target for question preparation instead of rebuilding on modal close', async () => {
@@ -144,7 +199,6 @@ describe('screen-reader and keyboard behavior', () => {
     vi.clearAllTimers();
     originalFocusTarget.remove();
     modal.dispatchEvent(new Event('hidden.bs.modal'));
-    await vi.advanceTimersByTimeAsync(100);
 
     expect(quest.root.querySelector('#Q1 .screen-reader-focus')).toBeNull();
     expect(document.activeElement).not.toBe(originalFocusTarget);

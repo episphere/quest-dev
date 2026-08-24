@@ -121,13 +121,15 @@ test.describe('checked-in authoring application @authoring', () => {
     await expect(page.locator('#rendering form.question.active')).toHaveCount(1);
   });
 
-  test('loads previous results before rendering and applies them to authored conditions', async ({ page, diagnostics }) => {
+  test('loads previous results before rendering and applies them to conditions', async ({ page, diagnostics }) => {
     await installAuthoringRoutes(page, diagnostics);
     await page.goto('/index.html');
     await waitForAuthoringReady(page);
 
     await openAuthoringSettings(page);
-    await page.getByRole('textbox', { name: 'json input' }).fill('{"EXTERNAL_FLAG":"1"}');
+    const jsonInput = page.getByRole('textbox', { name: 'json input' });
+    await jsonInput.fill('{"EXTERNAL_FLAG":"1"}');
+    await expect(jsonInput).toHaveValue('{"EXTERNAL_FLAG":"1"}');
     await page.getByRole('button', { name: 'Add JSON to Memory' }).click();
     await expect(page.locator('#loadDisplay')).toHaveText('Added JSON successfully.');
     await page.getByRole('switch', { name: 'Activate Logic' }).check();
@@ -632,7 +634,7 @@ test.describe('cross-browser authoring storage and export boundaries @authoring'
     expect(storage.objectStores).toContain('params');
   });
 
-  test('downloads the exact authored markup under the requested export name', async ({ page, diagnostics }) => {
+  test('downloads the exact markup under the requested export name', async ({ page, diagnostics }) => {
     const markdown = readCanonicalFixture('navigationState.txt');
     await installAuthoringRoutes(page, diagnostics);
     await page.goto('/index.html');

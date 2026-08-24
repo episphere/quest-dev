@@ -66,7 +66,7 @@ describe('parseGrid', () => {
     );
   });
 
-  it('uses a plain prompt when no edit marker is authored', () => {
+  it('uses a plain prompt when no edit marker is present', () => {
     const html = parseGrid('|grid|id=PLAIN|Question|[ROW]Text;|(1:One)|', buttons);
     const template = document.createElement('template');
     template.innerHTML = html;
@@ -87,17 +87,17 @@ describe('parseGrid', () => {
   });
 
   it('encodes production-style quoted row conditions exactly once', () => {
-    const authoredCondition = 'valueOrDefault("AGE","DEFAULT")>=18 and someSelected("ROW_1","ROW_2")';
+    const condition = 'valueOrDefault("AGE","DEFAULT")>=18 and someSelected("ROW_1","ROW_2")';
     const html = parseGrid(
-      `|grid|id=CONDITIONAL|Question|[ROW,displayif=${authoredCondition}]Text;|(1:One)|`,
+      `|grid|id=CONDITIONAL|Question|[ROW,displayif=${condition}]Text;|(1:One)|`,
       buttons,
     );
     const template = document.createElement('template');
     template.innerHTML = html;
     const serializedCondition = template.content.querySelector('[data-displayif]').dataset.displayif;
 
-    expect(serializedCondition).toBe(encodeURIComponent(authoredCondition));
-    expect(decodeURIComponent(serializedCondition)).toBe(authoredCondition);
+    expect(serializedCondition).toBe(encodeURIComponent(condition));
+    expect(decodeURIComponent(serializedCondition)).toBe(condition);
     expect(serializedCondition).not.toContain('%25');
   });
 });

@@ -7,22 +7,10 @@ import {
   openParticipant,
   selectLabeledResponse,
 } from './support/harness.js';
-
-const ASYNC_MAP = {
-  '[ASYNC?]': { func: 'loadSyntheticOptions', args: ['SEED'] },
-};
-
-const ASYNC_HTML = `
-  <span>Choose the host-provided option.</span>
-  <div class="response">
-    <input type="radio" name="ASYNC" id="ASYNC_A" value="A">
-    <label for="ASYNC_A">Host option A</label>
-  </div>
-  <div class="response">
-    <input type="radio" name="ASYNC" id="ASYNC_B" value="B">
-    <label for="ASYNC_B">Host option B</label>
-  </div>
-`;
+import {
+  ASYNC_QUESTION_HTML,
+  ASYNC_QUESTION_MAP,
+} from '../harness/participantScenarios.js';
 
 const DESKTOP_ENGINES = new Set(['chromium-desktop', 'firefox-desktop', 'webkit-desktop']);
 
@@ -34,8 +22,8 @@ test.describe('host-provided asynchronous questions @core @canonical', () => {
   test('passes prior answers and locale to the host, then persists the injected response', async ({ page }) => {
     await openParticipant(page, {
       fixture: 'asyncQuestion.txt',
-      asyncQuestionsMap: ASYNC_MAP,
-      asyncQuestionHtml: ASYNC_HTML,
+      asyncQuestionsMap: ASYNC_QUESTION_MAP,
+      asyncQuestionHtml: ASYNC_QUESTION_HTML,
       asyncDelayMs: 75,
     });
     await selectLabeledResponse(page, 'Clinical');
@@ -60,7 +48,7 @@ test.describe('host-provided asynchronous questions @core @canonical', () => {
   test('renders an in-question error and logs host rejection without leaving the question', async ({ page }) => {
     await openParticipant(page, {
       fixture: 'asyncQuestion.txt',
-      asyncQuestionsMap: ASYNC_MAP,
+      asyncQuestionsMap: ASYNC_QUESTION_MAP,
       asyncOutcomes: [{ kind: 'reject', message: 'Synthetic async failure' }],
     });
     await selectLabeledResponse(page, 'Research');
@@ -84,8 +72,8 @@ test.describe('host-provided asynchronous questions @core @canonical', () => {
 
         [END,end] Async modal focus testing complete.
       `,
-      asyncQuestionsMap: ASYNC_MAP,
-      asyncQuestionHtml: ASYNC_HTML,
+      asyncQuestionsMap: ASYNC_QUESTION_MAP,
+      asyncQuestionHtml: ASYNC_QUESTION_HTML,
       asyncDelayMs: 400,
     });
     await expect(activeQuestion(page, 'OPTIONAL').locator('.screen-reader-focus')).toBeFocused();

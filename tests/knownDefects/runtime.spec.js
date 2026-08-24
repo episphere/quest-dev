@@ -107,9 +107,10 @@ describe('characterized Quest runtime defects', () => {
     expect(tree.rootNode.children.map(({ value }) => value)).toEqual(['Q1', 'Q2']);
   });
 
-  it.fails(`${runtimeDefects.treeHasNext.localDefectId}: reports lookahead without mutation`, () => {
+  it.fails(`${runtimeDefects.treeHasNext.localDefectId}: reports lookahead without throwing or mutation`, () => {
     const tree = new Tree();
     tree.add('Q1');
+    expect(() => tree.hasNext()).not.toThrow();
     expect(tree.hasNext()).toBe(true);
     expect(tree.currentNode).toBe(tree.rootNode);
   });
@@ -118,15 +119,15 @@ describe('characterized Quest runtime defects', () => {
     ['English', 'en'],
     ['Spanish', 'es'],
   ])(`${runtimeDefects.corpusMalformedCondition.localDefectId}: %s COVID Markdown keeps the complete grid complement`, (_, locale) => {
-    const authoredCondition = lockedCovidGridCondition(locale);
+    const sourceCondition = lockedCovidGridCondition(locale);
     const expectedCondition = `someSelected("${expectedCovidGridResponseIds.join('","')}")`;
-    expect(authoredCondition).toBe(expectedCondition);
+    expect(sourceCondition).toBe(expectedCondition);
   });
 
   it.fails.each([
     ['English', 'en'],
     ['Spanish', 'es'],
-  ])(`${runtimeDefects.corpusDuplicateScalarId.localDefectId}: %s Module 1 age and year fields have independent response IDs`, async (
+  ])(`${runtimeDefects.corpusDuplicateScalarId.localDefectId}: %s Module 1 age and year alternatives use distinct response IDs`, async (
     _,
     locale,
   ) => {
@@ -243,7 +244,7 @@ describe('characterized Quest runtime defects', () => {
     )).toBe(true);
   });
 
-  it.fails(`${runtimeDefects.explicitCombinedChoiceName.localDefectId}: preserves an authored combined-choice name exactly`, async () => {
+  it.fails(`${runtimeDefects.explicitCombinedChoiceName.localDefectId}: preserves a specified combined-choice name exactly`, async () => {
     const { processor } = await loadQuestionProcessor(`
       {"name":"EXPLICIT_COMBINED_NAME"}
       [Q1?] Other response.

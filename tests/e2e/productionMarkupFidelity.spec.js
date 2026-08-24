@@ -9,6 +9,7 @@ import {
   goNext,
   harnessSnapshot,
   openParticipant,
+  waitInHarness,
 } from './support/harness.js';
 import { readLockedMarkdown, repositoryRoot, treeAt } from './support/corpus.js';
 
@@ -197,7 +198,7 @@ test.describe('locked Module 1 intro markup fidelity @canonical @corpus', () => 
         popup: { ...expectation.popup, trigger: 'manual' },
       });
       // The real intro uses three raw text blocks and exactly two blank-line
-      // separators; it does not rely on authored paragraph elements.
+      // separators; it does not rely on paragraph elements.
       expect(initial.paragraphs).toHaveLength(3);
       expectation.paragraphs.forEach(({ start, end }, index) => {
         expect(initial.paragraphs[index].startsWith(start)).toBe(true);
@@ -301,6 +302,12 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
   for (const scalarCase of [
     {
       language: 'en',
+      dialogName: 'Response Requested',
+      dialogDescription: 'Is the weight correct?',
+      closeButton: 'Close',
+      correctButton: 'Correct',
+      incorrectButton: 'Incorrect',
+      weightDescription: 'Value must be greater than or equal to 0. Value must be less than or equal to 999',
       names: [
         'a. 18 years old, Pounds (lbs)',
         'b. 25 years old, Pounds (lbs)',
@@ -311,6 +318,12 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
     },
     {
       language: 'es',
+      dialogName: 'Respuesta Solicitada',
+      dialogDescription: '¿Este peso es correcto?',
+      closeButton: 'Cerrar',
+      correctButton: 'Correcto',
+      incorrectButton: 'Incorrecto',
+      weightDescription: 'El valor debe ser mayor o igual a 0. El valor debe ser menor o igual a 999',
       names: [
         'a. 18 años, NÚM. DE LIBRAS (lbs)',
         'b. 25 años, NÚM. DE LIBRAS (lbs)',
@@ -344,9 +357,64 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
       ))).toBe(scalarCase.names.length);
 
       const firstWeight = question.locator('#D_821387277');
+      await expect(firstWeight).toHaveAccessibleDescription(scalarCase.weightDescription);
       await firstWeight.pressSequentially('18.5');
       await expect(firstWeight).toHaveValue('185');
       await firstWeight.fill('');
+
+      await firstWeight.fill('65');
+      await firstWeight.blur();
+      const responseModal = page.locator('#softModalResponse');
+      const responseDialog = page.getByRole('dialog', { name: scalarCase.dialogName });
+      await expect(responseModal).toHaveClass(/show/);
+      await expect(responseDialog).toHaveAccessibleDescription(scalarCase.dialogDescription);
+      await expect(responseDialog.locator('[role="alert"]')).toHaveCount(0);
+      await expect(page.locator('#softModalResponseTitle')).toBeFocused();
+      const closeButton = responseDialog.getByRole('button', { name: scalarCase.closeButton, exact: true });
+      const correctButton = responseDialog.getByRole('button', { name: scalarCase.correctButton, exact: true });
+      const incorrectButton = responseDialog.getByRole('button', { name: scalarCase.incorrectButton, exact: true });
+      await expect(closeButton).toBeVisible();
+      await expect(correctButton).toBeVisible();
+      await expect(incorrectButton).toBeVisible();
+      await responseModal.evaluate((element) => {
+        element.addEventListener('hidden.bs.modal', () => {
+          element.__questFocusAtHidden = document.activeElement?.id ?? null;
+        }, { once: true });
+      });
+      await correctButton.click();
+      await expect(responseModal).not.toHaveClass(/show/);
+      expect(await responseModal.evaluate((element) => element.__questFocusAtHidden)).toBe('D_821387277');
+      await expect(firstWeight).toBeFocused();
+      await expect(firstWeight).toHaveAttribute('data-accepted-modal-value', '65');
+      await firstWeight.press('Tab');
+      await expect(responseModal).not.toHaveClass(/show/);
+
+      await firstWeight.fill('66');
+      await firstWeight.blur();
+      await expect(responseModal).toHaveClass(/show/);
+      await expect(page.locator('#softModalResponseTitle')).toBeFocused();
+      if (testInfo.project.name === 'chromium-desktop') {
+        await incorrectButton.click();
+      } else if (testInfo.project.name === 'firefox-desktop') {
+        await closeButton.click();
+      } else {
+        await page.keyboard.press('Escape');
+      }
+      await expect(responseModal).not.toHaveClass(/show/);
+      await expect(firstWeight).toBeFocused();
+      await expect(firstWeight).not.toHaveAttribute('data-accepted-modal-value');
+
+      await firstWeight.press('Tab');
+      await expect(responseModal).toHaveClass(/show/);
+      await correctButton.click();
+      await expect(responseModal).not.toHaveClass(/show/);
+      await expect(firstWeight).toBeFocused();
+      await expect(firstWeight).toHaveAttribute('data-accepted-modal-value', '66');
+
+      await firstWeight.fill('180');
+      await waitInHarness(page, 250);
+      await expect(firstWeight).toBeFocused();
+      await expect(firstWeight).toHaveValue('180');
 
       if (testInfo.project.name === 'chromium-desktop') {
         const thirdWeight = question.locator('#D_950080618');
@@ -354,7 +422,6 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
           D_821387277: '180',
           D_950080618: '175',
         };
-        await firstWeight.pressSequentially('180');
         await firstWeight.blur();
         await thirdWeight.pressSequentially('175');
         await thirdWeight.blur();
@@ -380,6 +447,9 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
         await expect(activeQuestion(page, 'D_912857732')).toBeVisible();
         await expect(firstWeight).toHaveValue('180');
         await expect(thirdWeight).toHaveValue('175');
+      } else {
+        await firstWeight.fill('');
+        await firstWeight.blur();
       }
 
       await expectHealthyHarness(page);

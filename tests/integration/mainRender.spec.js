@@ -49,6 +49,34 @@ describe('transform.render', () => {
     expect(progress.querySelector('#progressBarText').textContent).toBe('0%');
   });
 
+  it.each([
+    ['en', 'Close'],
+    ['es', 'Cerrar'],
+  ])('gives every %s dialog resolvable relationships and a localized Close name', async (lang, closeName) => {
+    const quest = await renderFreshQuest({ params: { lang } });
+    const modals = [
+      '#softModal',
+      '#hardModal',
+      '#softModalResponse',
+      '#submitModal',
+      '#storeErrorModal',
+    ].map((selector) => quest.root.querySelector(selector));
+
+    modals.forEach((modal) => {
+      const labelledBy = modal.getAttribute('aria-labelledby');
+      const describedBy = modal.getAttribute('aria-describedby');
+      expect(labelledBy).toBeTruthy();
+      expect(describedBy).toBeTruthy();
+      expect(modal.querySelector(`#${labelledBy}`)).not.toBeNull();
+      expect(modal.querySelector(`#${describedBy}`)).not.toBeNull();
+      expect(modal.querySelector('[role="alert"]')).toBeNull();
+      expect(modal.querySelector('.btn-close').getAttribute('aria-label')).toBe(closeName);
+    });
+
+    const ids = [...quest.root.querySelectorAll('[id]')].map(({ id }) => id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it('keeps numeric progress synchronized while advancing and returning', async () => {
     const quest = await renderFreshQuest();
     const radio = quest.root.querySelector('#Q1_1');
@@ -504,6 +532,77 @@ describe('transform.render', () => {
     expect(secondRoot.querySelector('input[name="Q1"][value="1"]').checked).toBe(false);
     expect(secondRoot.querySelector('input[name="Q1"][value="2"]').checked).toBe(true);
     expect(quest.state.getActiveQuestionState()).toEqual({ Q1: '2' });
+  });
+
+  it.each([
+    {
+      kind: 'requested',
+      marker: '?',
+      modalId: 'softModal',
+      bodyId: 'modalBodyText',
+      titleId: 'softModalTitle',
+      message: 'There is 1 question unanswered on this page. Would you like to continue?',
+    },
+    {
+      kind: 'required',
+      marker: '!',
+      modalId: 'hardModal',
+      bodyId: 'hardModalBodyText',
+      titleId: 'hardModalLabel',
+      message: 'There is 1 question unanswered on this page. Please answer the question.',
+    },
+  ])('keeps a $kind-response modal scoped to a retained sequential-render root', async ({
+    marker,
+    modalId,
+    bodyId,
+    titleId,
+    message,
+  }) => {
+    const markdown = `
+      {"name":"RETAINED_MODAL_ROOT"}
+      [Q1${marker}] Choose one answer.
+      (1) First answer
+      [END] Done.
+    `;
+    const quest = await renderFreshQuest({ markdown, rootId: 'firstRoot' });
+    const firstRoot = quest.root;
+    const obsoleteModal = firstRoot.querySelector(`[id="${modalId}"]`);
+    obsoleteModal.querySelector(`[id="${bodyId}"]`).textContent = 'Obsolete modal body';
+
+    const secondRoot = document.createElement('div');
+    secondRoot.id = 'secondRoot';
+    document.body.append(secondRoot);
+    const rendered = await quest.transform.render({
+      activate: true,
+      text: markdown,
+      store: vi.fn(async () => ({ code: 200 })),
+      errorLogger: () => {},
+    }, 'secondRoot');
+
+    expect(rendered).toBe(true);
+    const currentQuestion = secondRoot.querySelector('form.question.active');
+    expect(currentQuestion?.id).toBe('Q1');
+    const currentModal = secondRoot.querySelector(`[id="${modalId}"]`);
+    const focusTarget = currentQuestion.querySelector('.screen-reader-focus');
+    await vi.waitFor(() => expect(document.activeElement).toBe(focusTarget));
+
+    currentQuestion.querySelector('.next').click();
+
+    expect(obsoleteModal.classList).not.toContain('show');
+    expect(obsoleteModal.querySelector(`[id="${bodyId}"]`).textContent).toBe('Obsolete modal body');
+    expect(currentModal.classList).toContain('show');
+    expect(currentModal.querySelector(`[id="${bodyId}"]`).innerText.replace(/\s+/g, ' ').trim()).toBe(message);
+    expect(document.activeElement).toBe(currentModal.querySelector(`[id="${titleId}"]`));
+
+    const modalInstance = globalThis.bootstrap.Modal.getInstance(currentModal);
+    expect(modalInstance).not.toBeNull();
+    modalInstance.hide();
+    expect(document.activeElement).toBe(focusTarget);
+
+    currentQuestion.querySelector('.next').click();
+    expect(globalThis.bootstrap.Modal.getInstance(currentModal)).toBe(modalInstance);
+    modalInstance.hide();
+    expect(document.activeElement).toBe(focusTarget);
   });
 
   it('uses the current render store for submission and supports a later hostless render', async () => {

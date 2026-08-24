@@ -52,6 +52,18 @@ const COMPOUND_DELETION_SURVEY = `
 [END,end] Done.
 `;
 
+async function transitionToTextQuestion(quest) {
+  quest.root.querySelector('#Q1_1').click();
+  quest.root.querySelector('#Q1 .next').click();
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(quest.root.querySelector('form.active')?.id).toBe('Q2');
+  return {
+    focusTarget: quest.root.querySelector('#Q2 .screen-reader-focus'),
+    input: quest.root.querySelector('#Q2_TEXT'),
+  };
+}
+
 describe('delegated runtime event handling', () => {
   afterEach(() => {
     vi.clearAllTimers();
@@ -85,9 +97,11 @@ describe('delegated runtime event handling', () => {
     input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     expect(quest.state.getActiveQuestionState().TEXT).toBe('focusout value');
     expect(input.getAttribute('style')).toContain('size: 20');
+    input.dataset.acceptedModalValue = input.value;
 
     form.querySelector('.reset').click();
     expect(input.value).toBe('');
+    expect(input.hasAttribute('data-accepted-modal-value')).toBe(false);
     expect(quest.state.getActiveQuestionState().TEXT).toBeUndefined();
   });
 
@@ -201,6 +215,79 @@ describe('delegated runtime event handling', () => {
 
     expect(textarea.value).toBe('');
     expect(quest.state.getActiveQuestionState().NOTES).toBeUndefined();
+  });
+
+  it('clears checkbox-group validation semantics when its form is reset', async () => {
+    const quest = await renderFreshQuest({ markdown: TEXT_SURVEY });
+    const form = quest.root.querySelector('#TEXT');
+    form.dataset.minCount = '2';
+    form.querySelector('fieldset').innerHTML = `
+      <div class="response"><input type="checkbox" name="CHOICES" value="1" checked></div>
+      <div class="response"><input type="checkbox" name="CHOICES" value="2"></div>
+      <div class="response"><input type="checkbox" name="CHOICES" value="3"></div>
+    `;
+    const inputs = [...form.querySelectorAll('input')];
+    const { validateInput } = await import('../../validate.js');
+    const { resetChildren } = await import('../../eventHandlers.js');
+
+    validateInput(inputs[0]);
+    const error = form.querySelector('.validation-container');
+    expect(error).not.toBeNull();
+    inputs.forEach((input) => {
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(input.getAttribute('aria-describedby').split(/\s+/)).toContain(error.id);
+    });
+
+    resetChildren(form);
+
+    expect(form.querySelector('.validation-container')).toBeNull();
+    inputs.forEach((input) => {
+      expect(input.checked).toBe(false);
+      expect(input.hasAttribute('aria-invalid')).toBe(false);
+      expect(input.hasAttribute('aria-describedby')).toBe(false);
+    });
+  });
+
+  it('clears stale validation when another choice clears an embedded number response', async () => {
+    const quest = await renderFreshQuest({ markdown: TEXT_SURVEY });
+    const form = quest.root.querySelector('#TEXT');
+    form.querySelector('fieldset').innerHTML = `
+      <span id="detail-hint"></span>
+      <div class="response">
+        <label>
+          <input type="radio" id="OTHER" name="CHOICES" value="1">
+          Other
+          <input type="number" id="DETAIL" name="DETAIL" data-max="3" aria-describedby="detail-hint">
+        </label>
+      </div>
+      <div class="response">
+        <label><input type="radio" id="NONE" name="CHOICES" value="2"> None</label>
+      </div>
+    `;
+    quest.state.setNumResponseInputs('TEXT', 2);
+    const other = form.querySelector('#OTHER');
+    const none = form.querySelector('#NONE');
+    const detail = form.querySelector('#DETAIL');
+
+    other.click();
+    detail.value = '9';
+    detail.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+
+    const error = form.querySelector('.validation-container');
+    expect(error).not.toBeNull();
+    expect(detail.getAttribute('aria-invalid')).toBe('true');
+    expect(detail.getAttribute('aria-describedby').split(/\s+/)).toEqual([
+      'detail-hint',
+      error.id,
+    ]);
+
+    none.click();
+
+    expect(detail.value).toBe('');
+    expect(form.querySelector('.validation-container')).toBeNull();
+    expect(detail.hasAttribute('aria-invalid')).toBe(false);
+    expect(detail.getAttribute('aria-describedby')).toBe('detail-hint');
+    expect(quest.state.getActiveQuestionState().TEXT).toEqual({ CHOICES: '2' });
   });
 
   it('clears a choice-linked textarea together with its owning response', async () => {
@@ -428,17 +515,154 @@ describe('delegated runtime event handling', () => {
     vi.useFakeTimers();
     const quest = await renderFreshQuest();
     vi.clearAllTimers();
+    const nativeRequestAnimationFrame = window.requestAnimationFrame;
+    let scheduledFrameCount = 0;
+    window.requestAnimationFrame = (callback) => {
+      scheduledFrameCount += 1;
+      return nativeRequestAnimationFrame.call(window, callback);
+    };
 
+    let focusTarget;
+    try {
+      ({ focusTarget } = await transitionToTextQuestion(quest));
+      expect(document.activeElement).not.toBe(focusTarget);
+      expect(scheduledFrameCount).toBe(1);
+    } finally {
+      window.requestAnimationFrame = nativeRequestAnimationFrame;
+    }
+    await vi.advanceTimersToNextTimerAsync();
+    expect(document.activeElement).toBe(focusTarget);
+  });
+
+  it('never overrides rapid focus and typing in a newly rendered response', async () => {
+    vi.useFakeTimers();
+    const quest = await renderFreshQuest();
+    vi.clearAllTimers();
+
+    const { focusTarget, input } = await transitionToTextQuestion(quest);
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'A', code: 'KeyA' }));
+    input.value = 'A';
+    input.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: 'A',
+      inputType: 'insertText',
+    }));
+
+    await vi.runAllTimersAsync();
+    expect(document.activeElement).toBe(input);
+    expect(document.activeElement).not.toBe(focusTarget);
+    expect(input.value).toBe('A');
+  });
+
+  it('does not override focus moved to a host control before the handoff', async () => {
+    vi.useFakeTimers();
+    const quest = await renderFreshQuest();
+    vi.clearAllTimers();
+
+    const { focusTarget } = await transitionToTextQuestion(quest);
+    const hostControl = document.querySelector('#afterQuest');
+    hostControl.focus();
+
+    await vi.runAllTimersAsync();
+    expect(document.activeElement).toBe(hostControl);
+    expect(document.activeElement).not.toBe(focusTarget);
+  });
+
+  it('honors host focus moved while asynchronous question content is loading', async () => {
+    vi.useFakeTimers();
+    let finishAsyncLoad;
+    const fetchAsyncQuestion = vi.fn(() => new Promise((resolve) => {
+      finishAsyncLoad = resolve;
+    }));
+    const quest = await renderFreshQuest({
+      params: {
+        asyncQuestionsMap: {
+          '[Q1?]': { func: 'loadQuestion', args: [] },
+        },
+        fetchAsyncQuestion,
+      },
+    });
+    const hostControl = document.querySelector('#afterQuest');
+
+    expect(fetchAsyncQuestion).toHaveBeenCalledOnce();
+    hostControl.focus();
+    finishAsyncLoad();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.runAllTimersAsync();
+
+    expect(quest.root.querySelector('#Q1 .screen-reader-focus')).not.toBeNull();
+    expect(document.activeElement).toBe(hostControl);
+  });
+
+  it.each([
+    ['participant keyboard activity', (quest) => quest.root.querySelector('#Q2 legend'), () => new KeyboardEvent('keydown', { bubbles: true, key: 'A', code: 'KeyA' })],
+    ['participant pointer activity', (quest) => quest.root.querySelector('#Q2 legend'), () => new PointerEvent('pointerdown', { bubbles: true })],
+    ['participant assistive-technology click', (quest) => quest.root.querySelector('#Q2 legend'), () => new MouseEvent('click', { bubbles: true, detail: 0 })],
+    ['host keyboard activity', () => document.querySelector('#afterQuest'), () => new KeyboardEvent('keydown', { bubbles: true, key: 'A', code: 'KeyA' })],
+    ['host pointer activity', () => document.querySelector('#afterQuest'), () => new PointerEvent('pointerdown', { bubbles: true })],
+    ['host programmatic click', () => document.querySelector('#afterQuest'), () => new MouseEvent('click', { bubbles: true, detail: 0 })],
+  ])('cancels the question-focus handoff after %s', async (_, eventTarget, createEvent) => {
+    vi.useFakeTimers();
+    const quest = await renderFreshQuest();
+    vi.clearAllTimers();
+
+    const { focusTarget } = await transitionToTextQuestion(quest);
+    eventTarget(quest).dispatchEvent(createEvent());
+
+    await vi.runAllTimersAsync();
+    expect(document.activeElement).not.toBe(focusTarget);
+  });
+
+  it('does not move focus behind an open response modal', async () => {
+    vi.useFakeTimers();
+    const quest = await renderFreshQuest();
+    vi.clearAllTimers();
+
+    const { focusTarget } = await transitionToTextQuestion(quest);
+    quest.root.querySelector('#softModal').classList.add('show');
+
+    await vi.advanceTimersToNextTimerAsync();
+    expect(document.activeElement).not.toBe(focusTarget);
+  });
+
+  it('ignores a focus target disconnected before the handoff', async () => {
+    vi.useFakeTimers();
+    const quest = await renderFreshQuest();
+    vi.clearAllTimers();
+
+    const { focusTarget } = await transitionToTextQuestion(quest);
+    const focusSpy = vi.spyOn(focusTarget, 'focus');
+    focusTarget.remove();
+
+    await vi.advanceTimersToNextTimerAsync();
+    expect(focusTarget.isConnected).toBe(false);
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(focusTarget);
+  });
+
+  it('does not restore an obsolete submit trigger during render-driven modal disposal', async () => {
+    const quest = await renderFreshQuest();
     quest.root.querySelector('#Q1_1').click();
     quest.root.querySelector('#Q1 .next').click();
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.waitFor(() => expect(quest.root.querySelector('form.active')?.id).toBe('Q2'));
 
-    expect(quest.root.querySelector('form.active')?.id).toBe('Q2');
-    const focusTarget = quest.root.querySelector('#Q2 .screen-reader-focus');
-    await vi.advanceTimersByTimeAsync(499);
-    expect(document.activeElement).not.toBe(focusTarget);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(document.activeElement).toBe(focusTarget);
+    const input = quest.root.querySelector('#Q2_TEXT');
+    input.value = 'valid';
+    input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    quest.root.querySelector('#Q2 .next').click();
+    await vi.waitFor(() => expect(quest.root.querySelector('form.active')?.id).toBe('END'));
+
+    const submitTrigger = quest.root.querySelector('#END [data-click-type="submitSurvey"]');
+    submitTrigger.click();
+    const submitModal = quest.root.querySelector('#submitModal');
+    expect(submitModal.classList).toContain('show');
+
+    const focusSpy = vi.spyOn(submitTrigger, 'focus');
+    submitModal._questRenderDisposal = true;
+    globalThis.bootstrap.Modal.getInstance(submitModal).hide();
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   it('keeps host controls outside the delegated event boundary unchanged', async () => {

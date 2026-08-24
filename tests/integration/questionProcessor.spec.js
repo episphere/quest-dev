@@ -236,18 +236,126 @@ describe('QuestionProcessor constructs', () => {
         || Array.from(control.labels ?? [], (label) => label.textContent).join(' ');
       expect(nameSource, id).toBe(accessibleName);
     }
-    expect(fallback.querySelector('#FALLBACK_NUMBER').getAttribute('aria-describedby')).toBe('FALLBACK_NUMBER-desc');
+    expect(fallback.querySelector('#FALLBACK_NUMBER').getAttribute('aria-describedby')).toBeNull();
+    expect(fallback.querySelector('#FALLBACK_NUMBER-desc')).toBeNull();
     expect(fallback.querySelector('#FALLBACK_DATE-desc').textContent).toBe(dateDescription);
     expect(fallback.querySelector('#FALLBACK_MONTH-desc').textContent).toBe(monthDescription);
   });
 
-  it('preserves authored accessible names and never mistakes metadata or choice markup for a name', async () => {
+  it.each([
+    {
+      language: 'en',
+      fallbackName: 'Enter a value',
+      zeroDescription: 'Value must be greater than or equal to 0. Value must be less than or equal to 10',
+      minDescription: 'Value must be greater than or equal to 2',
+      maxDescription: 'Value must be less than or equal to 8',
+    },
+    {
+      language: 'es',
+      fallbackName: 'Introduzca un valor',
+      zeroDescription: 'El valor debe ser mayor o igual a 0. El valor debe ser menor o igual a 10',
+      minDescription: 'El valor debe ser mayor o igual a 2',
+      maxDescription: 'El valor debe ser menor o igual a 8',
+    },
+  ])('keeps number names and descriptions distinct in $language', async ({
+    language,
+    fallbackName,
+    zeroDescription,
+    minDescription,
+    maxDescription,
+  }) => {
+    const { processor } = await createProcessor(`
+      {"name":"NUMBER_SEMANTICS_${language.toUpperCase()}"}
+      [NUMBERS?] Number semantics.
+      <span id="ZERO_LABEL">Zero minimum</span>
+      <span id="existing-number-hint">Existing hint</span>
+      <span id="second-number-hint">Second hint</span>
+      <span id="fallback-number-hint">Fallback hint</span>
+      |__|__|id=ZERO_VALUE min=0 max=10 aria-labelledby='ZERO_LABEL' aria-describedby='existing-number-hint ZERO_VALUE-desc existing-number-hint'|
+      |__|__|id=MIN_ONLY_VALUE min=2|
+      |__|__|id=MAX_ONLY_VALUE max=8|
+      |__|__|id=EXPLICIT_VALUE aria-label='Explicit number' aria-describedby='second-number-hint existing-number-hint second-number-hint'|
+      |__|__|id=REFERENCED_FALLBACK_VALUE aria-describedby='fallback-number-hint REFERENCED_FALLBACK_VALUE-desc'|
+      |__|__|id=FALLBACK_VALUE|
+      [END,end] Done.
+    `, {}, { language });
+    const question = processById(processor, 'NUMBERS');
+    const zero = question.querySelector('#ZERO_VALUE');
+    const minOnly = question.querySelector('#MIN_ONLY_VALUE');
+    const maxOnly = question.querySelector('#MAX_ONLY_VALUE');
+    const explicit = question.querySelector('#EXPLICIT_VALUE');
+    const referencedFallback = question.querySelector('#REFERENCED_FALLBACK_VALUE');
+    const fallback = question.querySelector('#FALLBACK_VALUE');
+
+    expect(zero.getAttribute('aria-labelledby')).toBe('ZERO_LABEL');
+    expect(zero.hasAttribute('aria-label')).toBe(false);
+    expect(zero.getAttribute('aria-describedby').split(/\s+/)).toEqual([
+      'existing-number-hint',
+      'ZERO_VALUE-desc',
+    ]);
+    expect(zero.outerHTML.match(/aria-describedby=/g)).toHaveLength(1);
+    expect(question.querySelector('#ZERO_VALUE-desc').textContent).toBe(zeroDescription);
+    expect(zero.placeholder).toBe(fallbackName);
+    expect(zero.dataset.min).toBe('0');
+
+    expect(minOnly.getAttribute('aria-describedby')).toBe('MIN_ONLY_VALUE-desc');
+    expect(question.querySelector('#MIN_ONLY_VALUE-desc').textContent).toBe(minDescription);
+    expect(maxOnly.getAttribute('aria-describedby')).toBe('MAX_ONLY_VALUE-desc');
+    expect(question.querySelector('#MAX_ONLY_VALUE-desc').textContent).toBe(maxDescription);
+
+    expect(explicit.getAttribute('aria-label')).toBe('Explicit number');
+    expect(explicit.getAttribute('aria-describedby').split(/\s+/)).toEqual([
+      'second-number-hint',
+      'existing-number-hint',
+      'EXPLICIT_VALUE-desc',
+    ]);
+    expect(explicit.outerHTML.match(/aria-describedby=/g)).toHaveLength(1);
+    expect(question.querySelector('#EXPLICIT_VALUE-desc').textContent).toBe(fallbackName);
+    expect(explicit.getAttribute('aria-describedby').split(/\s+/).map(
+      (id) => question.querySelector(`#${id}`).textContent,
+    )).toEqual(['Second hint', 'Existing hint', fallbackName]);
+    expect(question.querySelectorAll('#EXPLICIT_VALUE-desc')).toHaveLength(1);
+
+    expect(referencedFallback.getAttribute('aria-label')).toBe(fallbackName);
+    expect(referencedFallback.getAttribute('aria-describedby').split(/\s+/)).toEqual([
+      'fallback-number-hint',
+      'REFERENCED_FALLBACK_VALUE-desc',
+    ]);
+    expect(referencedFallback.outerHTML.match(/aria-describedby=/g)).toHaveLength(1);
+    expect(question.querySelector('#REFERENCED_FALLBACK_VALUE-desc').textContent).toBe(fallbackName);
+    for (const id of referencedFallback.getAttribute('aria-describedby').split(/\s+/)) {
+      expect(question.querySelectorAll(`[id="${id}"]`), id).toHaveLength(1);
+    }
+
+    expect(fallback.getAttribute('aria-label')).toBe(fallbackName);
+    expect(fallback.hasAttribute('aria-describedby')).toBe(false);
+    expect(question.querySelector('#FALLBACK_VALUE-desc')).toBeNull();
+
+    const numbers = Array.from(question.querySelectorAll('input[type="number"]'));
+    expect(numbers.map(({ id }) => id)).toEqual([
+      'ZERO_VALUE',
+      'MIN_ONLY_VALUE',
+      'MAX_ONLY_VALUE',
+      'EXPLICIT_VALUE',
+      'REFERENCED_FALLBACK_VALUE',
+      'FALLBACK_VALUE',
+    ]);
+    expect(new Set(numbers.map(({ id }) => id)).size).toBe(numbers.length);
+    const descriptionIds = Array.from(
+      question.querySelectorAll('[id$="-desc"]'),
+      ({ id }) => id,
+    );
+    expect(descriptionIds).toHaveLength(5);
+    expect(new Set(descriptionIds).size).toBe(descriptionIds.length);
+  });
+
+  it('preserves explicit accessible names and never mistakes metadata or choice markup for a name', async () => {
     const { processor } = await createProcessor(`
       {"name":"SCALAR_NAME_BOUNDARIES"}
       [NUMBER?] Number.
-      |__|__|id=AUTHORED_NUMBER min=1 max=2 aria-label='Authored number'|
-      [DATE?] <span id="AUTHORED_DATE_LABEL">Authored date</span>
-      |date|id=AUTHORED_DATE aria-labelledby='AUTHORED_DATE_LABEL'|
+      |__|__|id=EXPLICIT_NUMBER min=1 max=2 aria-label='Explicit number'|
+      [DATE?] <span id="EXPLICIT_DATE_LABEL">Explicit date</span>
+      |date|id=EXPLICIT_DATE aria-labelledby='EXPLICIT_DATE_LABEL'|
       [METADATA?] Metadata is not a label.
       |__|id=METADATA_TEXT data-aria-label=metadata|
       [HASH?] Duration.
@@ -265,16 +373,16 @@ describe('QuestionProcessor constructs', () => {
       [END,end] Done.
     `);
 
-    const number = processById(processor, 'NUMBER').querySelector('#AUTHORED_NUMBER');
-    expect(number.id).toBe('AUTHORED_NUMBER');
-    expect(number.getAttribute('aria-label')).toBe('Authored number');
-    expect(number.getAttribute('aria-describedby')).toBe('AUTHORED_NUMBER-desc');
+    const number = processById(processor, 'NUMBER').querySelector('#EXPLICIT_NUMBER');
+    expect(number.id).toBe('EXPLICIT_NUMBER');
+    expect(number.getAttribute('aria-label')).toBe('Explicit number');
+    expect(number.getAttribute('aria-describedby')).toBe('EXPLICIT_NUMBER-desc');
 
-    const date = processById(processor, 'DATE').querySelector('#AUTHORED_DATE');
-    expect(date.id).toBe('AUTHORED_DATE');
+    const date = processById(processor, 'DATE').querySelector('#EXPLICIT_DATE');
+    expect(date.id).toBe('EXPLICIT_DATE');
     expect(date.hasAttribute('aria-label')).toBe(false);
-    expect(date.getAttribute('aria-labelledby')).toBe('AUTHORED_DATE_LABEL');
-    expect(date.getAttribute('aria-describedby')).toBe('AUTHORED_DATE-desc');
+    expect(date.getAttribute('aria-labelledby')).toBe('EXPLICIT_DATE_LABEL');
+    expect(date.getAttribute('aria-describedby')).toBe('EXPLICIT_DATE-desc');
 
     const metadata = processById(processor, 'METADATA').querySelector('#METADATA_TEXT');
     expect(metadata.dataset.ariaLabel).toBe('metadata');
@@ -302,25 +410,25 @@ describe('QuestionProcessor constructs', () => {
 
   it('protects accessible names from later choice parsing', async () => {
     const { processor } = await createProcessor(`
-      {"name":"AUTHORED_SCALAR_CHOICE_DELIMITERS"}
-      [QUESTA11YOPTION_0_END?] Authored scalar names.
-      |@|id=AUTHORED_EMAIL aria-label='Contact option (1) [2] &amp; more'|
-      |date|id=AUTHORED_DATE aria-label='Appointment [2]'|
-      |time|id=AUTHORED_TIME aria-label='Preferred time (3)'|
-      |__|__|id=AUTHORED_NUMBER aria-label='Amount [4]'|
+      {"name":"SCALAR_CHOICE_DELIMITERS"}
+      [QUESTA11YOPTION_0_END?] Scalar names.
+      |@|id=SCALAR_EMAIL aria-label='Contact option (1) [2] &amp; more'|
+      |date|id=SCALAR_DATE aria-label='Appointment [2]'|
+      |time|id=SCALAR_TIME aria-label='Preferred time (3)'|
+      |__|__|id=SCALAR_NUMBER aria-label='Amount [4]'|
       [END,end] Done.
     `);
     const question = processById(processor, 'QUESTA11YOPTION_0_END');
 
-    expect(question.querySelector('#AUTHORED_EMAIL').getAttribute('aria-label')).toBe('Contact option (1) [2] & more');
-    expect(question.querySelector('#AUTHORED_DATE').getAttribute('aria-label')).toBe('Appointment [2]');
-    expect(question.querySelector('#AUTHORED_TIME').getAttribute('aria-label')).toBe('Preferred time (3)');
-    expect(question.querySelector('#AUTHORED_NUMBER').getAttribute('aria-label')).toBe('Amount [4]');
-    expect(question.querySelector('#AUTHORED_NUMBER').name).toBe('QUESTA11YOPTION_0_END');
+    expect(question.querySelector('#SCALAR_EMAIL').getAttribute('aria-label')).toBe('Contact option (1) [2] & more');
+    expect(question.querySelector('#SCALAR_DATE').getAttribute('aria-label')).toBe('Appointment [2]');
+    expect(question.querySelector('#SCALAR_TIME').getAttribute('aria-label')).toBe('Preferred time (3)');
+    expect(question.querySelector('#SCALAR_NUMBER').getAttribute('aria-label')).toBe('Amount [4]');
+    expect(question.querySelector('#SCALAR_NUMBER').name).toBe('QUESTA11YOPTION_0_END');
     expect(question.querySelectorAll('input')).toHaveLength(4);
     expect(question.querySelectorAll('input[type="radio"], input[type="checkbox"]')).toHaveLength(0);
     expect(question.querySelectorAll('.response')).toHaveLength(0);
-    expect(question.querySelector('label[for="AUTHORED_TIME"]')).toBeNull();
+    expect(question.querySelector('label[for="SCALAR_TIME"]')).toBeNull();
   });
 
   it('includes conditional caption text only when it matches the scalar condition', async () => {
@@ -342,7 +450,7 @@ describe('QuestionProcessor constructs', () => {
       .toBe('Enter a value');
   });
 
-  it('keeps generated number handlers intact inside authored display conditions', async () => {
+  it('keeps generated number handlers intact inside display conditions', async () => {
     const { processor } = await createProcessor(`
       {"name":"CONDITIONAL_NUMBER_HANDLER"}
       [WEIGHT?] Weight history.
@@ -695,7 +803,7 @@ describe('QuestionProcessor loop runtime', () => {
     [END,end] Done.
   `;
 
-  it('continues to the next authored iteration, then exits when the response boundary changes', async () => {
+  it('continues to the next iteration, then exits when the response boundary changes', async () => {
     const { processor, moduleParams } = await createProcessor(LOOP_MARKDOWN, { D_100: '2' });
     const firstLoopIndex = processor.questions.findIndex(({ questionIDExactSearch }) => questionIDExactSearch === 'ITEM_1_1');
     processor.processQuestion(firstLoopIndex);
@@ -778,7 +886,7 @@ describe('QuestionProcessor loop runtime', () => {
     expect(moduleParams.errorLogger).toHaveBeenCalledWith(expect.stringContaining('loop data not found'));
   });
 
-  it('preserves authored loop metadata and English teen ordinals', async () => {
+  it('preserves loop metadata and English teen ordinals', async () => {
     const { processor } = await createProcessor(`
       {"name":"LOOP_ORDINALS"}
       [D_300?] Count |__|__|id=D_300|

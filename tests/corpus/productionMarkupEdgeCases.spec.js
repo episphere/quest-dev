@@ -295,7 +295,7 @@ describe('locked production markup edge cases', () => {
       // Participant mode mounts the first question block, so keep the malformed
       // dependent target first. The later production source remains searchable
       // by QuestionProcessor, which resolves the pipe without rewriting either
-      // authored block under characterization.
+      // source block under characterization.
       markdown: survey('PRODUCTION_NONSTANDARD_BREAK', nonstandardBreak, medicationSource),
     });
     const fertilityQuestion = breakQuest.root.querySelector('#D_466346054');

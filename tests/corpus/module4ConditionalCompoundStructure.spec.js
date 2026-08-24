@@ -60,7 +60,7 @@ function lockedQuestionBlock(markdown, questionId) {
   return lines.slice(start, end);
 }
 
-function authoredCompoundGroups(questionLines, questionId) {
+function compoundGroups(questionLines, questionId) {
   const promptPattern = /^\s*\|displayif=(.+?)\|\s*(.*?)\|\s*$/;
   const responsePattern = /^\s*\((\d+):([A-Z_][A-Z0-9_#]*),displayif=(.+)\)\s+(.+?)\s*$/;
   const groups = [];
@@ -128,64 +128,64 @@ describe('locked Module 4 conditional compound-radio structure @corpus', () => {
 
     for (const questionId of conditionalCompoundQuestionIds) {
       const questionLines = lockedQuestionBlock(markdown, questionId);
-      const authoredGroups = authoredCompoundGroups(questionLines, questionId);
+      const groups = compoundGroups(questionLines, questionId);
       const { question } = questionProcessor.findQuestion(questionId);
 
       expect(question, `${locale} Module 4 must render ${questionId}`).not.toBeNull();
-      expect(authoredGroups, `${questionId} must contain eight authored prompt mappings`).toHaveLength(8);
-      expect(new Set(authoredGroups.map(({ name }) => name)).size).toBe(8);
-      expect(authoredGroups.flatMap(({ responses }) => responses)).toHaveLength(40);
+      expect(groups, `${questionId} must contain eight prompt mappings`).toHaveLength(8);
+      expect(new Set(groups.map(({ name }) => name)).size).toBe(8);
+      expect(groups.flatMap(({ responses }) => responses)).toHaveLength(40);
 
       if (indentedResponseQuestionIds.has(questionId)) {
         expect(
           questionLines.filter((line) => /^\s+\(\d+:/.test(line)),
-          `${questionId} must retain its 40 indented authored response lines`,
+          `${questionId} must retain its 40 indented response lines`,
         ).toHaveLength(40);
       }
 
       const radios = Array.from(question.querySelectorAll('input[type="radio"]'));
       expect(radios, `${questionId} must render all 40 native radios`).toHaveLength(40);
       expect(new Set(radios.map(({ name }) => name))).toEqual(
-        new Set(authoredGroups.map(({ name }) => name)),
+        new Set(groups.map(({ name }) => name)),
       );
 
       const mappedPrompts = new Set();
-      for (const authoredGroup of authoredGroups) {
-        expect(authoredGroup.responses).toHaveLength(5);
-        expect(authoredGroup.responses.map(({ value }) => value)).toEqual(expectedDurationValues);
-        expect(new Set(authoredGroup.responses.map(({ condition }) => condition))).toEqual(
-          new Set([authoredGroup.prompt.condition]),
+      for (const group of groups) {
+        expect(group.responses).toHaveLength(5);
+        expect(group.responses.map(({ value }) => value)).toEqual(expectedDurationValues);
+        expect(new Set(group.responses.map(({ condition }) => condition))).toEqual(
+          new Set([group.prompt.condition]),
         );
 
-        const groupRadios = radios.filter(({ name }) => name === authoredGroup.name);
-        expect(groupRadios, `${questionId}.${authoredGroup.name} must render five radios`).toHaveLength(5);
+        const groupRadios = radios.filter(({ name }) => name === group.name);
+        expect(groupRadios, `${questionId}.${group.name} must render five radios`).toHaveLength(5);
         expect(groupRadios.map(({ value }) => value)).toEqual(expectedDurationValues);
 
         const firstResponse = groupRadios[0].closest('.response');
         const prompt = previousConditionalPrompt(firstResponse);
-        expect(prompt, `${questionId}.${authoredGroup.name} must retain its preceding prompt`).not.toBeNull();
+        expect(prompt, `${questionId}.${group.name} must retain its preceding prompt`).not.toBeNull();
         mappedPrompts.add(prompt);
-        expect(normalizeText(prompt.textContent)).toBe(authoredGroup.prompt.text);
+        expect(normalizeText(prompt.textContent)).toBe(group.prompt.text);
         expect(safelyDecodeCondition(prompt.getAttribute('displayif'))).toBe(
-          authoredGroup.prompt.condition,
+          group.prompt.condition,
         );
 
         for (const [index, input] of groupRadios.entries()) {
-          const authoredResponse = authoredGroup.responses[index];
+          const expectedResponse = group.responses[index];
           const response = input.closest('.response');
           const labels = Array.from(input.labels);
 
           expect(input.type).toBe('radio');
-          expect(input.name).toBe(authoredGroup.name);
-          expect(input.value).toBe(authoredResponse.value);
-          expect(input.id).toBe(`${authoredGroup.name}_${authoredResponse.value}`);
+          expect(input.name).toBe(group.name);
+          expect(input.value).toBe(expectedResponse.value);
+          expect(input.id).toBe(`${group.name}_${expectedResponse.value}`);
           expect(input.hasAttribute('aria-label')).toBe(false);
           expect(input.hasAttribute('aria-labelledby')).toBe(false);
           expect(labels).toHaveLength(1);
           expect(labels[0].htmlFor).toBe(input.id);
-          expect(normalizeText(labels[0].textContent)).toBe(authoredResponse.label);
+          expect(normalizeText(labels[0].textContent)).toBe(expectedResponse.label);
           expect(safelyDecodeCondition(response.getAttribute('displayif'))).toBe(
-            authoredGroup.prompt.condition,
+            group.prompt.condition,
           );
         }
       }

@@ -185,7 +185,7 @@ function addGeneratedAccessibleName(options, name) {
   return `${options} aria-label="${escapeAttribute(name)}"`.trim();
 }
 
-function extractAuthoredAccessibleNameOptions(options) {
+function extractAccessibleNameOptions(options) {
   const accessibleNameOptions = [];
   const parseableOptions = String(options ?? '').replace(
     /(?:^|\s)(aria-(?:label|labelledby)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s]+))/gi,
@@ -198,6 +198,23 @@ function extractAuthoredAccessibleNameOptions(options) {
   return {
     parseableOptions,
     accessibleNameOptions: accessibleNameOptions.join(' '),
+  };
+}
+
+function extractAriaDescribedByOptions(options) {
+  const describedByTokens = [];
+  const parseableOptions = String(options ?? '').replace(
+    /(?:^|\s)aria-describedby\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))/gi,
+    (_, doubleQuotedValue, singleQuotedValue, unquotedValue) => {
+      const value = doubleQuotedValue ?? singleQuotedValue ?? unquotedValue ?? '';
+      describedByTokens.push(...value.split(/\s+/).filter(Boolean));
+      return ' ';
+    },
+  ).trim();
+
+  return {
+    parseableOptions,
+    describedByTokens: [...new Set(describedByTokens)],
   };
 }
 
@@ -932,10 +949,10 @@ export class QuestionProcessor {
       .replace(/\[_#\]/g, "");
 
     // Quest's legacy choice transforms scan the question as a string and can
-    // mistake `(1)` or `[2]` inside an authored aria-label for real responses.
+    // mistake `(1)` or `[2]` inside an aria-label for real responses.
     // Hide only those label values during parsing, then restore their exact text.
-    const authoredAccessibleLabels = tokenizeAccessibleLabelValues(questText);
-    questText = authoredAccessibleLabels.text;
+    const accessibleLabels = tokenizeAccessibleLabelValues(questText);
+    questText = accessibleLabels.text;
 
     let counter = 1;
     questText = questText.replace(/\[\]/g, function () {
@@ -1062,7 +1079,7 @@ export class QuestionProcessor {
       const {
         parseableOptions,
         accessibleNameOptions,
-      } = extractAuthoredAccessibleNameOptions(options);
+      } = extractAccessibleNameOptions(options);
       let optionObj = paramSplit(parseableOptions);
       // can't have the value uri encoded... 
       if (Object.prototype.hasOwnProperty.call(optionObj, "value")) {
@@ -1347,14 +1364,14 @@ export class QuestionProcessor {
     questText = questText.replace(/\|time\|(?:([^\|\<]+[^\|]+)\|)?/g, fTime);
     function fTime(fullmatch, opts, offset, source) {
       let { options, elementId } = guaranteeIdSet(opts, "time");
-      const hasAuthoredAccessibleName = accessibleNameRegex.test(options);
+      const hasAccessibleName = accessibleNameRegex.test(options);
       const accessibleName = generatedControlNameFromReplace(
         fullmatch,
         offset,
         source,
         i18n.enterValue,
       );
-      const generatedLabel = hasAuthoredAccessibleName
+      const generatedLabel = hasAccessibleName
         ? ''
         : `<label for='${elementId}' class='visually-hidden'>${escapeAttribute(accessibleName)}</label>`;
       return `
@@ -1363,7 +1380,6 @@ export class QuestionProcessor {
       `;
     }
 
-    // TODO: (future): format for number input boxes needs adjustment for screen readers (description text first or aria description)
     // replace |__|__|  with a number box...
     questText = questText.replace(/\|(?:__\|){2,}(?:([^\|\<]+[^\|]+)\|)?/g, fNum);
 
@@ -1375,8 +1391,11 @@ export class QuestionProcessor {
         .slice(offset + fullmatch.length)
         .startsWith('|displayif=');
 
-      const extractedAccessibleNames = extractAuthoredAccessibleNameOptions(options);
-      options = extractedAccessibleNames.parseableOptions.replaceAll('"', "'");
+      const extractedAccessibleNames = extractAccessibleNameOptions(options);
+      const extractedDescriptions = extractAriaDescribedByOptions(
+        extractedAccessibleNames.parseableOptions,
+      );
+      options = extractedDescriptions.parseableOptions.replaceAll('"', "'");
       //instead of replacing max and min with data-min and data-max, they need to be added, as the up down buttons are needed for input type number
       let optionObj = paramSplit(options)
 
@@ -1390,7 +1409,15 @@ export class QuestionProcessor {
       }
 
       // Handle not converted and not yet calculated min and max values
-      const minMaxValueTest = (value) => { return value && !value.startsWith('valueOr') && !value.includes('isDefined') && value !== '0' ? value : ''; }
+      const minMaxValueTest = (value) => {
+        return value !== undefined
+          && value !== null
+          && value !== ''
+          && !value.startsWith('valueOr')
+          && !value.includes('isDefined')
+          ? value
+          : '';
+      }
       // Evaluate min and max, ensuring they are valid numbers or get evaluated if they aren't.
       const evaluateMinMax = (value) => {
         let result = minMaxValueTest(value);
@@ -1407,10 +1434,10 @@ export class QuestionProcessor {
 
       // Build the description text
       const numberConstraints = [];
-      if (min) {
+      if (min !== '') {
         numberConstraints.push(i18n.validationNumberGreaterThan.replace('{0}', min));
       }
-      if (max) {
+      if (max !== '') {
         numberConstraints.push(i18n.validationNumberLessThan.replace('{0}', max));
       }
       const descriptionText = numberConstraints.join('. ') || i18n.enterValue;
@@ -1421,26 +1448,50 @@ export class QuestionProcessor {
       let placeholder;
       if (max && max >= 50) {
         placeholder = defaultPlaceholder;
-      } else if (min && max) {
+      } else if (min && min !== '0' && max) {
         const avgValue = Math.floor((parseInt(min, 10) + parseInt(max, 10)) / 2);
         placeholder = `placeholder="${moduleParams.i18n.example}: ${avgValue}"`;
       } else {
         placeholder = defaultPlaceholder;
       }
 
-      options += ` ${placeholder} aria-describedby="${elementId}-desc"`;
+      const generatedAccessibleName = generatedControlNameFromReplace(
+        fullmatch,
+        offset,
+        source,
+        i18n.enterValue,
+      );
+      const usesGeneratedFallbackName = !extractedAccessibleNames.accessibleNameOptions
+        && generatedAccessibleName === i18n.enterValue;
+      const generatedDescriptionId = `${elementId}-desc`;
+      const preservesGeneratedDescriptionReference = extractedDescriptions.describedByTokens
+        .includes(generatedDescriptionId);
+      const shouldGenerateDescription = numberConstraints.length > 0
+        || !usesGeneratedFallbackName
+        || preservesGeneratedDescriptionReference;
+      const describedByTokens = [
+        ...extractedDescriptions.describedByTokens,
+        ...(shouldGenerateDescription ? [generatedDescriptionId] : []),
+      ];
+
+      options += ` ${placeholder}`;
+      if (describedByTokens.length > 0) {
+        options += ` aria-describedby="${escapeAttribute([...new Set(describedByTokens)].join(' '))}"`;
+      }
       options = addGeneratedAccessibleName(
         options,
-        generatedControlNameFromReplace(fullmatch, offset, source, i18n.enterValue),
+        generatedAccessibleName,
       );
 
       // onkeypress forces whole numbers. Keep the OR operators encoded until
       // the browser parses the HTML: a later Quest pass uses raw pipes as
       // display-condition delimiters and must not consume generated script.
       const input = `<input type='number' step='any' onkeypress='return (event.charCode == 8 &#124;&#124; event.charCode == 0 &#124;&#124; event.charCode == 13) ? null : event.charCode >= 48 && event.charCode <= 57' name='${questionID}' ${options}>`;
-      const description = `<div id="${elementId}-desc" class="visually-hidden">${descriptionText}</div><br>`;
+      const description = shouldGenerateDescription
+        ? `<div id="${elementId}-desc" class="visually-hidden">${descriptionText}</div><br>`
+        : '<br>';
 
-      // A number macro can itself be the content of an authored displayif.
+      // A number macro can itself be the content of a displayif.
       // In the compact `...number||displayif=...` form, the number parser
       // consumes the wrapper's closing pipe. Restore it only at that exact
       // boundary. Ordinary, already-closed wrappers must not gain a literal pipe.
@@ -1646,7 +1697,7 @@ export class QuestionProcessor {
       ),
     );
     questText = questText.replace(/<\/div><br>/g, "</div>");
-    questText = authoredAccessibleLabels.restore(questText);
+    questText = accessibleLabels.restore(questText);
 
     // handle the back/next/reset buttons
     const hasInputfield = /<(?:input|textarea)\b/i.test(questText);

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "corpus": {
     "repository": "episphere/questionnaire",
     "commit": "7ae99a22af325cf0e14be047a7636462db9bfd50",
@@ -14,7 +14,7 @@
     "sequentialAdjacency": "Adjacent runtimeQuestionIds; path feasibility is intentionally not inferred."
   },
   "counts": {
-    "authoredMarkerCount": 3568,
+    "markerCount": 3568,
     "processorQuestionCount": 8302,
     "processedQuestionCount": 8302,
     "renderedFormCount": 8302,
@@ -37,7 +37,7 @@
     {
       "module": "module1",
       "counts": {
-        "authoredMarkerCount": 631,
+        "markerCount": 631,
         "processorQuestionCount": 3996,
         "processedQuestionCount": 3996,
         "renderedFormCount": 3996,
@@ -60,7 +60,7 @@
         {
           "locale": "en",
           "path": "prod/module1.txt",
-          "authoredMarkerCount": 316,
+          "markerCount": 316,
           "processorQuestionCount": 1998,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 2,
@@ -71,7 +71,7 @@
         {
           "locale": "es",
           "path": "prod/module1Spanish.txt",
-          "authoredMarkerCount": 315,
+          "markerCount": 315,
           "processorQuestionCount": 1998,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 2,
@@ -84,7 +84,7 @@
     {
       "module": "module2",
       "counts": {
-        "authoredMarkerCount": 719,
+        "markerCount": 719,
         "processorQuestionCount": 1108,
         "processedQuestionCount": 1108,
         "renderedFormCount": 1108,
@@ -107,7 +107,7 @@
         {
           "locale": "en",
           "path": "prod/module2.txt",
-          "authoredMarkerCount": 359,
+          "markerCount": 359,
           "processorQuestionCount": 554,
           "gridQuestionCount": 6,
           "loopDefinitionCount": 1,
@@ -118,7 +118,7 @@
         {
           "locale": "es",
           "path": "prod/module2Spanish.txt",
-          "authoredMarkerCount": 360,
+          "markerCount": 360,
           "processorQuestionCount": 554,
           "gridQuestionCount": 6,
           "loopDefinitionCount": 1,
@@ -131,7 +131,7 @@
     {
       "module": "module2024ConnectExperience",
       "counts": {
-        "authoredMarkerCount": 86,
+        "markerCount": 86,
         "processorQuestionCount": 86,
         "processedQuestionCount": 86,
         "renderedFormCount": 86,
@@ -154,7 +154,7 @@
         {
           "locale": "en",
           "path": "prod/module2024ConnectExperience.txt",
-          "authoredMarkerCount": 43,
+          "markerCount": 43,
           "processorQuestionCount": 43,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -165,7 +165,7 @@
         {
           "locale": "es",
           "path": "prod/module2024ConnectExperienceSpanish.txt",
-          "authoredMarkerCount": 43,
+          "markerCount": 43,
           "processorQuestionCount": 43,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -178,7 +178,7 @@
     {
       "module": "module2026ROIPreferences",
       "counts": {
-        "authoredMarkerCount": 32,
+        "markerCount": 32,
         "processorQuestionCount": 32,
         "processedQuestionCount": 32,
         "renderedFormCount": 32,
@@ -201,7 +201,7 @@
         {
           "locale": "en",
           "path": "prod/module2026ROIPreferences.txt",
-          "authoredMarkerCount": 16,
+          "markerCount": 16,
           "processorQuestionCount": 16,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -212,7 +212,7 @@
         {
           "locale": "es",
           "path": "prod/module2026ROIPreferencesSpanish.txt",
-          "authoredMarkerCount": 16,
+          "markerCount": 16,
           "processorQuestionCount": 16,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -225,7 +225,7 @@
     {
       "module": "module3",
       "counts": {
-        "authoredMarkerCount": 628,
+        "markerCount": 628,
         "processorQuestionCount": 610,
         "processedQuestionCount": 610,
         "renderedFormCount": 610,
@@ -248,7 +248,7 @@
         {
           "locale": "en",
           "path": "prod/module3.txt",
-          "authoredMarkerCount": 314,
+          "markerCount": 314,
           "processorQuestionCount": 305,
           "gridQuestionCount": 4,
           "loopDefinitionCount": 0,
@@ -259,7 +259,7 @@
         {
           "locale": "es",
           "path": "prod/module3Spanish.txt",
-          "authoredMarkerCount": 314,
+          "markerCount": 314,
           "processorQuestionCount": 305,
           "gridQuestionCount": 4,
           "loopDefinitionCount": 0,
@@ -272,7 +272,7 @@
     {
       "module": "module4",
       "counts": {
-        "authoredMarkerCount": 734,
+        "markerCount": 734,
         "processorQuestionCount": 734,
         "processedQuestionCount": 734,
         "renderedFormCount": 734,
@@ -295,7 +295,7 @@
         {
           "locale": "en",
           "path": "prod/module4.txt",
-          "authoredMarkerCount": 367,
+          "markerCount": 367,
           "processorQuestionCount": 367,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -306,7 +306,7 @@
         {
           "locale": "es",
           "path": "prod/module4Spanish.txt",
-          "authoredMarkerCount": 367,
+          "markerCount": 367,
           "processorQuestionCount": 367,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -319,7 +319,7 @@
     {
       "module": "moduleBiospecimen",
       "counts": {
-        "authoredMarkerCount": 105,
+        "markerCount": 105,
         "processorQuestionCount": 101,
         "processedQuestionCount": 101,
         "renderedFormCount": 101,
@@ -342,7 +342,7 @@
         {
           "locale": "en",
           "path": "prod/moduleBiospecimen.txt",
-          "authoredMarkerCount": 52,
+          "markerCount": 52,
           "processorQuestionCount": 50,
           "gridQuestionCount": 1,
           "loopDefinitionCount": 0,
@@ -353,7 +353,7 @@
         {
           "locale": "es",
           "path": "prod/moduleBiospecimenSpanish.txt",
-          "authoredMarkerCount": 53,
+          "markerCount": 53,
           "processorQuestionCount": 51,
           "gridQuestionCount": 1,
           "loopDefinitionCount": 0,
@@ -366,7 +366,7 @@
     {
       "module": "moduleCancerScreeningHistory",
       "counts": {
-        "authoredMarkerCount": 288,
+        "markerCount": 288,
         "processorQuestionCount": 288,
         "processedQuestionCount": 288,
         "renderedFormCount": 288,
@@ -389,7 +389,7 @@
         {
           "locale": "en",
           "path": "prod/moduleCancerScreeningHistory.txt",
-          "authoredMarkerCount": 144,
+          "markerCount": 144,
           "processorQuestionCount": 144,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -400,7 +400,7 @@
         {
           "locale": "es",
           "path": "prod/moduleCancerScreeningHistorySpanish.txt",
-          "authoredMarkerCount": 144,
+          "markerCount": 144,
           "processorQuestionCount": 144,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -413,7 +413,7 @@
     {
       "module": "moduleClinicalBloodUrine",
       "counts": {
-        "authoredMarkerCount": 42,
+        "markerCount": 42,
         "processorQuestionCount": 38,
         "processedQuestionCount": 38,
         "renderedFormCount": 38,
@@ -436,7 +436,7 @@
         {
           "locale": "en",
           "path": "prod/moduleClinicalBloodUrine.txt",
-          "authoredMarkerCount": 21,
+          "markerCount": 21,
           "processorQuestionCount": 19,
           "gridQuestionCount": 1,
           "loopDefinitionCount": 0,
@@ -447,7 +447,7 @@
         {
           "locale": "es",
           "path": "prod/moduleClinicalBloodUrineSpanish.txt",
-          "authoredMarkerCount": 21,
+          "markerCount": 21,
           "processorQuestionCount": 19,
           "gridQuestionCount": 1,
           "loopDefinitionCount": 0,
@@ -460,7 +460,7 @@
     {
       "module": "moduleCOVID19",
       "counts": {
-        "authoredMarkerCount": 194,
+        "markerCount": 194,
         "processorQuestionCount": 1200,
         "processedQuestionCount": 1200,
         "renderedFormCount": 1200,
@@ -483,7 +483,7 @@
         {
           "locale": "en",
           "path": "prod/moduleCOVID19.txt",
-          "authoredMarkerCount": 97,
+          "markerCount": 97,
           "processorQuestionCount": 600,
           "gridQuestionCount": 7,
           "loopDefinitionCount": 2,
@@ -494,7 +494,7 @@
         {
           "locale": "es",
           "path": "prod/moduleCOVID19Spanish.txt",
-          "authoredMarkerCount": 97,
+          "markerCount": 97,
           "processorQuestionCount": 600,
           "gridQuestionCount": 7,
           "loopDefinitionCount": 2,
@@ -507,7 +507,7 @@
     {
       "module": "moduleDietScreener",
       "counts": {
-        "authoredMarkerCount": 6,
+        "markerCount": 6,
         "processorQuestionCount": 6,
         "processedQuestionCount": 6,
         "renderedFormCount": 6,
@@ -530,7 +530,7 @@
         {
           "locale": "en",
           "path": "prod/moduleDietScreener",
-          "authoredMarkerCount": 3,
+          "markerCount": 3,
           "processorQuestionCount": 3,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -541,7 +541,7 @@
         {
           "locale": "es",
           "path": "prod/moduleDietScreenerSpanish.txt",
-          "authoredMarkerCount": 3,
+          "markerCount": 3,
           "processorQuestionCount": 3,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -554,7 +554,7 @@
     {
       "module": "moduleMenstrual",
       "counts": {
-        "authoredMarkerCount": 10,
+        "markerCount": 10,
         "processorQuestionCount": 10,
         "processedQuestionCount": 10,
         "renderedFormCount": 10,
@@ -577,7 +577,7 @@
         {
           "locale": "en",
           "path": "prod/moduleMenstrual.txt",
-          "authoredMarkerCount": 5,
+          "markerCount": 5,
           "processorQuestionCount": 5,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -588,7 +588,7 @@
         {
           "locale": "es",
           "path": "prod/moduleMenstrualSpanish.txt",
-          "authoredMarkerCount": 5,
+          "markerCount": 5,
           "processorQuestionCount": 5,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -601,7 +601,7 @@
     {
       "module": "moduleMouthwash",
       "counts": {
-        "authoredMarkerCount": 68,
+        "markerCount": 68,
         "processorQuestionCount": 68,
         "processedQuestionCount": 68,
         "renderedFormCount": 68,
@@ -624,7 +624,7 @@
         {
           "locale": "en",
           "path": "prod/moduleMouthwash.txt",
-          "authoredMarkerCount": 34,
+          "markerCount": 34,
           "processorQuestionCount": 34,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -635,7 +635,7 @@
         {
           "locale": "es",
           "path": "prod/moduleMouthwashSpanish.txt",
-          "authoredMarkerCount": 34,
+          "markerCount": 34,
           "processorQuestionCount": 34,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -648,7 +648,7 @@
     {
       "module": "moduleQoL",
       "counts": {
-        "authoredMarkerCount": 22,
+        "markerCount": 22,
         "processorQuestionCount": 22,
         "processedQuestionCount": 22,
         "renderedFormCount": 22,
@@ -671,7 +671,7 @@
         {
           "locale": "en",
           "path": "prod/moduleQoL.txt",
-          "authoredMarkerCount": 11,
+          "markerCount": 11,
           "processorQuestionCount": 11,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -682,7 +682,7 @@
         {
           "locale": "es",
           "path": "prod/moduleQoLSpanish.txt",
-          "authoredMarkerCount": 11,
+          "markerCount": 11,
           "processorQuestionCount": 11,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -695,7 +695,7 @@
     {
       "module": "ssnModule",
       "counts": {
-        "authoredMarkerCount": 3,
+        "markerCount": 3,
         "processorQuestionCount": 3,
         "processedQuestionCount": 3,
         "renderedFormCount": 3,
@@ -718,7 +718,7 @@
         {
           "locale": "en",
           "path": "prod/ssnModule.txt",
-          "authoredMarkerCount": 3,
+          "markerCount": 3,
           "processorQuestionCount": 3,
           "gridQuestionCount": 0,
           "loopDefinitionCount": 0,
@@ -731,7 +731,7 @@
   ],
   "surveys": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module1",
       "locale": "en",
       "language": "en",
@@ -739,7 +739,7 @@
       "sha256": "c36e2ceb44808d43538d04f43c336085ec73c05614ad5791fbb6e58582b8e107",
       "questName": "D_726699695_V2",
       "version": "4.0",
-      "authoredMarkerCount": 316,
+      "markerCount": 316,
       "runtimeQuestionIds": [
         "INTROM1",
         "INTROBAC",
@@ -7232,7 +7232,7 @@
         "D_761310265"
       ],
       "counts": {
-        "authoredMarkerCount": 316,
+        "markerCount": 316,
         "processorQuestionCount": 1998,
         "processedQuestionCount": 1998,
         "renderedFormCount": 1998,
@@ -7254,7 +7254,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module1",
       "locale": "es",
       "language": "es",
@@ -7262,7 +7262,7 @@
       "sha256": "f7a768ede6036e68742ea7d0bea3f0debc3f30aa4ab51774b637a9fbbe9e1d2e",
       "questName": "D_726699695_V2",
       "version": "4.0",
-      "authoredMarkerCount": 315,
+      "markerCount": 315,
       "runtimeQuestionIds": [
         "INTROM1",
         "INTROBAC",
@@ -13824,7 +13824,7 @@
         "D_761310265"
       ],
       "counts": {
-        "authoredMarkerCount": 315,
+        "markerCount": 315,
         "processorQuestionCount": 1998,
         "processedQuestionCount": 1998,
         "renderedFormCount": 1998,
@@ -13846,7 +13846,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module2",
       "locale": "en",
       "language": "en",
@@ -13854,7 +13854,7 @@
       "sha256": "a7b9dba4edd27d55ccb3830b0b54b8d4fa7003a1d2a9c1c79749aaeeaa4f664f",
       "questName": "D_745268907_V2",
       "version": "2.3",
-      "authoredMarkerCount": 359,
+      "markerCount": 359,
       "runtimeQuestionIds": [
         "INTROM2",
         "SECTION1",
@@ -15730,7 +15730,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 359,
+        "markerCount": 359,
         "processorQuestionCount": 554,
         "processedQuestionCount": 554,
         "renderedFormCount": 554,
@@ -15752,7 +15752,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module2024ConnectExperience",
       "locale": "en",
       "language": "en",
@@ -15760,7 +15760,7 @@
       "sha256": "70f70eb07acec537f634c96b66c29596e68baee11812f367bfc89317cb818fe7",
       "questName": "D_506648060",
       "version": "1.1",
-      "authoredMarkerCount": 43,
+      "markerCount": 43,
       "runtimeQuestionIds": [
         "SRVPES_PESINTRO_V1R0",
         "D_145727599?",
@@ -15886,7 +15886,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 43,
+        "markerCount": 43,
         "processorQuestionCount": 43,
         "processedQuestionCount": 43,
         "renderedFormCount": 43,
@@ -15908,7 +15908,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module2024ConnectExperience",
       "locale": "es",
       "language": "es",
@@ -15916,7 +15916,7 @@
       "sha256": "1bb9757b35913beca279af01bb99ee9c776684fbf7d056289f71c898e5cfef9f",
       "questName": "D_506648060",
       "version": "1.1",
-      "authoredMarkerCount": 43,
+      "markerCount": 43,
       "runtimeQuestionIds": [
         "SRVPES_PESINTRO_V1R0",
         "D_145727599?",
@@ -16042,7 +16042,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 43,
+        "markerCount": 43,
         "processorQuestionCount": 43,
         "processedQuestionCount": 43,
         "renderedFormCount": 43,
@@ -16064,7 +16064,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module2026ROIPreferences",
       "locale": "en",
       "language": "en",
@@ -16072,7 +16072,7 @@
       "sha256": "bb14766a8d7fd626d2234254db78c1c7e84b0503f4734ddafa31239763b160a9",
       "questName": "D_312845734",
       "version": "1.0",
-      "authoredMarkerCount": 16,
+      "markerCount": 16,
       "runtimeQuestionIds": [
         "INTROPREF",
         "INTROGEO",
@@ -16114,7 +16114,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 16,
+        "markerCount": 16,
         "processorQuestionCount": 16,
         "processedQuestionCount": 16,
         "renderedFormCount": 16,
@@ -16136,7 +16136,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module2026ROIPreferences",
       "locale": "es",
       "language": "es",
@@ -16144,7 +16144,7 @@
       "sha256": "c31cf93e57d0c26fb630b940d906cce1f42440e434dea4049ca46859a8423227",
       "questName": "D_312845734",
       "version": "1.0",
-      "authoredMarkerCount": 16,
+      "markerCount": 16,
       "runtimeQuestionIds": [
         "INTROPREF",
         "INTROGEO",
@@ -16186,7 +16186,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 16,
+        "markerCount": 16,
         "processorQuestionCount": 16,
         "processedQuestionCount": 16,
         "renderedFormCount": 16,
@@ -16208,7 +16208,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module2",
       "locale": "es",
       "language": "es",
@@ -16216,7 +16216,7 @@
       "sha256": "c8545d3286b47909c9f9048df73467459cccabbeb7dfe7676756ea9474164bb5",
       "questName": "D_745268907_V2",
       "version": "2.3",
-      "authoredMarkerCount": 360,
+      "markerCount": 360,
       "runtimeQuestionIds": [
         "INTROM2",
         "SECTION1",
@@ -18162,7 +18162,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 360,
+        "markerCount": 360,
         "processorQuestionCount": 554,
         "processedQuestionCount": 554,
         "renderedFormCount": 554,
@@ -18184,7 +18184,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module3",
       "locale": "en",
       "language": "en",
@@ -18192,7 +18192,7 @@
       "sha256": "73f6a1ba8bb0ce4b3c1cb56566b3c46b0d8552ff299be81a57ed6c4d4597ea8f",
       "questName": "D_965707586",
       "version": "1.6",
-      "authoredMarkerCount": 314,
+      "markerCount": 314,
       "runtimeQuestionIds": [
         "INTROM3",
         "INTROSMO",
@@ -19456,7 +19456,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 314,
+        "markerCount": 314,
         "processorQuestionCount": 305,
         "processedQuestionCount": 305,
         "renderedFormCount": 305,
@@ -19478,7 +19478,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module3",
       "locale": "es",
       "language": "es",
@@ -19486,7 +19486,7 @@
       "sha256": "4c78a6b2f3db419e87c7701b938a30c56c87c0c4ae2864d9eeb33e16a207e3b8",
       "questName": "D_965707586",
       "version": "1.6",
-      "authoredMarkerCount": 314,
+      "markerCount": 314,
       "runtimeQuestionIds": [
         "INTROM3",
         "INTROSMO",
@@ -20747,7 +20747,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 314,
+        "markerCount": 314,
         "processorQuestionCount": 305,
         "processedQuestionCount": 305,
         "renderedFormCount": 305,
@@ -20769,7 +20769,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module4",
       "locale": "en",
       "language": "en",
@@ -20777,7 +20777,7 @@
       "sha256": "008faf8420a7a657692c7e04a3615f171c53f675411fd3fd049f329a62124fe4",
       "questName": "D_716117817",
       "version": "2.0",
-      "authoredMarkerCount": 367,
+      "markerCount": 367,
       "runtimeQuestionIds": [
         "INTROM4",
         "INTRORH",
@@ -21781,7 +21781,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 367,
+        "markerCount": 367,
         "processorQuestionCount": 367,
         "processedQuestionCount": 367,
         "renderedFormCount": 367,
@@ -21803,7 +21803,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "module4",
       "locale": "es",
       "language": "es",
@@ -21811,7 +21811,7 @@
       "sha256": "c1705fb2632f8c2fda8f22a716fb006eecacde9aa75b153611c4e7f15aec5c3f",
       "questName": "D_716117817",
       "version": "2.0",
-      "authoredMarkerCount": 367,
+      "markerCount": 367,
       "runtimeQuestionIds": [
         "INTROM4",
         "INTRORH",
@@ -22815,7 +22815,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 367,
+        "markerCount": 367,
         "processorQuestionCount": 367,
         "processedQuestionCount": 367,
         "renderedFormCount": 367,
@@ -22837,7 +22837,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleBiospecimen",
       "locale": "en",
       "language": "en",
@@ -22845,7 +22845,7 @@
       "sha256": "3511079715fecaf0498d2a3f197f3cce400a9a4674af0947ff740b68ddfb5d22",
       "questName": "D_299215535",
       "version": "1.4",
-      "authoredMarkerCount": 52,
+      "markerCount": 52,
       "runtimeQuestionIds": [
         "SRVBIO_MODULEINTRO_V1R0",
         "D_522008539?",
@@ -23022,7 +23022,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 52,
+        "markerCount": 52,
         "processorQuestionCount": 50,
         "processedQuestionCount": 50,
         "renderedFormCount": 50,
@@ -23044,7 +23044,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleBiospecimen",
       "locale": "es",
       "language": "es",
@@ -23052,7 +23052,7 @@
       "sha256": "16f3ae9976bc65506da60281fe17e27f6701109e6a5b67d9b65e044805259192",
       "questName": "D_299215535",
       "version": "1.4",
-      "authoredMarkerCount": 53,
+      "markerCount": 53,
       "runtimeQuestionIds": [
         "SRVBIO_MODULEINTRO_V1R0",
         "D_522008539?",
@@ -23230,7 +23230,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 53,
+        "markerCount": 53,
         "processorQuestionCount": 51,
         "processedQuestionCount": 51,
         "renderedFormCount": 51,
@@ -23252,7 +23252,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleCOVID19",
       "locale": "en",
       "language": "en",
@@ -23260,7 +23260,7 @@
       "sha256": "5d3dfa29799998557fd85d168869f9b1f122d3d957f443a7a423ec12304c6426",
       "questName": "D_793330426",
       "version": "1.3",
-      "authoredMarkerCount": 97,
+      "markerCount": 97,
       "runtimeQuestionIds": [
         "SRVCOV_COVIDINTRO_V1R0",
         "D_494226443?",
@@ -24847,7 +24847,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 97,
+        "markerCount": 97,
         "processorQuestionCount": 600,
         "processedQuestionCount": 600,
         "renderedFormCount": 600,
@@ -24869,7 +24869,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleCOVID19",
       "locale": "es",
       "language": "es",
@@ -24877,7 +24877,7 @@
       "sha256": "3aec9221ab9dedd091d46b6eee3de1085e49f3a7c93e98e4ee8b47da969b9c43",
       "questName": "D_793330426",
       "version": "1.3",
-      "authoredMarkerCount": 97,
+      "markerCount": 97,
       "runtimeQuestionIds": [
         "SRVCOV_COVIDINTRO_V1R0",
         "D_494226443?",
@@ -26464,7 +26464,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 97,
+        "markerCount": 97,
         "processorQuestionCount": 600,
         "processedQuestionCount": 600,
         "renderedFormCount": 600,
@@ -26486,7 +26486,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleCancerScreeningHistory",
       "locale": "en",
       "language": "en",
@@ -26494,7 +26494,7 @@
       "sha256": "65207c189b9b62836afc43cb80c12b416612b3d246a71d257804e0924c7817b2",
       "questName": "D_369168474",
       "version": "1.2",
-      "authoredMarkerCount": 144,
+      "markerCount": 144,
       "runtimeQuestionIds": [
         "SRVSCR_INTROSCREEN_V1R0",
         "D_890391968?",
@@ -26958,7 +26958,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 144,
+        "markerCount": 144,
         "processorQuestionCount": 144,
         "processedQuestionCount": 144,
         "renderedFormCount": 144,
@@ -26980,7 +26980,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleCancerScreeningHistory",
       "locale": "es",
       "language": "es",
@@ -26988,7 +26988,7 @@
       "sha256": "dd93c2e963d9c0f2eb202667a45748ca576aefed4157f315a6e8ddef95eb7c38",
       "questName": "D_369168474",
       "version": "1.2",
-      "authoredMarkerCount": 144,
+      "markerCount": 144,
       "runtimeQuestionIds": [
         "SRVSCR_INTROSCREEN_V1R0",
         "D_890391968?",
@@ -27451,7 +27451,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 144,
+        "markerCount": 144,
         "processorQuestionCount": 144,
         "processedQuestionCount": 144,
         "renderedFormCount": 144,
@@ -27473,7 +27473,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleClinicalBloodUrine",
       "locale": "en",
       "language": "en",
@@ -27481,7 +27481,7 @@
       "sha256": "da2014adad00d371c0044fdfe1095af570e253c293ea3e88023045d51762a91e",
       "questName": "D_826163434",
       "version": "1.4",
-      "authoredMarkerCount": 21,
+      "markerCount": 21,
       "runtimeQuestionIds": [
         "SRVBIO_MODULEINTRO_V1R0",
         "D_522008539?",
@@ -27570,7 +27570,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 21,
+        "markerCount": 21,
         "processorQuestionCount": 19,
         "processedQuestionCount": 19,
         "renderedFormCount": 19,
@@ -27592,7 +27592,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleClinicalBloodUrine",
       "locale": "es",
       "language": "es",
@@ -27600,7 +27600,7 @@
       "sha256": "2898151d137c3f33ecf857b4f82561d6c42ae0c6c1947d47a1317ba24c9de987",
       "questName": "D_826163434",
       "version": "1.4",
-      "authoredMarkerCount": 21,
+      "markerCount": 21,
       "runtimeQuestionIds": [
         "SRVBIO_MODULEINTRO_V1R0",
         "D_522008539?",
@@ -27689,7 +27689,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 21,
+        "markerCount": 21,
         "processorQuestionCount": 19,
         "processedQuestionCount": 19,
         "renderedFormCount": 19,
@@ -27711,7 +27711,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleDietScreener",
       "locale": "en",
       "language": "en",
@@ -27719,7 +27719,7 @@
       "sha256": "bfe990625139d13c6125245a441c8fcb666bcbac905e577ef374df8f708f5dca",
       "questName": "D_515124081",
       "version": "1.0",
-      "authoredMarkerCount": 3,
+      "markerCount": 3,
       "runtimeQuestionIds": [
         "INTRO_SRVDSQ",
         "D_916948380?",
@@ -27746,7 +27746,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 3,
+        "markerCount": 3,
         "processorQuestionCount": 3,
         "processedQuestionCount": 3,
         "renderedFormCount": 3,
@@ -27768,7 +27768,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleDietScreener",
       "locale": "es",
       "language": "es",
@@ -27776,7 +27776,7 @@
       "sha256": "40a21887c151720e2ce65450154e0ab8b21f5d94c6324de3f8417b35e2d5564a",
       "questName": "D_515124081",
       "version": "1.0",
-      "authoredMarkerCount": 3,
+      "markerCount": 3,
       "runtimeQuestionIds": [
         "INTRO_SRVDSQ",
         "D_916948380?",
@@ -27803,7 +27803,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 3,
+        "markerCount": 3,
         "processorQuestionCount": 3,
         "processedQuestionCount": 3,
         "renderedFormCount": 3,
@@ -27825,7 +27825,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleMenstrual",
       "locale": "en",
       "language": "en",
@@ -27833,7 +27833,7 @@
       "sha256": "13de3a43aed31befdda5be4c805a3b885e36df9275f742a19ca931e360e159b2",
       "questName": "D_912367929",
       "version": "1.1",
-      "authoredMarkerCount": 5,
+      "markerCount": 5,
       "runtimeQuestionIds": [
         "SRVBLU_MENSINTRO_V1R0",
         "SRVBLU_MENSINTRO2_V1R0",
@@ -27882,7 +27882,7 @@
         "END"
       ],
       "counts": {
-        "authoredMarkerCount": 5,
+        "markerCount": 5,
         "processorQuestionCount": 5,
         "processedQuestionCount": 5,
         "renderedFormCount": 5,
@@ -27904,7 +27904,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleMenstrual",
       "locale": "es",
       "language": "es",
@@ -27912,7 +27912,7 @@
       "sha256": "6424161524cbfd2ba9884e0db0106f1dcb37132473125de2abeeae9c8ae6cc8f",
       "questName": "D_912367929",
       "version": "1.1",
-      "authoredMarkerCount": 5,
+      "markerCount": 5,
       "runtimeQuestionIds": [
         "SRVBLU_MENSINTRO_V1R0",
         "SRVBLU_MENSINTRO2_V1R0",
@@ -27961,7 +27961,7 @@
         "END"
       ],
       "counts": {
-        "authoredMarkerCount": 5,
+        "markerCount": 5,
         "processorQuestionCount": 5,
         "processedQuestionCount": 5,
         "renderedFormCount": 5,
@@ -27983,7 +27983,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleMouthwash",
       "locale": "en",
       "language": "en",
@@ -27991,7 +27991,7 @@
       "sha256": "5d352f4bebe7c0a16cb835c24b44c93c7ce00af4a9b5c8a345ce3662036c70fd",
       "questName": "D_390351864",
       "version": "1.1",
-      "authoredMarkerCount": 34,
+      "markerCount": 34,
       "runtimeQuestionIds": [
         "SRVMTW_MODULEINTRO_V1R0",
         "D_667908442!",
@@ -28129,7 +28129,7 @@
         "END"
       ],
       "counts": {
-        "authoredMarkerCount": 34,
+        "markerCount": 34,
         "processorQuestionCount": 34,
         "processedQuestionCount": 34,
         "renderedFormCount": 34,
@@ -28151,7 +28151,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleMouthwash",
       "locale": "es",
       "language": "es",
@@ -28159,7 +28159,7 @@
       "sha256": "e7516c4836ad310bc8be26f7c96cb9e1f23ee0bcbc529677e34db332fd76637a",
       "questName": "D_390351864",
       "version": "1.1",
-      "authoredMarkerCount": 34,
+      "markerCount": 34,
       "runtimeQuestionIds": [
         "SRVMTW_MODULEINTRO_V1R0",
         "D_667908442!",
@@ -28297,7 +28297,7 @@
         "END"
       ],
       "counts": {
-        "authoredMarkerCount": 34,
+        "markerCount": 34,
         "processorQuestionCount": 34,
         "processedQuestionCount": 34,
         "renderedFormCount": 34,
@@ -28319,7 +28319,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleQoL",
       "locale": "en",
       "language": "en",
@@ -28327,7 +28327,7 @@
       "sha256": "6e1e8c3af357783996395be2a6b6907cf02f936c5cb8275717477f3e05c51b7e",
       "questName": "D_601305072",
       "version": "1.0",
-      "authoredMarkerCount": 11,
+      "markerCount": 11,
       "runtimeQuestionIds": [
         "D_284353934?",
         "D_404946076?",
@@ -28362,7 +28362,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 11,
+        "markerCount": 11,
         "processorQuestionCount": 11,
         "processedQuestionCount": 11,
         "renderedFormCount": 11,
@@ -28384,7 +28384,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "moduleQoL",
       "locale": "es",
       "language": "es",
@@ -28392,7 +28392,7 @@
       "sha256": "c068aab47cb94768399a635e7e98a48078e29e36391db55987ce33701edbf4a1",
       "questName": "D_601305072",
       "version": "1.0",
-      "authoredMarkerCount": 11,
+      "markerCount": 11,
       "runtimeQuestionIds": [
         "D_284353934?",
         "D_404946076?",
@@ -28427,7 +28427,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 11,
+        "markerCount": 11,
         "processorQuestionCount": 11,
         "processedQuestionCount": 11,
         "renderedFormCount": 11,
@@ -28449,7 +28449,7 @@
       }
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "module": "ssnModule",
       "locale": "en",
       "language": "en",
@@ -28457,7 +28457,7 @@
       "sha256": "400e5fb271c1d434c6c397f370b32fced6d16ea2a2f589720ac220ba82bbeb1b",
       "questName": "D_166676176",
       "version": "1.0",
-      "authoredMarkerCount": 3,
+      "markerCount": 3,
       "runtimeQuestionIds": [
         "SOCIALSECUR1?",
         "SOCIALSECUR2?",
@@ -28495,7 +28495,7 @@
       "unresolvedTargets": [],
       "asyncQuestionIds": [],
       "counts": {
-        "authoredMarkerCount": 3,
+        "markerCount": 3,
         "processorQuestionCount": 3,
         "processedQuestionCount": 3,
         "renderedFormCount": 3,

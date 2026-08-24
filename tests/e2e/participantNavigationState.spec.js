@@ -217,7 +217,14 @@ test.describe('participant navigation and state @core @canonical', () => {
 
       await expect(activeQuestion(page, 'PATH')).toBeVisible();
       await expect(activeQuestion(page, 'PATH').locator('#PATH_1')).toBeChecked();
-      await expect(page.locator('#storeErrorModal')).toHaveClass(/show/);
+      const storeErrorModal = page.locator('#storeErrorModal');
+      const storeErrorDialog = page.getByRole('dialog', { name: 'Error saving response' });
+      await expect(storeErrorModal).toHaveClass(/show/);
+      await expect(storeErrorDialog).toHaveAccessibleDescription(
+        'There was an error saving your response. Please try again.',
+      );
+      await expect(storeErrorDialog.locator('[role="alert"]')).toHaveCount(0);
+      await expect(storeErrorModal).toBeFocused();
       const failed = await expectHealthyHarness(page, { allowErrors: true });
       expect(failed.logs.errors.filter((entry) => entry.message.includes('syncToStore'))).toHaveLength(1);
       expect(failed.logs.storeCalls).toHaveLength(1);
@@ -232,8 +239,22 @@ test.describe('participant navigation and state @core @canonical', () => {
       expect(failed.state.mapping).toMatchObject({ PATH: 'PATH' });
       expect(failed.state.cache).toMatchObject({ PATH: '1' });
 
-      await page.locator('#storeErrorModal .btn-close').click();
-      await expect(page.locator('#storeErrorModal')).not.toHaveClass(/show/);
+      await storeErrorModal.evaluate((element) => {
+        element.addEventListener('hidden.bs.modal', () => {
+          const activeElement = document.activeElement;
+          element.__questFocusAtHidden = {
+            isQuestionTarget: activeElement?.classList?.contains('screen-reader-focus') ?? false,
+            questionId: activeElement?.closest?.('form.question.active')?.id ?? null,
+          };
+        }, { once: true });
+      });
+      await storeErrorDialog.getByRole('button', { name: 'Close' }).first().click();
+      await expect(storeErrorModal).not.toHaveClass(/show/);
+      expect(await storeErrorModal.evaluate((element) => element.__questFocusAtHidden)).toEqual({
+        isQuestionTarget: true,
+        questionId: 'PATH',
+      });
+      await expect(activeQuestion(page, 'PATH').locator('.screen-reader-focus')).toBeFocused();
       await goNext(page);
       await flushHarness(page);
 

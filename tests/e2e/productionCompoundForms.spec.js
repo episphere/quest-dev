@@ -9,7 +9,6 @@ import {
   goNext,
   harnessSnapshot,
   openParticipant,
-  waitInHarness,
 } from './support/harness.js';
 import {
   readLockedMarkdown,
@@ -133,7 +132,7 @@ function normalizeText(text) {
   return String(text ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function authoredCompoundPrompts(markdown, questionId) {
+function compoundPrompts(markdown, questionId) {
   const lines = markdown.split(/\r?\n/);
   const questionStart = lines.findIndex((line) => line.startsWith(`[${questionId}`));
   expect(questionStart, `Locked corpus question ${questionId} must exist`).toBeGreaterThanOrEqual(0);
@@ -155,7 +154,7 @@ function authoredCompoundPrompts(markdown, questionId) {
   return prompts;
 }
 
-function authoredConditionalCompoundPrompts(markdown, questionId) {
+function conditionalCompoundPrompts(markdown, questionId) {
   const lines = markdown.split(/\r?\n/);
   const questionStart = lines.findIndex((line) => line.startsWith(`[${questionId}`));
   expect(questionStart, `Locked corpus question ${questionId} must exist`).toBeGreaterThanOrEqual(0);
@@ -431,7 +430,7 @@ test.describe('locked production compound-response forms @corpus', () => {
 
   test('Module 4 commute duration limits visible subgroups to selected modes and persists them independently', async ({ page }) => {
     const markdown = readLockedMarkdown('module4');
-    const expectedPrompts = authoredConditionalCompoundPrompts(markdown, commuteDuration);
+    const expectedPrompts = conditionalCompoundPrompts(markdown, commuteDuration);
     const selectedModes = ['767755239', '385609081'];
     // The valid selected-mode transition leads to a production image. It is
     // unrelated to this contract, so retain the suite's boundary by
@@ -574,7 +573,7 @@ test.describe('locked production compound-response forms @corpus', () => {
   for (const runtimeCase of conditionalRuntimeCases) {
     test(`Module 4 exposes ${runtimeCase.description} as labelled groups`, async ({ page }) => {
       const markdown = readLockedMarkdown('module4');
-      const expectedPrompts = authoredConditionalCompoundPrompts(markdown, runtimeCase.questionId);
+      const expectedPrompts = conditionalCompoundPrompts(markdown, runtimeCase.questionId);
       expect(Object.keys(expectedPrompts)).toHaveLength(8);
 
       await openParticipant(page, {
@@ -656,7 +655,6 @@ test.describe('locked compound-radio accessibility @canonical @windows-a11y @cor
       ));
 
       if (locale === 'en' && conditionalKeyboardProjects.has(testInfo.project.name)) {
-        await waitInHarness(page, 550);
         await duration.locator('#CAR_DURATION_1').focus();
         await page.keyboard.press('Space');
         await expect(duration.locator('#CAR_DURATION_1')).toBeFocused();
@@ -688,7 +686,7 @@ test.describe('locked compound-radio accessibility @canonical @windows-a11y @cor
 
     test(`Module 4 conditional commute groups ${locale} expose only selected modes`, async ({ page }) => {
       const markdown = readLockedMarkdown('module4', locale);
-      const expectedPrompts = authoredConditionalCompoundPrompts(markdown, commuteDuration);
+      const expectedPrompts = conditionalCompoundPrompts(markdown, commuteDuration);
       expect(Object.keys(expectedPrompts).sort()).toEqual([...commuteDurationGroups].sort());
 
       await openParticipant(page, {
@@ -730,7 +728,7 @@ test.describe('locked compound-radio accessibility @canonical @windows-a11y @cor
         question,
         dietGroupNames,
         157,
-        authoredCompoundPrompts(markdown, dietQuestion),
+        compoundPrompts(markdown, dietQuestion),
       );
 
       const intendedChoices = locale === 'es'
@@ -762,7 +760,7 @@ test.describe('locked compound-radio accessibility @canonical @windows-a11y @cor
         question,
         qualityOfLifeGroupNames,
         20,
-        authoredCompoundPrompts(markdown, qualityOfLifeQuestion),
+        compoundPrompts(markdown, qualityOfLifeQuestion),
       );
 
       const prompts = locale === 'es'

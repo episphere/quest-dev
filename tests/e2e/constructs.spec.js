@@ -70,7 +70,7 @@ test.describe('canonical Markdown construct renderer @canonical @constructs', ()
     };
     for (const [id, { type, name }] of Object.entries(scalarControls)) {
       await expect(root.locator(`#${id}`), `${id} should render as ${type}`).toHaveAttribute('type', type);
-      await expect(root.locator(`#${id}`), `${id} should retain its authored caption`).toHaveAttribute('aria-label', name);
+      await expect(root.locator(`#${id}`), `${id} should retain its caption`).toHaveAttribute('aria-label', name);
     }
     await expect(root.locator('#TIME_VALUE')).toHaveAttribute('type', 'time');
     await expect(root.locator('#TIME_VALUE')).not.toHaveAttribute('aria-label');

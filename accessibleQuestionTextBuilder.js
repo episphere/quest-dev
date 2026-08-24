@@ -1,29 +1,96 @@
 import { evaluateCondition } from './evaluateConditions.js';
 import { handleForIDAttributes, moduleParams } from './questionnaire.js';
 
-const QUESTION_TRANSITION_FOCUS_DELAY_MS = 500;
-const MODAL_RETURN_FOCUS_DELAY_MS = 100;
+const QUESTION_FOCUS_CANCEL_EVENTS = ['focusin', 'keydown', 'pointerdown', 'click'];
+let pendingQuestionFocusHandoff = null;
 let selectionAnnouncementTimeout = null;
+
+/**
+ * Begin the focus handoff for a newly activated question.
+ * Participant or host interaction before the next animation frame cancels it.
+ * @param {Document} ownerDocument - The document containing the active question.
+ * @returns {{schedule: (focusableEle: HTMLElement) => void, cancel: () => void} | null}
+ */
+export function beginQuestionFocusHandoff(ownerDocument) {
+    clearQuestionFocusHandoff();
+
+    const ownerWindow = ownerDocument?.defaultView;
+    if (moduleParams.isRenderer || !ownerWindow?.requestAnimationFrame) return null;
+
+    let active = true;
+    let animationFrameId = null;
+    let handoff;
+
+    const clear = ({ cancelFrame = true } = {}) => {
+        if (!active) return;
+        active = false;
+
+        if (cancelFrame && animationFrameId !== null) {
+            ownerWindow.cancelAnimationFrame(animationFrameId);
+        }
+        animationFrameId = null;
+
+        QUESTION_FOCUS_CANCEL_EVENTS.forEach((eventName) => {
+            ownerDocument.removeEventListener(eventName, handoff.cancel, true);
+        });
+
+        if (pendingQuestionFocusHandoff === handoff) {
+            pendingQuestionFocusHandoff = null;
+        }
+    };
+
+    handoff = {
+        schedule(focusableEle) {
+            if (!active || pendingQuestionFocusHandoff !== handoff || animationFrameId !== null) return;
+
+            animationFrameId = ownerWindow.requestAnimationFrame(() => {
+                if (!active || pendingQuestionFocusHandoff !== handoff) return;
+
+                // Remove the focusin listener before moving focus so the handoff
+                // does not interpret its own focus event as participant activity.
+                clear({ cancelFrame: false });
+                focusAccessibleQuestionTarget(focusableEle);
+            });
+        },
+        cancel() {
+            clear();
+        },
+    };
+
+    pendingQuestionFocusHandoff = handoff;
+    QUESTION_FOCUS_CANCEL_EVENTS.forEach((eventName) => {
+        ownerDocument.addEventListener(eventName, handoff.cancel, true);
+    });
+
+    return handoff;
+}
+
+/**
+ * Cancel any question-focus handoff left by the current render or transition.
+ */
+export function clearQuestionFocusHandoff() {
+    pendingQuestionFocusHandoff?.cancel();
+}
 
 /**
  * Initialize the question text and focus management for screen readers.
  * This drives the screen reader's question announcement and focus when a question is loaded.
- * Set the focus after a brief timeout to ensure the screen reader has time to process the new content.
+ * Schedule focus at the next rendering opportunity after question preparation completes.
  * @param {HTMLElement} fieldsetEle - The fieldset element containing the question text.
  * @param {Boolean} questionFocusSet - The flag to manage screen reader focus.
+ * @param {{schedule: (focusableEle: HTMLElement) => void, cancel: () => void} | null} [questionFocusHandoff] - The transition's cancellable focus handoff.
  * @returns {Boolean} - The updated questionFocusSet flag.
  */
 
-export function manageAccessibleQuestion(fieldsetEle, questionFocusSet) {
+export function manageAccessibleQuestion(fieldsetEle, questionFocusSet, questionFocusHandoff) {
     if (fieldsetEle && !questionFocusSet) {
         // Build the question text and get the focusable element
         let focusableEle = buildQuestionText(fieldsetEle);
 
-        // Focus the hidden, focusable element
+        // Focus the hidden, programmatic target on the next animation frame.
         if (!moduleParams.isRenderer) {
-            setTimeout(() => {
-                focusAccessibleQuestionTarget(focusableEle);
-            }, QUESTION_TRANSITION_FOCUS_DELAY_MS);
+            const handoff = questionFocusHandoff ?? beginQuestionFocusHandoff(fieldsetEle.ownerDocument);
+            handoff?.schedule(focusableEle);
         }
 
         questionFocusSet = true;
@@ -766,12 +833,19 @@ function createFocusableElement(fieldsetEle, focusNode) {
  * Restore question context after an unanswered-response modal closes.
  * Focus the question target after Bootstrap finishes hiding the modal.
  */
-export function closeModalAndFocusQuestion() {
+export function closeModalAndFocusQuestion(event) {
     if (moduleParams.isRenderer) return;
+    if (event?.currentTarget?._questRenderDisposal) return;
 
-    // Retain the short modal-settle buffer. For a soft-modal continuation, the newly
-    // activated question is already in the DOM when Bootstrap's hidden event runs.
-    const activeQuestion = moduleParams.questDiv.querySelector('.question.active');
+    const questDiv = moduleParams.questDiv;
+    // An obsolete modal can finish hiding after a sequential question render.
+    // Never let its lifecycle move focus inside the replacement Quest instance.
+    if (event?.currentTarget && !questDiv?.contains(event.currentTarget)) return;
+
+    // For a soft-modal continuation, the newly activated question is already in
+    // the DOM when Bootstrap's hidden event runs. Its normal handoff is replaced
+    // here so the question receives focus only once.
+    const activeQuestion = questDiv?.querySelector('.question.active');
     if (!activeQuestion) return;
 
     const accessibleQuestion = activeQuestion.querySelector('fieldset') || activeQuestion;
@@ -781,9 +855,24 @@ export function closeModalAndFocusQuestion() {
     // final markup is available.
     if (!focusableEle) return;
 
-    setTimeout(() => {
-        focusAccessibleQuestionTarget(focusableEle);
-    }, MODAL_RETURN_FOCUS_DELAY_MS);
+    // Bootstrap has finished hiding the dialog before this event fires, and
+    // the question markup is already prepared. Cancel any transition handoff
+    // so no later task can pull focus away from the participant's next action.
+    clearQuestionFocusHandoff();
+
+    const ownerDocument = accessibleQuestion.ownerDocument;
+    const dismissedModal = event?.currentTarget;
+    const activeElement = ownerDocument.activeElement;
+    const focusStillBelongsToDismissal = !activeElement
+        || activeElement === ownerDocument.body
+        || activeElement === ownerDocument.documentElement
+        || dismissedModal?.contains(activeElement);
+
+    // A participant, host, or future Bootstrap trigger may have already moved
+    // focus while the dialog was closing. Respect that newer focus decision.
+    if (!focusStillBelongsToDismissal) return;
+
+    focusAccessibleQuestionTarget(focusableEle);
 }
 
 function scheduleSelectionAnnouncement(liveRegion, announcementText, delay) {

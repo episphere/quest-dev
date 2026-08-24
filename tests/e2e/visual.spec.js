@@ -5,7 +5,6 @@ import {
   openParticipant,
   readCanonicalFixture,
   selectLabeledResponse,
-  waitInHarness,
 } from './support/harness.js';
 import {
   installAuthoringRoutes,
@@ -59,7 +58,6 @@ test.describe('stable participant styling @visual', () => {
 
   test('keeps keyboard focus visible on list and grid choices', async ({ page }, testInfo) => {
     await openParticipant(page);
-    await waitInHarness(page, 550);
     const listChoice = activeQuestion(page, 'CHOICE').locator('#CHOICE_1');
     await listChoice.focus();
     await page.keyboard.press('Space');
@@ -74,7 +72,6 @@ test.describe('stable participant styling @visual', () => {
 
     await openParticipant(page, { fixture: 'gridResponsive.txt' });
     await goNext(page);
-    await waitInHarness(page, 550);
     const gridChoice = activeQuestion(page, 'GRID_RATE').locator('#GRID_WALK_1');
     await gridChoice.focus();
     await page.keyboard.press('Space');
@@ -116,7 +113,6 @@ test.describe('stable participant styling @visual', () => {
     await openParticipant(page, { fixture: 'navigationState.txt' });
     await selectLabeledResponse(page, 'Yes');
     await goNext(page);
-    await waitInHarness(page, 550);
     await activeQuestion(page, 'DETAIL').locator('#detail').focus();
     await stabilizeVisual(page, testInfo);
 

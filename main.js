@@ -4,7 +4,7 @@ import { addEventListeners } from "./eventHandlers.js";
 import { ariaLiveAnnouncementRegions, progressBar, responseRequestedModal, responseRequiredModal, responseErrorModal, storeErrorModal, submitModal  } from "./common.js";
 import { initSurvey } from "./initSurvey.js";
 import { getStateManager, initializeStateManager } from "./stateManager.js";
-import { clearSelectionAnnouncement } from "./accessibleQuestionTextBuilder.js";
+import { clearQuestionFocusHandoff, clearSelectionAnnouncement } from "./accessibleQuestionTextBuilder.js";
 
 import en from "./i18n/en.js";
 import es from "./i18n/es.js";
@@ -16,7 +16,8 @@ transform.rbAndCbClick = rbAndCbClick;
 
 transform.render = async (obj, divID, previousResults = {}) => {
   try {
-    // Cancel potential delayed announcement updates from the prior render.
+    // Cancel pending accessibility work from the prior render.
+    clearQuestionFocusHandoff();
     clearSelectionAnnouncement();
 
     // Set the global moduleParams object with data needed for different parts of the app.
@@ -148,10 +149,12 @@ function setInitialQuestionOnStartup(questionProcessor, activeQuestionID, initia
 }
 
 function setModuleParams(obj, divID, previousResults) {
-  // Bootstrap renders popover tips outside the Quest root. Dispose any
-  // existing instances before a host starts a sequential render.
+  // Bootstrap renders popover tips and modal backdrops outside the Quest
+  // root. Dispose existing instances before a host starts a sequential
+  // render so no detached overlay or focus trap survives replacement.
   if (moduleParams.questDiv) {
     disposePopovers(moduleParams.questDiv);
+    disposeModals(moduleParams.questDiv);
   }
 
   moduleParams.url = obj.url || '';
@@ -182,6 +185,25 @@ function setModuleParams(obj, divID, previousResults) {
     : moduleParams.questVersion
       ? `https://cdn.jsdelivr.net/gh/episphere/quest@v${moduleParams.questVersion}/`
       : 'https://episphere.github.io/quest-dev/';
+}
+
+function disposeModals(questDiv) {
+  const Modal = globalThis.bootstrap?.Modal;
+  if (!Modal) return;
+
+  questDiv.querySelectorAll('.modal').forEach((modalElement) => {
+    const modal = Modal.getInstance(modalElement);
+    if (!modal) return;
+
+    // Hiding is synchronous for Quest's modals and emits the
+    // ordinary hidden event before the old root is replaced. Mark this as a
+    // render disposal so return-focus handlers do not target obsolete markup.
+    modalElement._questRenderDisposal = true;
+    if (modalElement.classList.contains('show')) {
+      modal.hide();
+    }
+    modal.dispose();
+  });
 }
 
 function isLocalDevelopment() {

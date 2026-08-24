@@ -23,14 +23,74 @@ For the keyboard-only command guide, see
   `fixture=validation.txt`; for navigation/restoration use
   `fixture=navigationState.txt`; for compound radio subgroups use
   `fixture=compoundRadioGroups.txt` and repeat with
-  `fixture=compoundRadioGroupsSpanish.txt`; for conditionally displayed
+  `fixture=compoundRadioGroupsSpanish.txt&lang=es`; for conditionally displayed
   radio subgroups use `fixture=conditionalCompoundRadioGroups.txt` and
-  repeat with `fixture=conditionalCompoundRadioGroupsSpanish.txt`.
+  repeat with `fixture=conditionalCompoundRadioGroupsSpanish.txt&lang=es`.
 - Keep Quest inside `#root > .row > #questionnaireRoot`.
-- Start each scenario from a new browser page. Quest owns module-level state and a second render in the same page is not a supported isolation boundary.
+- Start each manual scenario from a new browser page. The participant harness intentionally permits one render per page so one scenario cannot contaminate the next; Quest's sequential-render behavior is covered separately by automation.
 - Do not enable browser extensions other than the screen reader under test.
 - Record operating-system, browser, screen-reader, and Quest commit/version values before testing.
 - Run `npm run test:e2e -- --grep "@canonical|@axe|@responsive|@windows-a11y"` first. Automated results are prerequisites, not substitutes for this matrix.
+
+## Runnable dialog and asynchronous scenarios
+
+Start each check in a new page. Use these exact harness URLs and actions so the
+same configured state is exercised in every browser and screen reader.
+
+### Requested- and required-response dialogs
+
+Open
+`http://127.0.0.1:4173/tests/harness/participant.html?fixture=unansweredModals.txt`.
+
+1. Leave `SOFT` unanswered and activate Next. Test every dismissal action in the requested-response dialog.
+2. Reopen it, activate Continue Without Answering, and confirm `HARD` becomes active.
+3. Leave `HARD` unanswered and activate Next. Test every dismissal action in the required-response dialog.
+4. After each dismissal, immediately move to or activate a response. Wait at least one second and confirm focus does not jump back.
+
+### Submit dialog
+
+Open
+`http://127.0.0.1:4173/tests/harness/participant.html?fixture=validation.txt`.
+
+1. Enter `2`, activate Next, and activate Submit your survey.
+2. Test Close, Cancel, Escape, and keyboard focus containment in the submit dialog.
+3. After dismissal, immediately interact with the active question, wait at least one second, and confirm focus does not jump back.
+
+### Response-confirmation dialog
+
+Open both language-specific URLs:
+
+- English: `http://127.0.0.1:4173/tests/harness/participant.html?fixture=responseConfirmation.txt&lang=en`
+- Spanish: `http://127.0.0.1:4173/tests/harness/participant.html?fixture=responseConfirmationSpanish.txt&lang=es`
+
+For each URL:
+
+1. Enter `65` in the weight field and move focus out of the field.
+2. Confirm the response-confirmation dialog uses the selected language and test Close, Correct/Correcto, Incorrect/Incorrecto, and Escape.
+3. Confirm each dismissal returns focus to the weight field. Immediately edit or navigate, wait at least one second, and confirm focus does not jump back.
+
+### Configured store failure
+
+Open
+`http://127.0.0.1:4173/tests/harness/participant.html?fixture=navigationState.txt&scenario=store-failure`.
+
+1. Select Yes and activate Next. The first store call is configured to return a non-success result and the store-error dialog must open.
+2. Leave the dialog open for at least six seconds. Confirm it remains open and keyboard focus remains contained.
+3. Dismiss it with Close. Confirm focus returns to the active question, then activate Next to exercise the configured successful retry.
+4. Immediately interact after dismissal, wait at least one second, and confirm focus does not jump back.
+
+### Asynchronous question success and error
+
+For success, open
+`http://127.0.0.1:4173/tests/harness/participant.html?fixture=asyncQuestion.txt&scenario=async-success`.
+Select Clinical and activate Next. Confirm the `ASYNC` question finishes loading before focus reaches it, then select a host-provided option and continue.
+
+For error, open
+`http://127.0.0.1:4173/tests/harness/participant.html?fixture=asyncQuestion.txt&scenario=async-error`.
+Select Research and activate Next. Confirm `ASYNC` remains active, its in-question error is announced, and focus does not leave the question for stale or missing response markup.
+
+The harness accepts only the documented `scenario` values and the `en` or `es`
+language values. A scenario used with the wrong fixture is rejected before Quest renders.
 
 ## Environment matrix
 
@@ -97,12 +157,12 @@ First run with Quick Nav off. Repeat response navigation and activation with Qui
 2. Confirm the survey boundary and the first question are announced once. The question must have a meaningful group/legend name.
 3. Navigate by form controls and by VoiceOver cursor. Each response must expose role, name, and selected/checked state; styled labels alone are insufficient.
 4. Activate a response with the VoiceOver default action (normally VO+Space). Confirm the visual selection, DOM checked state, and polite live announcement all agree.
-5. Immediately navigate forward after selecting a response. Focus must land at the newly active question context after the deliberate delay; it must not remain on a removed button or move to the PWA header/footer. The previous response's delayed “Selected” or “Unselected” message must not interrupt or replay over the new question.
+5. Immediately navigate forward after selecting a response. The newly active question must be announced once and receive focus promptly; focus must not remain on a removed button, move to the PWA header/footer, or jump away after the participant starts using a response. The previous response's delayed “Selected” or “Unselected” message must not interrupt or replay over the new question.
 6. Use Back immediately after another selection. Confirm the earlier response is restored and announced with the correct checked state, and that the response announcement from the question being left does not replay.
 7. Exercise text, number, select, date, and time controls. Confirm each control has a useful name and browser-native editing still works. In Module 1 weight history, verify that each field includes its distinct age and unit context; in Spanish question `D_912857732`, type with the physical keyboard and confirm whole numbers are accepted without a browser error while decimal punctuation is filtered. In a Module 4 backup-address form, verify that City, State/Province, Zip code, and Country remain distinguishable.
 8. Trigger required and range validation. Confirm the error is announced, focus remains in the question, and correction clears the error.
 9. Exercise the response grid. Confirm row prompt, column option, and selected state are available together.
-10. Open and close soft-validation and submit dialogs. Confirm dialog name, focus entry, keyboard containment, close action, and return focus.
+10. Open and close requested-response, required-response, submit, response-confirmation, and configured store-error dialogs. Confirm dialog name and description, focus entry, keyboard containment, each close action, and immediate return to the invoking control or active question context. Leave the store-error dialog open for at least six seconds and confirm it remains open with focus contained, then dismiss it manually. After each dismissal, immediately move to or activate a response, wait at least one second, and confirm focus never jumps back.
 11. Open each compound-radio fixture. Enter both activity groups and traverse all answers. Confirm VoiceOver announces the visible activity prompt as the radio-group name, each answer as the radio name, and its checked state. Confirm the activity prompt is not a separate empty or alert stop.
 12. Open each conditional compound-radio fixture. Select both travel modes and continue. Confirm each mode prompt is announced once when entering its group; each answer name and checked state is announced once; and exiting does not repeat the full answer list. Use Back, remove one mode, and continue again. Confirm the removed group is absent, the retained group is still named correctly, and no duplicate, empty, or separate repeated-prompt stop is announced.
 

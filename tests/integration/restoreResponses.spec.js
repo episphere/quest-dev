@@ -95,7 +95,7 @@ describe('response restoration', () => {
     expect(quest.root.querySelector('#DETAIL').value).toBe('restored detail');
   });
 
-  it('restores XOR object values into authored XOR controls', async () => {
+  it('restores XOR object values into XOR controls', async () => {
     const quest = await renderFreshQuest({
       markdown: `
         {"name":"RESTORE_XOR"}

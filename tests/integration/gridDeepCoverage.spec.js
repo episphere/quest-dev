@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderFreshQuest } from '../helpers/questRuntime.js';
 
 // This is the nine-row sleep grid from the locked production module2.txt
-// corpus (commit 7ae99a22af325cf0e14be047a7636462db9bfd50). Keeping the authored
+// corpus (commit 7ae99a22af325cf0e14be047a7636462db9bfd50). Keeping the source
 // IDs and response values makes the state-shape contract reviewable.
 const PRODUCTION_SLEEP_GRID_SURVEY = `
 {"name":"TEST_PRODUCTION_GRID"}
@@ -195,8 +195,15 @@ describe('deep grid state coverage', () => {
     const grid = quest.root.querySelector('#GRID_VALIDATION');
 
     grid.querySelector('button.next').click();
-    await vi.waitFor(() => expect(quest.root.querySelector(`#${modalId}`).classList.contains('show')).toBe(true));
-    expect(quest.root.querySelector(`#${modalId} [role="alert"]`)).not.toBeNull();
+    const modal = quest.root.querySelector(`#${modalId}`);
+    await vi.waitFor(() => expect(modal.classList.contains('show')).toBe(true));
+    const descriptionId = modal.getAttribute('aria-describedby');
+    const description = modal.querySelector(`#${descriptionId}`);
+    expect(description).not.toBeNull();
+    expect(description.innerText.trim()).not.toBe('');
+    expect(description.hasAttribute('role')).toBe(false);
+    expect(description.hasAttribute('tabindex')).toBe(false);
+    expect(modal.querySelector('[role="alert"]')).toBeNull();
     expect(quest.root.querySelector('form.question.active')?.id).toBe('GRID_VALIDATION');
     expect(quest.errors).toEqual([]);
   });

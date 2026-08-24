@@ -449,7 +449,7 @@ describe('state manager', () => {
     expect(await manager.submitSurvey()).toBeUndefined();
   });
 
-  it('logs invalid store rollback click types and automatically hides the recovery modal', async () => {
+  it('logs invalid store rollback click types and keeps the recovery modal open until dismissal', async () => {
     vi.useFakeTimers();
     document.body.innerHTML += '<div id="storeErrorModal"></div>';
     const store = vi.fn(async () => ({ code: 503 }));
@@ -461,7 +461,10 @@ describe('state manager', () => {
     manager.syncToStore(button);
     await vi.waitFor(() => expect(moduleParams.errorLogger).toHaveBeenCalledWith('Invalid click type (handleStoreError):', 'unknown'));
     expect(document.querySelector('#storeErrorModal').classList).toContain('show');
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(document.querySelector('#storeErrorModal').classList).toContain('show');
+
+    globalThis.bootstrap.Modal.getInstance(document.querySelector('#storeErrorModal')).hide();
     expect(document.querySelector('#storeErrorModal').classList).not.toContain('show');
   });
 

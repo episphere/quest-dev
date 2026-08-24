@@ -7,7 +7,7 @@ import { analyzeQuestAxe } from './support/axe.js';
 import { axeDefects } from '../knownDefects/registry.js';
 
 test.describe('accessibility lifecycle known defects @known-defect', () => {
-  test('production-shaped image markup supplies a text alternative and has no image-alt violation', async ({ page }, testInfo) => {
+  test('production-shaped image markup records an explicit alternative-text decision and has no image-alt violation', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'The image-alt defect is characterized once in Chromium.');
     const defect = axeDefects.imageAlt;
 
@@ -18,7 +18,7 @@ test.describe('accessibility lifecycle known defects @known-defect', () => {
     const imageAltFindings = (await analyzeQuestAxe(page)).filter((finding) => finding.id === defect.ruleId);
 
     test.fail(true, `${defect.localDefectId}: ${defect.reason}`);
-    expect(alt).toMatch(/\S/);
+    expect(alt).not.toBeNull();
     expect(imageAltFindings).toEqual([]);
   });
 });

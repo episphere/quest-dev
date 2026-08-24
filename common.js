@@ -33,15 +33,15 @@ export const progressBar = () => {
 export const responseRequestedModal = () => {
 
     return `
-      <div class="modal" id="softModal" tabindex="-1" role="dialog" aria-labelledby="softModalTitle" aria-modal="true">
+      <div class="modal" id="softModal" tabindex="-1" role="dialog" aria-labelledby="softModalTitle" aria-modal="true" aria-describedby="modalBodyText">
           <div class="modal-dialog" role="document">
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="softModalTitle" tabindex="-1">${translate('responseRequestedLabel')}</h5>
-                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
-                  <div id="modalBody" class="modal-body" aria-describedby="modalBodyText">
+                  <div id="modalBody" class="modal-body">
                       <p id="modalBodyText"></p>
                   </div>
                   <div id="softModalFooter" class="modal-footer d-flex flex-column flex-sm-row justify-content-between align-items-center g-2">
@@ -62,7 +62,7 @@ export const responseRequiredModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="hardModalLabel" tabindex="-1">${translate('responseRequiredLabel')}</h5>
-                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
                   <div class="modal-body">
@@ -80,19 +80,19 @@ export const responseRequiredModal = () => {
 export const responseErrorModal = () => {
     
     return `
-      <div class="modal" id="softModalResponse" tabindex="-1" role="dialog" aria-labelledby="softModalResponseTitle" aria-modal="true" aria-describedby="softModalResponseBody">
+      <div class="modal" id="softModalResponse" tabindex="-1" role="dialog" aria-labelledby="softModalResponseTitle" aria-modal="true" aria-describedby="modalResponseBody">
           <div class="modal-dialog" role="document">
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="softModalResponseTitle" tabindex="-1">${translate('responseErrorLabel')}</h5>
-                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
                   <div id="modalResponseBody" class="modal-body">
                       <p>${translate('responseErrorBody')}</p>
                   </div>
                   <div id="softModalResponseFooter" class="modal-footer d-flex justify-content-between">
-                      <button type="button" id=modalResponseContinueButton class="btn btn-success" data-bs-dismiss="modal">${translate('correctButton')}</button>
+                      <button type="button" id=modalResponseContinueButton class="btn btn-success">${translate('correctButton')}</button>
                       <button type="button" id=modalResponseCloseButton class="btn btn-danger" data-bs-dismiss="modal">${translate('incorrectButton')}</button>
                   </div>
               </div>
@@ -104,15 +104,15 @@ export const responseErrorModal = () => {
 export const submitModal = () => {
 
     return `
-      <div class="modal" id="submitModal" tabindex="-1" role="dialog" aria-labelledby="submitModalTitle" aria-modal="true">
+      <div class="modal" id="submitModal" tabindex="-1" role="dialog" aria-labelledby="submitModalTitle" aria-modal="true" aria-describedby="submitModalBodyText">
           <div class="modal-dialog" role="document">
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="submitModalTitle" tabindex="-1">${translate('submitLabel')}</h5>
-                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
-                  <div id="submitModalBody" class="modal-body" aria-describedby="submitModalBodyText">
+                  <div id="submitModalBody" class="modal-body">
                       <p id="submitModalBodyText">${translate('submitBody')}</p>
                   </div>
                   <div class="modal-footer d-flex justify-content-between">
@@ -133,14 +133,14 @@ export const storeErrorModal = () => {
               <div class="modal-content">
                   <div class="modal-header">
                       <h5 class="modal-title" id="storeErrorModalTitle" tabindex="-1">${translate('storeErrorLabel')}</h5>
-                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close">
+                      <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
-                  <div id="modalResponseBody" class="modal-body">
+                  <div id="storeErrorModalBody" class="modal-body">
                       <p>${translate('storeErrorBody')}</p>
                   </div>
                   <div id="storeErrorModalFooter" class="modal-footer text-center">
-                      <button type="button" id="cancelModalButton" class="btn btn-danger mx-auto" data-bs-dismiss="modal">${translate('closeButton')}</button>
+                      <button type="button" id="storeErrorModalCloseButton" class="btn btn-danger mx-auto" data-bs-dismiss="modal">${translate('closeButton')}</button>
                   </div>
               </div>
           </div>

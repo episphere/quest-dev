@@ -129,7 +129,6 @@ test.describe('participant responsive layout @responsive @canonical', () => {
     );
 
     await openParticipant(page, { fixture: 'gridResponsive.txt' });
-    await waitInHarness(page, 550);
     await goNext(page);
     await page.mouse.move(0, 0);
 
@@ -169,7 +168,6 @@ test.describe('participant responsive layout @responsive @canonical', () => {
 
     await openParticipant(page, { fixture: 'gridResponsive.txt' });
     await goNext(page);
-    await waitInHarness(page, 550);
 
     const question = activeQuestion(page, 'GRID_RATE');
     const row = question.locator('tr[data-question-id="GRID_WALK"]');
@@ -207,9 +205,7 @@ test.describe('participant responsive layout @responsive @canonical', () => {
     );
 
     await openParticipant(page, { fixture: 'gridCheckboxFocus.txt' });
-    await waitInHarness(page, 550);
     await goNext(page);
-    await waitInHarness(page, 550);
 
     const question = activeQuestion(page, 'GRID_CHECK');
     await expect(question.getByRole('checkbox', {

@@ -205,13 +205,8 @@ const createStateManager = (store, initialState = {}) => {
     function showStoreErrorModal() {
         const modalElement = moduleParams.questDiv?.querySelector('#storeErrorModal');
         if (!modalElement) return;
-        const modal = new bootstrap.Modal(modalElement);
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
         modal.show();
-
-        // Automatically close the modal after 5 seconds.
-        setTimeout(() => {
-            modal.hide();
-        }, 5000);
     }
 
     // Remove null and undefined values for the surveyState logging (in the renderer).

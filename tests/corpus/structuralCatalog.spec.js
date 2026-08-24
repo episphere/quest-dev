@@ -18,7 +18,7 @@ const canonicalClock = new Date('2024-07-15T12:00:00.000Z');
 const primaryPersona = hostRegistry.personas.find(({ id }) => id === 'external-branch-primary');
 
 const aggregateCountFields = [
-  'authoredMarkerCount',
+  'markerCount',
   'processorQuestionCount',
   'processedQuestionCount',
   'renderedFormCount',
@@ -179,7 +179,7 @@ function compactSurvey(survey) {
     sha256: survey.sha256,
     questName: survey.questName,
     version: survey.version,
-    authoredMarkerCount: survey.authoredMarkerCount,
+    markerCount: survey.markerCount,
     runtimeQuestionIds: survey.processedQuestionIds,
     responseControlsByType: responseControlTypes(survey.questionRecords),
     explicitTransitions: transitionSummary(survey.transitions),
@@ -213,7 +213,7 @@ function moduleSummaries(surveys) {
       surveys: moduleSurveys.map(({ locale, path: surveyPath, counts }) => ({
         locale,
         path: surveyPath,
-        authoredMarkerCount: counts.authoredMarkerCount,
+        markerCount: counts.markerCount,
         processorQuestionCount: counts.processorQuestionCount,
         gridQuestionCount: counts.gridQuestionCount,
         loopDefinitionCount: counts.loopDefinitionCount,
