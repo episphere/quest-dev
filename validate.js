@@ -126,7 +126,12 @@ export function clearValidationError(inputElement) {
         }
     }
 }
-export function validationError(inputElement, errorMsg, relatedTargets = [inputElement]) {
+export function validationError(
+    inputElement,
+    errorMsg,
+    relatedTargets = [inputElement],
+    { liveRegion = true } = {},
+) {
     let errSpan = null
     let errDiv = null;
 
@@ -150,13 +155,19 @@ export function validationError(inputElement, errorMsg, relatedTargets = [inputE
     if (!errDiv.id) {
         errDiv.id = nextValidationErrorId(inputElement.ownerDocument);
     }
-    errDiv.setAttribute('role', 'alert');
-    errDiv.setAttribute('aria-atomic', 'true');
+    if (liveRegion) {
+        errDiv.setAttribute('role', 'alert');
+        errDiv.setAttribute('aria-atomic', 'true');
+    } else {
+        errDiv.removeAttribute('role');
+        errDiv.removeAttribute('aria-atomic');
+    }
     associateValidationError(errDiv, relatedTargets);
 
     errSpan.innerText = errorMsg
     inputElement.classList.add("invalid");
     inputElement.closest("form")?.classList.add("invalid");
+    return errDiv;
 }
 
 function validate_number(inputElement) {

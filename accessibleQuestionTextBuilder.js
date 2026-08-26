@@ -9,7 +9,7 @@ let selectionAnnouncementTimeout = null;
  * Begin the focus handoff for a newly activated question.
  * Participant or host interaction before the next animation frame cancels it.
  * @param {Document} ownerDocument - The document containing the active question.
- * @returns {{schedule: (focusableEle: HTMLElement) => void, cancel: () => void} | null}
+ * @returns {{schedule: (focusableEle: HTMLElement, options?: {onInteractionCancel?: () => void}) => void, cancel: (event?: Event) => void} | null}
  */
 export function beginQuestionFocusHandoff(ownerDocument) {
     clearQuestionFocusHandoff();
@@ -19,6 +19,8 @@ export function beginQuestionFocusHandoff(ownerDocument) {
 
     let active = true;
     let animationFrameId = null;
+    let interactionCancelHandler = null;
+    let wasCancelledByInteraction = false;
     let handoff;
 
     const clear = ({ cancelFrame = true } = {}) => {
@@ -39,21 +41,38 @@ export function beginQuestionFocusHandoff(ownerDocument) {
         }
     };
 
+    const notifyInteractionCancel = (handler = interactionCancelHandler) => {
+        interactionCancelHandler = null;
+        wasCancelledByInteraction = false;
+        handler?.();
+    };
+
     handoff = {
-        schedule(focusableEle) {
-            if (!active || pendingQuestionFocusHandoff !== handoff || animationFrameId !== null) return;
+        schedule(focusableEle, { onInteractionCancel } = {}) {
+            if (!active) {
+                if (wasCancelledByInteraction) notifyInteractionCancel(onInteractionCancel);
+                return;
+            }
+            if (pendingQuestionFocusHandoff !== handoff || animationFrameId !== null) return;
+
+            interactionCancelHandler = onInteractionCancel;
 
             animationFrameId = ownerWindow.requestAnimationFrame(() => {
                 if (!active || pendingQuestionFocusHandoff !== handoff) return;
 
                 // Remove the focusin listener before moving focus so the handoff
                 // does not interpret its own focus event as participant activity.
+                interactionCancelHandler = null;
                 clear({ cancelFrame: false });
                 focusAccessibleQuestionTarget(focusableEle);
             });
         },
-        cancel() {
+        cancel(event) {
+            const cancelledByInteraction = Boolean(event?.type);
+            if (cancelledByInteraction) wasCancelledByInteraction = true;
+            const handler = cancelledByInteraction ? interactionCancelHandler : null;
             clear();
+            if (cancelledByInteraction && handler) notifyInteractionCancel(handler);
         },
     };
 
@@ -78,25 +97,61 @@ export function clearQuestionFocusHandoff() {
  * Schedule focus at the next rendering opportunity after question preparation completes.
  * @param {HTMLElement} fieldsetEle - The fieldset element containing the question text.
  * @param {Boolean} questionFocusSet - The flag to manage screen reader focus.
- * @param {{schedule: (focusableEle: HTMLElement) => void, cancel: () => void} | null} [questionFocusHandoff] - The transition's cancellable focus handoff.
+ * @param {{schedule: (focusableEle: HTMLElement, options?: {onInteractionCancel?: () => void}) => void, cancel: (event?: Event) => void} | null} [questionFocusHandoff] - The transition's cancellable focus handoff.
+ * @param {HTMLElement | null} [preferredFocusTarget] - Static feedback that should receive the transition focus instead of the generated question target.
  * @returns {Boolean} - The updated questionFocusSet flag.
  */
 
-export function manageAccessibleQuestion(fieldsetEle, questionFocusSet, questionFocusHandoff) {
+export function manageAccessibleQuestion(
+    fieldsetEle,
+    questionFocusSet,
+    questionFocusHandoff,
+    preferredFocusTarget = null,
+) {
     if (fieldsetEle && !questionFocusSet) {
+        const questionLiveRegion = moduleParams.questDiv?.querySelector('#ariaLiveQuestionAnnouncer');
+        if (questionLiveRegion) questionLiveRegion.textContent = '';
+
         // Build the question text and get the focusable element
         let focusableEle = buildQuestionText(fieldsetEle);
+        const transitionFocusTarget = preferredFocusTarget?.isConnected
+            ? preferredFocusTarget
+            : focusableEle;
 
         // Focus the hidden, programmatic target on the next animation frame.
         if (!moduleParams.isRenderer) {
             const handoff = questionFocusHandoff ?? beginQuestionFocusHandoff(fieldsetEle.ownerDocument);
-            handoff?.schedule(focusableEle);
+            handoff?.schedule(transitionFocusTarget, {
+                onInteractionCancel: preferredFocusTarget
+                    ? () => announcePreferredFocusTarget(preferredFocusTarget)
+                    : undefined,
+            });
         }
 
         questionFocusSet = true;
     }
 
     return questionFocusSet;
+}
+
+function announcePreferredFocusTarget(preferredFocusTarget) {
+    const activeQuestion = preferredFocusTarget?.closest('form.question.active');
+    const openModal = moduleParams.questDiv?.querySelector('.modal.show');
+    if (
+        !preferredFocusTarget?.isConnected
+        || !activeQuestion
+        || !moduleParams.questDiv?.contains(preferredFocusTarget)
+        || openModal
+    ) return;
+
+    const announcementText = (
+        preferredFocusTarget.innerText
+        || preferredFocusTarget.firstElementChild?.innerText
+        || preferredFocusTarget.textContent
+        || ''
+    ).replace(/\s+/g, ' ').trim();
+    const liveRegion = moduleParams.questDiv.querySelector('#ariaLiveQuestionAnnouncer');
+    if (liveRegion && announcementText) liveRegion.textContent = announcementText;
 }
 
 function focusAccessibleQuestionTarget(focusableEle) {
@@ -122,6 +177,8 @@ function focusAccessibleQuestionTarget(focusableEle) {
 function buildQuestionText(fieldsetEle) {
     let focusNode = null;
     let multiQuestionStartIndex = null;
+    const staticCompoundPlan = createStaticCompoundRadioPlan(fieldsetEle);
+    const staticCompoundFirstPrompt = staticCompoundPlan?.firstPrompt ?? null;
 
     // The conditions for building textContent (survey questions) for the screen reader.
     const textNodeConditional = (node) =>
@@ -144,6 +201,18 @@ function buildQuestionText(fieldsetEle) {
 
     for (let nodeIndex = 0; nodeIndex < childNodes.length; nodeIndex++) {
         const node = childNodes[nodeIndex];
+
+        // A static compound question has an overall instruction followed by a
+        // distinct prompt for each native radio subgroup. Stop before the
+        // first subgroup prompt so it does not become part of the outer
+        // fieldset's legend. The multi-question pass below will preserve it as
+        // the first subgroup's visible label.
+        if (node === staticCompoundFirstPrompt) {
+            focusNode = node;
+            multiQuestionStartIndex = nodeIndex;
+            break;
+        }
+
         if (textNodeConditional(node)) {
             // Special <br> handling to retain spacing for top headings with question text below.
             if (node.tagName === 'B' && nodeIndex <= 1 && (nodeIndex === 0 || (childNodes[nodeIndex - 1].nodeType === Node.TEXT_NODE && !childNodes[nodeIndex - 1].textContent.trim()))) {
@@ -230,8 +299,93 @@ function buildQuestionText(fieldsetEle) {
     const updatedFieldset = manageAccessibleFieldset(fieldsetEle, questionElements);
     // Create and return the hidden, focusable element for screen reader focus management.
     const focusableEle = createFocusableElement(updatedFieldset, focusNode);
-    manageCompoundRadioGroups(updatedFieldset);
+    manageCompoundRadioGroups(updatedFieldset, Boolean(staticCompoundPlan));
     return focusableEle;
+}
+
+/**
+ * Validate the complete source structure for an unconditional compound-radio
+ * question before separating its first subgroup prompt from the outer legend.
+ * Each subgroup prompt must occupy its own source line immediately before the
+ * subgroup's first response.
+ * Conditional groups retain their existing non-reparenting ARIA path.
+ * @param {HTMLElement} fieldsetEle - The fieldset before question text is rebuilt.
+ * @returns {{firstPrompt: Node} | null} - The validated first subgroup boundary.
+ */
+function createStaticCompoundRadioPlan(fieldsetEle) {
+    if (fieldsetEle.querySelector('.displayif, [displayif]')) return null;
+
+    const radioResponses = Array.from(
+        fieldsetEle.querySelectorAll(':scope > .response'),
+    ).map((response) => ({
+        response,
+        input: response.querySelector(':scope > input[type="radio"][name]'),
+    })).filter(({ input }) => input);
+    if (new Set(radioResponses.map(({ input }) => input.name)).size <= 1) return null;
+
+    const responseGroups = [];
+    radioResponses.forEach(({ response, input }) => {
+        const currentGroup = responseGroups.at(-1);
+        const previousResponse = currentGroup?.responses.at(-1);
+        if (currentGroup?.name === input.name && responsesSharePrompt(previousResponse, response)) {
+            currentGroup.responses.push(response);
+        } else {
+            responseGroups.push({ name: input.name, responses: [response] });
+        }
+    });
+    if (new Set(responseGroups.map(({ name }) => name)).size !== responseGroups.length) return null;
+    if (responseGroups.some(({ responses }) => responses.some(({ hidden, style }) => (
+        hidden || style.display === 'none'
+    )))) return null;
+
+    const promptNodeGroups = responseGroups.map(({ responses }) => (
+        findStaticCompoundSourcePrompt(responses[0])
+    ));
+    if (promptNodeGroups.some((promptNodes) => !promptNodes)) return null;
+
+    const promptNodes = promptNodeGroups.flat();
+    if (new Set(promptNodes).size !== promptNodes.length) return null;
+    const firstPrompt = promptNodeGroups[0][0];
+
+    // Do not split away the only available prompt. The outer fieldset must
+    // retain a non-empty legend in order to name the complete question.
+    for (let previous = firstPrompt.previousSibling; previous; previous = previous.previousSibling) {
+        if (
+            previous.nodeType === Node.TEXT_NODE && previous.textContent.trim() !== ''
+            || previous.nodeType === Node.ELEMENT_NODE && previous.tagName !== 'BR'
+        ) return { firstPrompt };
+    }
+    return null;
+}
+
+function findStaticCompoundSourcePrompt(firstResponse) {
+    let node = firstResponse.previousSibling;
+
+    // Ignore line endings and indentation immediately before the response.
+    while (node && (
+        node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR'
+        || node.nodeType === Node.TEXT_NODE && node.textContent.trim() === ''
+    )) {
+        node = node.previousSibling;
+    }
+
+    const promptNodes = [];
+    while (node) {
+        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') break;
+        if (node.classList?.contains('response')) break;
+        if (
+            node.nodeType !== Node.TEXT_NODE
+            && !(node.nodeType === Node.ELEMENT_NODE && ['U', 'B', 'I'].includes(node.tagName))
+        ) return null;
+        if (node.nodeType !== Node.TEXT_NODE || node.textContent.trim() !== '') {
+            promptNodes.unshift(node);
+        }
+        node = node.previousSibling;
+    }
+
+    return promptNodes.length > 0 && promptNodes.some(({ textContent }) => textContent.trim() !== '')
+        ? promptNodes
+        : null;
 }
 
 // Find additional questions (e.g. QoL multi-question surveys).
@@ -314,8 +468,9 @@ function handleMultiQuestionSurveyAccessibility(childNodes, fieldsetEle, startIn
 /**
  * Give each named radio subgroup in a compound question its own accessible group label.
  * @param {HTMLElement} fieldsetEle - The fieldset containing the compound form.
+ * @param {boolean} useNativeStaticGroups - Whether the complete static source structure was validated.
  */
-function manageCompoundRadioGroups(fieldsetEle) {
+function manageCompoundRadioGroups(fieldsetEle, useNativeStaticGroups = false) {
     const radioResponses = Array.from(
         fieldsetEle.querySelectorAll(':scope > .response'),
     ).map((response) => ({
@@ -376,7 +531,7 @@ function manageCompoundRadioGroups(fieldsetEle) {
     }
 
     const questionId = fieldsetEle.closest('.question')?.id || 'question';
-    labelledGroups.forEach(({ name, responses, prompt, configuration }) => {
+    labelledGroups.forEach(({ name, responses, prompt, configuration }, groupIndex) => {
         if (configuration.kind === 'conditional') {
             // Conditional response rows must remain direct fieldset children for Quest's display logic and layout.
             // ARIA ownership provides the group relationship without moving those rows.
@@ -389,18 +544,37 @@ function manageCompoundRadioGroups(fieldsetEle) {
         }
 
         const labelId = ensureCompoundRadioPromptId(prompt, questionId, name);
-        if (prompt.getAttribute('role') === 'alert') {
-            prompt.removeAttribute('role');
-            if (prompt.getAttribute('tabindex') === '0') {
-                prompt.removeAttribute('tabindex');
+        if (!useNativeStaticGroups) {
+            if (prompt.getAttribute('role') === 'alert') {
+                prompt.removeAttribute('role');
+                if (prompt.getAttribute('tabindex') === '0') {
+                    prompt.removeAttribute('tabindex');
+                }
             }
+
+            const radioGroup = document.createElement('div');
+            radioGroup.classList.add('compound-radio-group');
+            radioGroup.setAttribute('role', 'radiogroup');
+            radioGroup.setAttribute('aria-labelledby', labelId);
+            fieldsetEle.insertBefore(radioGroup, responses[0]);
+            responses.forEach((response) => radioGroup.appendChild(response));
+            return;
         }
 
-        const radioGroup = document.createElement('div');
+        const radioGroup = document.createElement('fieldset');
         radioGroup.classList.add('compound-radio-group');
-        radioGroup.setAttribute('role', 'radiogroup');
-        radioGroup.setAttribute('aria-labelledby', labelId);
-        fieldsetEle.insertBefore(radioGroup, responses[0]);
+        if (groupIndex === 0) radioGroup.classList.add('compound-radio-group-first');
+
+        const groupLegend = document.createElement('legend');
+        groupLegend.classList.add('compound-radio-group-legend');
+        groupLegend.id = labelId;
+        while (prompt.firstChild) {
+            groupLegend.appendChild(prompt.firstChild);
+        }
+
+        radioGroup.appendChild(groupLegend);
+        fieldsetEle.insertBefore(radioGroup, prompt);
+        prompt.remove();
         responses.forEach((response) => radioGroup.appendChild(response));
     });
 }
@@ -800,7 +974,7 @@ function createFocusableElement(fieldsetEle, focusNode) {
             border: 0;
         `;
 
-        if (focusNode && fieldsetEle.contains(focusNode)) {
+        if (focusNode && focusNode !== fieldsetEle && fieldsetEle.contains(focusNode)) {
             fieldsetEle.insertBefore(focusableEle, focusNode);
         } else {
             const legendEle = fieldsetEle.querySelector('legend');
@@ -919,6 +1093,7 @@ export function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
     const liveRegion = moduleParams.questDiv?.querySelector('#ariaLiveSelectionAnnouncer');
     const cell = responseDiv.closest('td'); // Get the closest table cell (td)
     const label = cell?.querySelector('label'); // Find the label within the cell
+    const responseText = label?.querySelector('.grid-label-response-text');
     const input = cell?.querySelector('input[type="checkbox"], input[type="radio"]');
 
     if (!liveRegion || !cell || !label || !input) {
@@ -926,7 +1101,7 @@ export function updateAriaLiveSelectionAnnouncerTable(responseDiv) {
     }
 
     const actionText = input.checked ? 'Selected.' : 'Unselected.';
-    const announcementText = `${label.textContent} ${actionText}`;
+    const announcementText = `${responseText?.textContent ?? label.textContent} ${actionText}`;
 
     scheduleSelectionAnnouncement(liveRegion, announcementText, 250);
 }

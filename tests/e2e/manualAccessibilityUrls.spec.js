@@ -84,8 +84,52 @@ test.describe('documented manual accessibility URLs @canonical', () => {
     await openManualScenario(page, 'fixture=asyncQuestion.txt&scenario=async-error');
     await selectLabeledResponse(page, 'Research');
     await goNext(page);
-    await expect(activeQuestion(page, 'ASYNC').locator('.validation-container')).toContainText('Error fetching question');
+    const error = activeQuestion(page, 'ASYNC').locator('.validation-container');
+    await expect(error).toHaveText('Error fetching question. Please go back and try again.');
+    await expect(error).toHaveAttribute('tabindex', '-1');
+    await expect(error).not.toHaveAttribute('role');
+    await expect(error).toBeFocused();
+    await expect(activeQuestion(page, 'ASYNC').locator('fieldset')).not.toContainText('Loading...');
   });
+
+  for (const weightCase of [
+    {
+      description: 'English',
+      query: 'fixture=module1WeightHistory.txt&scenario=weight-history-en&lang=en',
+      lang: 'en',
+      names: [
+        'a. 18 years old, Pounds (lbs)',
+        'b. 25 years old, Pounds (lbs)',
+        'c. 35 years old, Pounds (lbs)',
+        'd. 45 years old, Pounds (lbs)',
+        'e. 55 years old, Pounds (lbs)',
+      ],
+    },
+    {
+      description: 'Spanish',
+      query: 'fixture=module1WeightHistorySpanish.txt&scenario=weight-history-es&lang=es',
+      lang: 'es',
+      names: [
+        'a. 18 años, NÚM. DE LIBRAS (lbs)',
+        'b. 25 años, NÚM. DE LIBRAS (lbs)',
+        'c. 35 años, NÚM. DE LIBRAS (lbs)',
+        'd. 45 años, NÚM. DE LIBRAS (lbs)',
+        'e. 55 años, NÚM. DE LIBRAS (lbs)',
+      ],
+    },
+  ]) {
+    test(`reaches all five ${weightCase.description} weight-history fields`, async ({ page }) => {
+      await openManualScenario(page, weightCase.query);
+      await expect(page.locator('html')).toHaveAttribute('lang', weightCase.lang);
+      const inputs = activeQuestion(page, 'D_912857732').locator('input[type="number"]:visible');
+      await expect(inputs).toHaveCount(weightCase.names.length);
+      for (const [index, name] of weightCase.names.entries()) {
+        await expect(inputs.nth(index)).toHaveAccessibleName(name);
+      }
+      await inputs.first().pressSequentially('18.5');
+      await expect(inputs.first()).toHaveValue('185');
+    });
+  }
 
   test('rejects unsupported scenario and language query values before rendering', async ({ page }) => {
     for (const query of [

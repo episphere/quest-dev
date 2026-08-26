@@ -3,6 +3,7 @@ import { getNextQuestion, getPreviousQuestion } from './questionnaire.js';
 import { resetChildren } from './eventHandlers.js';
 import { clearSelectionAnnouncement } from './accessibleQuestionTextBuilder.js';
 import { restoreResponses } from './restoreResponses.js';
+import { focusModalDescription } from './modalFocus.js';
 
 /**
  * State Manager: Quest state manager to centralize state management and syncing to the store.
@@ -207,6 +208,7 @@ const createStateManager = (store, initialState = {}) => {
         if (!modalElement) return;
         const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
         modal.show();
+        focusModalDescription(modalElement);
     }
 
     // Remove null and undefined values for the surveyState logging (in the renderer).

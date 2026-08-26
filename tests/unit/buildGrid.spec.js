@@ -25,15 +25,20 @@ describe('parseGrid', () => {
     expect(cornerSpacer.classList.contains('grid-corner-spacer')).toBe(true);
     expect(cornerSpacer.textContent).toBe('');
     expect(form.querySelectorAll('thead th:not([scope="col"])')).toHaveLength(0);
+    expect(form.querySelectorAll('table.quest-grid [role]')).toHaveLength(0);
     expect(form.querySelector('#ROW1_0').value).toBe('1');
-    expect(form.querySelector('#ROW1_0').getAttribute('aria-labelledby')).toBe(
-      'qtextROW1 labelROW1_0',
-    );
-    expect(form.querySelector('#ROW2_1').getAttribute('aria-labelledby')).toBe(
-      'qtextROW2 labelROW2_1',
-    );
+    expect(form.querySelector('#ROW1_0').hasAttribute('aria-labelledby')).toBe(false);
+    expect(form.querySelector('#ROW2_1').hasAttribute('aria-labelledby')).toBe(false);
+    expect(form.querySelector('#ROW1_0').labels).toHaveLength(1);
+    expect(form.querySelector('#ROW1_0').labels[0].id).toBe('labelROW1_0');
     expect(form.querySelector('#qtextROW1').textContent).toContain('First');
+    expect(form.querySelector('#labelROW1_0 .grid-label-row-context').textContent).toBe('');
+    expect(
+      form.querySelector('#labelROW1_0 .grid-label-row-context').classList.contains('visually-hidden'),
+    ).toBe(true);
+    expect(form.querySelector('#labelROW1_0 .grid-label-response-text').textContent).toBe('Yes');
     expect(form.querySelector('#labelROW1_0').textContent).toBe('Yes');
+    expect(form.querySelector('#labelROW1_0 [data-gridreplace="firstName"]')).toBeNull();
     expect(form.querySelector('span[data-gridreplace="name"]')).not.toBeNull();
     expect(form.querySelector('span[data-gridreplace="firstName"]')).not.toBeNull();
     expect(form.querySelector('.grid-displayif')).not.toBeNull();
@@ -58,12 +63,12 @@ describe('parseGrid', () => {
     expect(form.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
     expect(form.querySelectorAll('th[scope="col"]')).toHaveLength(2);
     expect(form.querySelector('th[scope="row"]').textContent).toContain('A row');
-    expect(form.querySelector('#ROW_0').getAttribute('aria-labelledby')).toBe(
-      'qtextROW labelROW_0',
-    );
-    expect(form.querySelector('#ROW_1').getAttribute('aria-labelledby')).toBe(
-      'qtextROW labelROW_1',
-    );
+    expect(form.querySelector('#ROW_0').hasAttribute('aria-labelledby')).toBe(false);
+    expect(form.querySelector('#ROW_1').hasAttribute('aria-labelledby')).toBe(false);
+    expect(form.querySelector('#ROW_0').labels).toHaveLength(1);
+    expect(form.querySelector('#labelROW_0 .grid-label-row-context').textContent).toBe('');
+    expect(form.querySelector('#labelROW_0 .grid-label-response-text').textContent).toBe('Alpha');
+    expect(form.querySelector('#labelROW_1').textContent).toBe('Beta');
   });
 
   it('uses a plain prompt when no edit marker is present', () => {

@@ -826,8 +826,12 @@ test.describe('native participant keyboard navigation @canonical @keyboard @wind
 
     await activeQuestion(page, 'END').getByRole('button', { name: 'Back to the previous section' }).click();
     await expect(activeQuestion(page, 'GRID_RATE')).toBeVisible();
-    await expect(activeQuestion(page, 'GRID_RATE').locator('#GRID_WALK_1')).toBeChecked();
-    await expect(activeQuestion(page, 'GRID_RATE').locator('#GRID_WALK_1')).toHaveAccessibleName(
+    const restoredChoice = activeQuestion(page, 'GRID_RATE').locator('#GRID_WALK_1');
+    await expect(restoredChoice).toBeChecked();
+    await expect(restoredChoice).not.toHaveAttribute('aria-labelledby');
+    await expect(restoredChoice.locator('xpath=following-sibling::label').locator('.grid-label-row-context'))
+      .toHaveText('Walking');
+    await expect(restoredChoice).toHaveAccessibleName(
       'Walking Sometimes',
     );
   });

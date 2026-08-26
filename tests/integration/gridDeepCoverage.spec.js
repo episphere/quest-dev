@@ -202,7 +202,8 @@ describe('deep grid state coverage', () => {
     expect(description).not.toBeNull();
     expect(description.innerText.trim()).not.toBe('');
     expect(description.hasAttribute('role')).toBe(false);
-    expect(description.hasAttribute('tabindex')).toBe(false);
+    expect(description.getAttribute('tabindex')).toBe('-1');
+    expect(description).toBe(document.activeElement);
     expect(modal.querySelector('[role="alert"]')).toBeNull();
     expect(quest.root.querySelector('form.question.active')?.id).toBe('GRID_VALIDATION');
     expect(quest.errors).toEqual([]);

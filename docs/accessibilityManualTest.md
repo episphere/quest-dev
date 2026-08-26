@@ -32,6 +32,18 @@ For the keyboard-only command guide, see
 - Record operating-system, browser, screen-reader, and Quest commit/version values before testing.
 - Run `npm run test:e2e -- --grep "@canonical|@axe|@responsive|@windows-a11y"` first. Automated results are prerequisites, not substitutes for this matrix.
 
+## Runnable production-shaped scenarios
+
+For the Module 1 weight-history controls, open both language-specific URLs:
+
+- English: `http://127.0.0.1:4173/tests/harness/participant.html?fixture=module1WeightHistory.txt&scenario=weight-history-en&lang=en`
+- Spanish: `http://127.0.0.1:4173/tests/harness/participant.html?fixture=module1WeightHistorySpanish.txt&scenario=weight-history-es&lang=es`
+
+For each URL, navigate through all five visible weight fields. Confirm each field
+includes its distinct age and unit context. In Spanish, type `18.5` with the
+physical keyboard and confirm the field contains `185`: whole numbers are
+accepted while decimal punctuation is filtered without a browser error.
+
 ## Runnable dialog and asynchronous scenarios
 
 Start each check in a new page. Use these exact harness URLs and actions so the
@@ -87,7 +99,7 @@ Select Clinical and activate Next. Confirm the `ASYNC` question finishes loading
 
 For error, open
 `http://127.0.0.1:4173/tests/harness/participant.html?fixture=asyncQuestion.txt&scenario=async-error`.
-Select Research and activate Next. Confirm `ASYNC` remains active, its in-question error is announced, and focus does not leave the question for stale or missing response markup.
+Select Research and activate Next. Confirm `ASYNC` remains active, focus moves to its in-question error, the error is announced once, the loading message disappears, and Tab proceeds to Next and then Back without stale or missing response markup.
 
 The harness accepts only the documented `scenario` values and the `en` or `es`
 language values. A scenario used with the wrong fixture is rejected before Quest renders.

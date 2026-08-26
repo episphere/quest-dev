@@ -8,6 +8,13 @@ const GRID_SURVEY = `
 [END,end] Done.
 `;
 
+const INLINE_CONDITION_GRID_SURVEY = `
+{"name":"A11Y_GRID_INLINE_CONDITION"}
+[GRID_LEAD] Rate each item.
+|grid?|id="GRID"|How often?|[ROW_ONE] Driving or sitting in a car, bus or train. %displayif=equals(SHOW_COMMUTE,1)%(This includes commuting to and from work.)%;|(1: Never)(2: Often)|
+[END,end] Done.
+`;
+
 function treeAt(questionID) {
   return JSON.stringify({
     rootNode: { value: null, children: [{ value: questionID, children: [] }] },
@@ -75,6 +82,13 @@ describe('screen-reader and keyboard behavior', () => {
       persistedData: { treeJSON: treeAt('GRID') },
     });
     const choice = quest.root.querySelector('#ROW_ONE_1');
+    const label = choice.labels[0];
+
+    expect(choice.hasAttribute('aria-labelledby')).toBe(false);
+    expect(choice.labels).toHaveLength(1);
+    expect(label.querySelector('.grid-label-row-context').textContent.trim()).toBe('First row');
+    expect(label.querySelector('.grid-label-response-text').textContent.trim()).toBe('Often');
+    expect(label.textContent.replace(/\s+/g, ' ').trim()).toBe('First row Often');
 
     choice.click();
     choice.dispatchEvent(new Event('change', { bubbles: true }));
@@ -82,6 +96,25 @@ describe('screen-reader and keyboard behavior', () => {
     await vi.advanceTimersByTimeAsync(250);
     expect(quest.root.querySelector('#ariaLiveSelectionAnnouncer').textContent.trim()).toBe('Often Selected.');
     expect(choice.getAttribute('role')).toBeNull();
+  });
+
+  it.each([
+    ['includes', '1', 'Driving or sitting in a car, bus or train. (This includes commuting to and from work.)'],
+    ['omits', '0', 'Driving or sitting in a car, bus or train.'],
+  ])('%s resolved inline-condition text in native grid labels', async (_, showCommute, expectedRowText) => {
+    const quest = await renderFreshQuest({
+      markdown: INLINE_CONDITION_GRID_SURVEY,
+      persistedData: {
+        SHOW_COMMUTE: showCommute,
+        treeJSON: treeAt('GRID'),
+      },
+    });
+    const choice = quest.root.querySelector('#ROW_ONE_0');
+    const label = choice.labels[0];
+
+    expect(label.querySelector('.grid-label-row-context').textContent.trim()).toBe(expectedRowText);
+    expect(label.textContent.replace(/\s+/g, ' ').trim()).toBe(`${expectedRowText} Never`);
+    expect(choice.hasAttribute('aria-labelledby')).toBe(false);
   });
 
   it('leaves Up and Down under native text and radio control', async () => {

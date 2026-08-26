@@ -325,7 +325,12 @@ describe('locked production markup edge cases', () => {
     expect(legend?.textContent).toContain(
       'Please respond to each question by selecting the response that best describes you.',
     );
-    expect(legend?.textContent).toContain('Are you able to do chores such as vacuuming or yard work?');
+    expect(legend?.textContent).not.toContain('Are you able to do chores such as vacuuming or yard work?');
+    const subgroups = fieldset.querySelectorAll(':scope > fieldset.compound-radio-group');
+    expect(subgroups).toHaveLength(4);
+    expect(subgroups[0].querySelector(':scope > legend')?.textContent).toContain(
+      'Are you able to do chores such as vacuuming or yard work?',
+    );
     expect(fieldset.querySelectorAll(':scope > .screen-reader-focus')).toHaveLength(1);
     expect(question.querySelectorAll('input[type="radio"]')).toHaveLength(20);
     expect(new Set(Array.from(question.querySelectorAll('input[type="radio"]'), (input) => input.name))).toEqual(new Set([

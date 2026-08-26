@@ -42,4 +42,16 @@ export const MANUAL_SCENARIOS = Object.freeze({
       asyncOutcomes: [{ kind: 'reject', message: 'Synthetic async failure' }],
     },
   },
+  'weight-history-en': {
+    fixture: 'module1WeightHistory.txt',
+    config: {
+      previousResults: { age: '60' },
+    },
+  },
+  'weight-history-es': {
+    fixture: 'module1WeightHistorySpanish.txt',
+    config: {
+      previousResults: { age: '60' },
+    },
+  },
 });

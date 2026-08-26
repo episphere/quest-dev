@@ -81,6 +81,26 @@ describe('validation through exported behavior', () => {
     expect(input.getAttribute('aria-invalid')).toBe('grammar');
   });
 
+  it('can return a static programmatic error target without live-region semantics', () => {
+    const { input } = appendInput();
+
+    const error = validationError(
+      input,
+      moduleParams.i18n.validationInputEmptyField,
+      [input],
+      { liveRegion: false },
+    );
+    error.tabIndex = -1;
+
+    expect(error).toBe(input.nextElementSibling);
+    expect(error.firstElementChild.innerText).toContain(moduleParams.i18n.validationInputEmptyField);
+    expect(error.tabIndex).toBe(-1);
+    expect(error.hasAttribute('role')).toBe(false);
+    expect(error.hasAttribute('aria-atomic')).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby').split(/\s+/)).toContain(error.id);
+  });
+
   it.each([
     ['1', { 'data-min': '2', 'data-max': '8' }, 'greater than or equal to 2'],
     ['9', { 'data-min': '2', 'data-max': '8' }, 'less than or equal to 8'],

@@ -126,7 +126,7 @@ describe('questionnaire runtime helpers', () => {
     expect(responseModal.classList).toContain('show');
     expect(quest.root.querySelector('#modalResponseBody').innerText).toBe('Confirm this value');
     expect(responseModal.getAttribute('aria-describedby')).toBe('modalResponseBody');
-    expect(document.activeElement).toBe(quest.root.querySelector('#softModalResponseTitle'));
+    expect(document.activeElement).toBe(quest.root.querySelector('#modalResponseBody'));
     expect(quest.state.getActiveQuestionState().Q1).toEqual({ Q1: '99', OTHER_TEXT: '6' });
 
     responseModal.querySelector('#modalResponseContinueButton').click();

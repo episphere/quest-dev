@@ -72,7 +72,7 @@ test.describe('participant controls @core @canonical', () => {
     await expect(activeQuestion(page, 'END')).toBeVisible();
     await activeQuestion(page).getByRole('button', { name: 'Submit your survey' }).click();
     await expect(page.locator('#submitModal')).toHaveClass(/show/);
-    await expect(page.locator('#submitModalTitle')).toBeFocused();
+    await expect(page.locator('#submitModalBodyText')).toBeFocused();
     await page.locator('#submitModalButton').click();
 
     const snapshot = await expectHealthyHarness(page);

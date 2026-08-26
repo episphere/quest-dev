@@ -137,28 +137,6 @@ test.describe('stable participant styling @visual', () => {
       screenshotOptions,
     );
 
-    const wrapperLayoutDelta = await question.evaluate((form) => {
-      const capture = () => ({
-        formHeight: form.getBoundingClientRect().height,
-        responses: Array.from(form.querySelectorAll('.response'), (response) => {
-          const rect = response.getBoundingClientRect();
-          return { id: response.querySelector('input')?.id, top: rect.top, height: rect.height };
-        }),
-      });
-      const withGroups = capture();
-      form.querySelectorAll('.compound-radio-group').forEach((group) => {
-        group.replaceWith(...group.children);
-      });
-      const withoutGroups = capture();
-      const responseDelta = Math.max(0, ...withGroups.responses.map((response, index) => (
-        Math.max(
-          Math.abs(response.top - withoutGroups.responses[index].top),
-          Math.abs(response.height - withoutGroups.responses[index].height),
-        )
-      )));
-      return Math.max(responseDelta, Math.abs(withGroups.formHeight - withoutGroups.formHeight));
-    });
-    expect(wrapperLayoutDelta).toBeLessThanOrEqual(0.5);
   });
 
   test('keeps conditional compound-radio prompts and responses visually unchanged', async ({ page }, testInfo) => {

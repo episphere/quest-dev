@@ -3,6 +3,7 @@ import { clearValidationError, validationError } from "./validate.js";
 import { hideLoadingIndicator, showLoadingIndicator, translate } from './common.js';
 import { nextButtonClicked, getPreviousQuestion } from "./questionnaire.js";
 import { getStateManager } from "./stateManager.js";
+import { focusModalDescription } from './modalFocus.js';
 import { closeModalAndFocusQuestion, updateAriaLiveSelectionAnnouncer, updateAriaLiveSelectionAnnouncerTable, clearSelectionAnnouncement } from "./accessibleQuestionTextBuilder.js";
 // Debounced version of handleInputEvent
 const debouncedHandleInputEvent = debounce(handleInputEvent, 250);
@@ -311,9 +312,7 @@ function handleSubmitSurveyClick(submitTrigger) {
   }, { once: true });
 
   submitModal.show();
-
-  //Force focus to the modal title
-  questDiv.querySelector('#submitModalTitle').focus();
+  focusModalDescription(submitModalElement);
 }
 
 // Event listener to submit the survey and reload the page.

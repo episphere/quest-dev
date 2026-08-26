@@ -595,6 +595,96 @@ describe('delegated runtime event handling', () => {
     expect(document.activeElement).toBe(hostControl);
   });
 
+  it('focuses a terminal asynchronous error unless participant or host activity cancels the handoff', async () => {
+    vi.useFakeTimers();
+    let rejectAsyncLoad;
+    const fetchAsyncQuestion = vi.fn(() => new Promise((_, reject) => {
+      rejectAsyncLoad = reject;
+    }));
+    const quest = await renderFreshQuest({
+      params: {
+        asyncQuestionsMap: {
+          '[Q1?]': { func: 'loadQuestion', args: [] },
+        },
+        fetchAsyncQuestion,
+      },
+    });
+
+    rejectAsyncLoad(new Error('Synthetic async failure'));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.runAllTimersAsync();
+
+    const error = quest.root.querySelector('#Q1 .validation-container');
+    expect(error.firstElementChild.innerText).toContain('Error fetching question. Please go back and try again.');
+    expect(error.tabIndex).toBe(-1);
+    expect(error.hasAttribute('role')).toBe(false);
+    expect(error.hasAttribute('aria-atomic')).toBe(false);
+    expect(document.activeElement).toBe(error);
+    expect(document.activeElement).not.toBe(quest.root.querySelector('#Q1 .screen-reader-focus'));
+    expect(quest.root.querySelector('#ariaLiveQuestionAnnouncer').textContent).toBe('');
+  });
+
+  it('does not move focus to a terminal asynchronous error after host focus cancels the handoff', async () => {
+    vi.useFakeTimers();
+    let rejectAsyncLoad;
+    const fetchAsyncQuestion = vi.fn(() => new Promise((_, reject) => {
+      rejectAsyncLoad = reject;
+    }));
+    const quest = await renderFreshQuest({
+      params: {
+        asyncQuestionsMap: {
+          '[Q1?]': { func: 'loadQuestion', args: [] },
+        },
+        fetchAsyncQuestion,
+      },
+    });
+    const hostControl = document.querySelector('#afterQuest');
+
+    hostControl.focus();
+    rejectAsyncLoad(new Error('Synthetic async failure'));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.runAllTimersAsync();
+
+    const error = quest.root.querySelector('#Q1 .validation-container');
+    expect(error).not.toBeNull();
+    expect(document.activeElement).toBe(hostControl);
+    expect(document.activeElement).not.toBe(error);
+    expect(quest.root.querySelector('#ariaLiveQuestionAnnouncer').textContent).toBe(
+      'Error fetching question. Please go back and try again.',
+    );
+  });
+
+  it('announces a terminal asynchronous error when interaction cancels its scheduled focus', async () => {
+    vi.useFakeTimers();
+    let rejectAsyncLoad;
+    const fetchAsyncQuestion = vi.fn(() => new Promise((_, reject) => {
+      rejectAsyncLoad = reject;
+    }));
+    const quest = await renderFreshQuest({
+      params: {
+        asyncQuestionsMap: {
+          '[Q1?]': { func: 'loadQuestion', args: [] },
+        },
+        fetchAsyncQuestion,
+      },
+    });
+
+    rejectAsyncLoad(new Error('Synthetic async failure'));
+    await vi.advanceTimersByTimeAsync(0);
+    const error = quest.root.querySelector('#Q1 .validation-container');
+    const hostControl = document.querySelector('#afterQuest');
+    expect(error).not.toBeNull();
+    expect(document.activeElement).not.toBe(error);
+
+    hostControl.focus();
+    await vi.runAllTimersAsync();
+
+    expect(document.activeElement).toBe(hostControl);
+    expect(quest.root.querySelector('#ariaLiveQuestionAnnouncer').textContent).toBe(
+      'Error fetching question. Please go back and try again.',
+    );
+  });
+
   it.each([
     ['participant keyboard activity', (quest) => quest.root.querySelector('#Q2 legend'), () => new KeyboardEvent('keydown', { bubbles: true, key: 'A', code: 'KeyA' })],
     ['participant pointer activity', (quest) => quest.root.querySelector('#Q2 legend'), () => new PointerEvent('pointerdown', { bubbles: true })],
@@ -657,6 +747,7 @@ describe('delegated runtime event handling', () => {
     submitTrigger.click();
     const submitModal = quest.root.querySelector('#submitModal');
     expect(submitModal.classList).toContain('show');
+    expect(document.activeElement).toBe(quest.root.querySelector('#submitModalBodyText'));
 
     const focusSpy = vi.spyOn(submitTrigger, 'focus');
     submitModal._questRenderDisposal = true;

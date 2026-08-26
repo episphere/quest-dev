@@ -288,7 +288,7 @@ async function expectCompoundRadioStructure(
   expectedRadioCount,
   expectedPromptsByGroup,
 ) {
-  const inventory = await question.locator('[role="radiogroup"]').evaluateAll((groups) => {
+  const inventory = await question.locator('fieldset.compound-radio-group').evaluateAll((groups) => {
     const idCounts = Array.from(document.querySelectorAll('[id]')).reduce((counts, element) => {
       counts[element.id] = (counts[element.id] ?? 0) + 1;
       return counts;
@@ -296,28 +296,20 @@ async function expectCompoundRadioStructure(
 
     return groups.map((group) => {
       const radios = Array.from(group.querySelectorAll('input[type="radio"]'));
-      const labelIds = String(group.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
-      const prompts = labelIds.map((id) => document.getElementById(id));
-      let previousNode = group.previousSibling;
-      while (previousNode && (
-        (previousNode.nodeType === Node.TEXT_NODE && previousNode.textContent.trim() === '')
-        || (previousNode.nodeType === Node.ELEMENT_NODE && (
-          previousNode.tagName === 'BR' || previousNode.classList.contains('screen-reader-focus')
-        ))
-      )) previousNode = previousNode.previousSibling;
+      const prompt = group.querySelector(':scope > legend');
       return {
-        labelIds,
-        labelIsNearestPrompt: prompts.length === 1 && prompts[0] === previousNode,
-        labelsResolveUniquely: prompts.every((prompt, index) => (
-          prompt && idCounts[labelIds[index]] === 1
-        )),
-        promptIsVisible: prompts.every((prompt) => {
+        tagName: group.tagName,
+        promptIsFirstChild: prompt === group.firstElementChild,
+        promptIdIsUnique: Boolean(prompt?.id) && idCounts[prompt.id] === 1,
+        promptIsVisible: (() => {
           if (!prompt || prompt.hidden || prompt.getAttribute('aria-hidden') === 'true') return false;
           const style = getComputedStyle(prompt);
           return style.display !== 'none' && style.visibility !== 'hidden' && prompt.getClientRects().length > 0;
-        }),
-        promptRole: prompts.map((prompt) => prompt?.getAttribute('role') ?? null),
-        promptText: prompts.map((prompt) => prompt?.textContent.replace(/\s+/g, ' ').trim() ?? ''),
+        })(),
+        promptText: prompt?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+        hasOnlyNativeGroupSemantics: !group.hasAttribute('role')
+          && !group.hasAttribute('aria-label')
+          && !group.hasAttribute('aria-labelledby'),
         radioNames: [...new Set(radios.map(({ name }) => name))],
         radioCount: radios.length,
         radioLabelsAreNativeAndNonempty: radios.every((radio) => (
@@ -326,7 +318,9 @@ async function expectCompoundRadioStructure(
         radiosKeepNativeNameSource: radios.every((radio) => (
           !radio.hasAttribute('aria-label') && !radio.hasAttribute('aria-labelledby')
         )),
-        radiosBelongDirectlyToGroup: radios.every((radio) => radio.closest('[role="radiogroup"]') === group),
+        radiosBelongDirectlyToGroup: radios.every((radio) => (
+          radio.closest('fieldset.compound-radio-group') === group
+        )),
       };
     });
   });
@@ -338,18 +332,18 @@ async function expectCompoundRadioStructure(
     expect(Object.keys(expectedPromptsByGroup).sort()).toEqual([...expectedGroupNames].sort());
   }
   for (const group of inventory) {
-    expect.soft(group.labelIds).toHaveLength(1);
-    expect.soft(group.labelIsNearestPrompt).toBe(true);
-    expect.soft(group.labelsResolveUniquely).toBe(true);
+    expect.soft(group.tagName).toBe('FIELDSET');
+    expect.soft(group.promptIsFirstChild).toBe(true);
+    expect.soft(group.promptIdIsUnique).toBe(true);
     expect.soft(group.promptIsVisible).toBe(true);
-    expect.soft(group.promptRole).toEqual([null]);
+    expect.soft(group.hasOnlyNativeGroupSemantics).toBe(true);
     expect.soft(group.radioNames).toHaveLength(1);
     expect.soft(group.radioLabelsAreNativeAndNonempty).toBe(true);
     expect.soft(group.radiosKeepNativeNameSource).toBe(true);
     expect.soft(group.radiosBelongDirectlyToGroup).toBe(true);
     if (expectedPromptsByGroup) {
       const expectedPrompt = expectedPromptsByGroup[group.radioNames[0]];
-      expect.soft(group.promptText[0]).toContain(expectedPrompt);
+      expect.soft(group.promptText).toContain(expectedPrompt);
     }
   }
 }
@@ -360,7 +354,7 @@ async function expectCompoundChoice(question, {
   prompt,
   answer,
 }) {
-  const group = question.locator(`[role="radiogroup"]:has(input[name="${groupName}"])`);
+  const group = question.locator(`fieldset.compound-radio-group:has(input[name="${groupName}"])`);
   const control = group.locator(`input[type="radio"][name="${groupName}"][value="${value}"]`);
   await expect(group).toHaveCount(1);
   await expect(group).toHaveAccessibleName(new RegExp(prompt, 'i'));
@@ -616,13 +610,41 @@ test.describe('locked compound-radio accessibility @canonical @windows-a11y @cor
 
       const question = activeQuestion(page, 'COMPOUND_RADIOS');
       await expect(question).toBeVisible();
-      await expectCompoundRadioStructure(question, ['MEAL', 'WALK'], 6);
+      const outerPrompt = locale === 'es'
+        ? 'Para cada actividad, elija la respuesta que mejor lo describa.'
+        : 'For each activity, choose the answer that best describes you.';
+      const subgroupPrompts = locale === 'es'
+        ? {
+          MEAL: '¿Puede preparar una comida sencilla?',
+          WALK: '¿Puede caminar durante 15 minutos?',
+        }
+        : {
+          MEAL: 'Can you prepare a simple meal?',
+          WALK: 'Can you walk for 15 minutes?',
+        };
+      await expectCompoundRadioStructure(question, ['MEAL', 'WALK'], 6, subgroupPrompts);
+      await expect(question.locator(':scope > fieldset > legend.question-text')).toHaveText(outerPrompt);
+      await expect(question.getByRole('group', { name: subgroupPrompts.MEAL, exact: true })).toHaveCount(1);
+      await expect(question.getByRole('group', { name: subgroupPrompts.WALK, exact: true })).toHaveCount(1);
       await expectCompoundChoice(question, {
         groupName: 'MEAL',
         value: '1',
         prompt: locale === 'es' ? 'preparar' : 'prepare',
         answer: locale === 'es' ? 'Sin dificultad' : 'Without difficulty',
       });
+
+      const focusTarget = question.locator(':scope > fieldset > .screen-reader-focus');
+      await focusTarget.focus();
+      await page.keyboard.press('Tab');
+      await expect(question.locator('#MEAL_1')).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(question.locator('#MEAL_2')).toBeFocused();
+      await expect(question.locator('#MEAL_2')).toBeChecked();
+      await page.keyboard.press('Tab');
+      await expect(question.locator('#WALK_1')).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      await expect(question.locator('#MEAL_2')).toBeFocused();
+
       await expectHealthyHarness(page);
     });
 

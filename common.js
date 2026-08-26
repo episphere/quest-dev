@@ -42,7 +42,7 @@ export const responseRequestedModal = () => {
                       </button>
                   </div>
                   <div id="modalBody" class="modal-body">
-                      <p id="modalBodyText"></p>
+                      <p id="modalBodyText" tabindex="-1"></p>
                   </div>
                   <div id="softModalFooter" class="modal-footer d-flex flex-column flex-sm-row justify-content-between align-items-center g-2">
                       <button type="button" id="modalContinueButton" class="btn btn-light" data-bs-dismiss="modal">${translate('continueWithoutAnsweringButton')}</button>
@@ -66,7 +66,7 @@ export const responseRequiredModal = () => {
                       </button>
                   </div>
                   <div class="modal-body">
-                      <p id="hardModalBodyText"></p>
+                      <p id="hardModalBodyText" tabindex="-1"></p>
                   </div>
                   <div class="modal-footer">
                       <button type="button" class="btn btn-danger" data-bs-dismiss="modal">${translate('answerQuestionButton')}</button>
@@ -88,8 +88,8 @@ export const responseErrorModal = () => {
                       <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
-                  <div id="modalResponseBody" class="modal-body">
-                      <p>${translate('responseErrorBody')}</p>
+                  <div class="modal-body">
+                      <p id="modalResponseBody" tabindex="-1">${translate('responseErrorBody')}</p>
                   </div>
                   <div id="softModalResponseFooter" class="modal-footer d-flex justify-content-between">
                       <button type="button" id=modalResponseContinueButton class="btn btn-success">${translate('correctButton')}</button>
@@ -113,7 +113,7 @@ export const submitModal = () => {
                       </button>
                   </div>
                   <div id="submitModalBody" class="modal-body">
-                      <p id="submitModalBodyText">${translate('submitBody')}</p>
+                      <p id="submitModalBodyText" tabindex="-1">${translate('submitBody')}</p>
                   </div>
                   <div class="modal-footer d-flex justify-content-between">
                       <button type="button" id="submitModalButton" class="btn btn-success" data-bs-dismiss="modal">${translate('submitButton')}</button>
@@ -136,8 +136,8 @@ export const storeErrorModal = () => {
                       <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="${translate('closeButton')}">
                       </button>
                   </div>
-                  <div id="storeErrorModalBody" class="modal-body">
-                      <p>${translate('storeErrorBody')}</p>
+                  <div class="modal-body">
+                      <p id="storeErrorModalBody" tabindex="-1">${translate('storeErrorBody')}</p>
                   </div>
                   <div id="storeErrorModalFooter" class="modal-footer text-center">
                       <button type="button" id="storeErrorModalCloseButton" class="btn btn-danger mx-auto" data-bs-dismiss="modal">${translate('closeButton')}</button>

@@ -67,7 +67,7 @@ describe('accessible question text construction', () => {
     expect(fieldset.querySelectorAll('.response')).toHaveLength(2);
   });
 
-  it('associates each compound radio subgroup with its visible prompt without changing answer labels', async () => {
+  it('uses separate native fieldset legends for static compound radio subgroups', async () => {
     const { quest, accessibility } = await loadAccessibilityFixture(`
       <form class="question active" id="COMPOUND_RADIOS">
         <fieldset>
@@ -85,25 +85,57 @@ describe('accessible question text construction', () => {
     accessibility.manageAccessibleQuestion(fieldset, false);
     accessibility.manageAccessibleQuestion(fieldset, false);
 
-    const groups = [...fieldset.querySelectorAll(':scope > [role="radiogroup"]')];
+    const outerLegend = fieldset.querySelector(':scope > legend.question-text');
+    const focusTarget = fieldset.querySelector(':scope > .screen-reader-focus');
+    const groups = [...fieldset.querySelectorAll(':scope > fieldset.compound-radio-group')];
+    expect(outerLegend.textContent.trim()).toBe('For each activity, choose one answer.');
+    expect(focusTarget.compareDocumentPosition(groups[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(groups).toHaveLength(2);
     expect(groups.map((group) => [...new Set(
       [...group.querySelectorAll('input[type="radio"]')].map(({ name }) => name),
     )])).toEqual([['CHORES'], ['STAIRS']]);
 
     const [choresGroup, stairsGroup] = groups;
-    const choresPrompt = document.getElementById(choresGroup.getAttribute('aria-labelledby'));
-    const stairsPrompt = document.getElementById(stairsGroup.getAttribute('aria-labelledby'));
-    expect(choresPrompt).toBe(fieldset.querySelector(':scope > legend'));
-    expect(choresPrompt.textContent).toContain('How difficult are household chores?');
-    expect(stairsPrompt.textContent).toContain('How difficult is climbing stairs?');
-    expect(stairsPrompt.hasAttribute('role')).toBe(false);
-    expect(stairsPrompt.hasAttribute('tabindex')).toBe(false);
+    const choresPrompt = choresGroup.querySelector(':scope > legend');
+    const stairsPrompt = stairsGroup.querySelector(':scope > legend');
+    expect(choresPrompt.textContent.trim()).toBe('How difficult are household chores?');
+    expect(stairsPrompt.textContent.trim()).toBe('How difficult is climbing stairs?');
+    expect(groups.every((group) => !group.hasAttribute('role'))).toBe(true);
+    expect(groups.every((group) => !group.hasAttribute('aria-label'))).toBe(true);
+    expect(groups.every((group) => !group.hasAttribute('aria-labelledby'))).toBe(true);
+    expect(fieldset.querySelectorAll('[role="alert"], [tabindex="0"]')).toHaveLength(0);
 
     expect(fieldset.querySelector('#CHORES_1').labels[0].textContent).toBe('No difficulty');
     expect(fieldset.querySelector('#STAIRS_2').labels[0].textContent).toBe('Some difficulty');
     expect(fieldset.querySelectorAll('[id="COMPOUND_RADIOS-compound-radio-CHORES-label"]')).toHaveLength(1);
     expect(fieldset.querySelectorAll('[id="COMPOUND_RADIOS-compound-radio-STAIRS-label"]')).toHaveLength(1);
+    expect(choresGroup.querySelector('#CHORES_1').closest('fieldset')).toBe(choresGroup);
+    expect(stairsGroup.querySelector('#STAIRS_1').closest('fieldset')).toBe(stairsGroup);
+  });
+
+  it('leaves an ambiguous repeated-name compound form ungrouped without splitting its outer legend', async () => {
+    const { quest, accessibility } = await loadAccessibilityFixture(`
+      <form class="question active" id="AMBIGUOUS_STATIC_RADIOS">
+        <fieldset>
+          Choose one answer for each activity.<br>Can you prepare a meal?
+          <div class="response"><input type="radio" id="MEAL_1" name="MEAL" value="1"><label for="MEAL_1">Yes</label></div>
+          Can you walk for 15 minutes?<br>
+          <div class="response"><input type="radio" id="WALK_1" name="WALK" value="1"><label for="WALK_1">Yes</label></div>
+          Duplicate meal group?<br>
+          <div class="response"><input type="radio" id="MEAL_2" name="MEAL" value="2"><label for="MEAL_2">No</label></div>
+        </fieldset>
+      </form>
+    `);
+    const fieldset = quest.root.querySelector('fieldset');
+
+    accessibility.manageAccessibleQuestion(fieldset, false);
+
+    const outerLegend = fieldset.querySelector(':scope > legend.question-text');
+    expect(outerLegend.textContent).toContain('Choose one answer for each activity.');
+    expect(outerLegend.textContent).toContain('Can you prepare a meal?');
+    expect(fieldset.querySelectorAll(':scope > .response')).toHaveLength(3);
+    expect(fieldset.querySelectorAll('.compound-radio-group')).toHaveLength(0);
+    expect(fieldset.querySelectorAll('[role="radiogroup"]')).toHaveLength(0);
   });
 
   it('leaves ordinary single-group radio questions structurally unchanged', async () => {

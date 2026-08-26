@@ -369,7 +369,8 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
       await expect(responseModal).toHaveClass(/show/);
       await expect(responseDialog).toHaveAccessibleDescription(scalarCase.dialogDescription);
       await expect(responseDialog.locator('[role="alert"]')).toHaveCount(0);
-      await expect(page.locator('#softModalResponseTitle')).toBeFocused();
+      await expect(responseDialog.locator('#modalResponseBody')).toHaveAttribute('tabindex', '-1');
+      await expect(responseDialog.locator('#modalResponseBody')).toBeFocused();
       const closeButton = responseDialog.getByRole('button', { name: scalarCase.closeButton, exact: true });
       const correctButton = responseDialog.getByRole('button', { name: scalarCase.correctButton, exact: true });
       const incorrectButton = responseDialog.getByRole('button', { name: scalarCase.incorrectButton, exact: true });
@@ -392,7 +393,7 @@ test.describe('locked Module 1 conditional scalar semantics @canonical @corpus',
       await firstWeight.fill('66');
       await firstWeight.blur();
       await expect(responseModal).toHaveClass(/show/);
-      await expect(page.locator('#softModalResponseTitle')).toBeFocused();
+      await expect(responseDialog.locator('#modalResponseBody')).toBeFocused();
       if (testInfo.project.name === 'chromium-desktop') {
         await incorrectButton.click();
       } else if (testInfo.project.name === 'firefox-desktop') {

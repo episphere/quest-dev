@@ -6,6 +6,7 @@ import { restoreResponses } from "./restoreResponses.js";
 import { getStateManager } from "./stateManager.js";
 import { evaluateCondition } from "./evaluateConditions.js";
 import { beginQuestionFocusHandoff, manageAccessibleQuestion } from "./accessibleQuestionTextBuilder.js";
+import { focusModalDescription } from './modalFocus.js';
 export const moduleParams = {};
 const initializedPopoverTriggers = new WeakSet();
 
@@ -468,7 +469,7 @@ export function textboxinput(inputElement, validate = true) {
         }, { once: true });
 
         modal.show();
-        modalElement.querySelector('#softModalResponseTitle')?.focus({ preventScroll: true });
+        focusModalDescription(modalElement);
       }
     }
   }
@@ -733,10 +734,7 @@ function showNumUnansweredQuestionsModal(num, nextOrPreviousButton, soft) {
   }
 
   modal.show();
-
-  // Set focus to the modal title
-  const modalTitleID = soft ? "softModalTitle" : "hardModalLabel";
-  modalElement.querySelector(`[id="${modalTitleID}"]`).focus();
+  focusModalDescription(modalElement);
 
   modalElement.querySelector('.btn-close').addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
@@ -921,6 +919,7 @@ export function showAllQuestions(allProcessedQuestionsMap) {
     if (questionEle.id === 'END_OF_LOOP') {
       questionEle.style.display = 'none';
     }
+    syncGridLabelRowContexts(questionEle);
     fragment.appendChild(questionEle);
   });
 
@@ -945,12 +944,13 @@ export async function prepareQuestionDOM(questionElement, { skipAsyncQuestionLoa
   const questionFocusHandoff = moduleParams.activate && !moduleParams.isRenderer
     ? beginQuestionFocusHandoff(questionElement.ownerDocument)
     : null;
+  let preferredQuestionFocusTarget = null;
 
   try {
     // Handle questions in moduleParams.asyncQuestionsMap. These are fetched externally and appended to the DOM. Uncommon. Connect example: SOCcer.
     if (!skipAsyncQuestionLoad && Object.keys(moduleParams.asyncQuestionsMap).length > 0 && Object.keys(moduleParams.asyncQuestionsMap).includes(questionElement.id) && moduleParams.fetchAsyncQuestion instanceof Function) {
       const fieldset = questionElement.querySelector('fieldset') || questionElement.querySelector('tbody');
-      await manageAsyncQuestionLoad(fieldset, questionElement.id);
+      preferredQuestionFocusTarget = await manageAsyncQuestionLoad(fieldset, questionElement.id);
     }
 
     handleQuestionDisplayIfs(questionElement);
@@ -981,6 +981,7 @@ export async function prepareQuestionDOM(questionElement, { skipAsyncQuestionLoa
         questionElement.querySelector('fieldset') || questionElement,
         questionFocusSet,
         questionFocusHandoff,
+        preferredQuestionFocusTarget,
       );
     }
 
@@ -1042,17 +1043,27 @@ async function manageAsyncQuestionLoad(fieldset, questionID) {
     moduleParams.i18n.language,
   ];
   
+  let errorFocusTarget = null;
+
   try {
     await moduleParams.fetchAsyncQuestion(funcToFetch, args);
 
   } catch (error) {
     moduleParams.errorLogger(`Error fetching async question: ${error}, Function: ${funcToFetch}, Args: ${relatedArgs}`);
-    validationError(fieldset, `Error fetching question. Please go back and try again.`);
+    errorFocusTarget = validationError(
+      fieldset,
+      `Error fetching question. Please go back and try again.`,
+      [fieldset],
+      { liveRegion: false },
+    );
+    errorFocusTarget.tabIndex = -1;
     
   } finally {
     removeLoadingTextNode(fieldset);
     hideLoadingIndicator();
   }
+
+  return errorFocusTarget;
 }
 
 // For async questions: Make sure the loading text is visible.
@@ -1068,18 +1079,15 @@ function insertLoadingTextNode(fieldset) {
   }
 }
 
-// For async questions: If a response element is found, remove the loading text.
+// For async questions: Remove the loading text once the host operation settles.
 function removeLoadingTextNode(fieldset) {
   const loadingText = moduleParams.i18n.loading;
-  const responseElement = fieldset.querySelector('.response');
-  if (responseElement) {
-    const loadingTextNode = Array.from(fieldset.childNodes).find(node =>
-      node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() === loadingText
-    );
+  const loadingTextNode = Array.from(fieldset.childNodes).find(node =>
+    node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() === loadingText
+  );
 
-    if (loadingTextNode) {
-      fieldset.removeChild(loadingTextNode);
-    }
+  if (loadingTextNode) {
+    fieldset.removeChild(loadingTextNode);
   }
 }
 
@@ -1125,6 +1133,44 @@ function handleQuestionDisplayIfs(questionElement) {
       elm.style.display = "";
     }
   });
+
+  syncGridLabelRowContexts(questionElement);
+}
+
+function syncGridLabelRowContexts(questionElement) {
+  [...questionElement.querySelectorAll('[data-gridrow="true"]')].forEach((row) => {
+    const rowHeader = row.querySelector('th[scope="row"]');
+    if (!rowHeader) return;
+
+    const rowContext = resolvedGridRowText(rowHeader);
+    row.querySelectorAll('.grid-label-row-context').forEach((context) => {
+      context.textContent = rowContext ? `${rowContext} ` : '';
+    });
+  });
+}
+
+function resolvedGridRowText(rowHeader) {
+  const parts = [];
+  const collectText = (node) => {
+    if (node.nodeType === 3) {
+      parts.push(node.nodeValue ?? '');
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    if (node.hidden || node.getAttribute('aria-hidden') === 'true' || node.style.display === 'none') return;
+    if (node.tagName === 'BR') {
+      parts.push(' ');
+      return;
+    }
+    if (node.hasAttribute('data-gridreplace') && typeof node.innerText === 'string') {
+      parts.push(node.textContent || node.innerText);
+      return;
+    }
+    node.childNodes.forEach(collectText);
+  };
+
+  collectText(rowHeader);
+  return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
 export function manageDisplayIfSpansAndDivs(elm) {  

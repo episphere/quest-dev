@@ -55,7 +55,21 @@ test.describe('host-provided asynchronous questions @core @canonical', () => {
     await goNext(page);
 
     await expect(activeQuestion(page, 'ASYNC')).toBeVisible();
-    await expect(activeQuestion(page).locator('.validation-container')).toContainText('Error fetching question');
+    const error = activeQuestion(page).locator('.validation-container');
+    await expect(error).toHaveText('Error fetching question. Please go back and try again.');
+    await expect(error).toHaveAttribute('tabindex', '-1');
+    await expect(error).not.toHaveAttribute('role');
+    await expect(error).toBeFocused();
+    await expect(activeQuestion(page).locator('.screen-reader-focus')).not.toBeFocused();
+    await expect(page.locator('#ariaLiveQuestionAnnouncer')).toHaveText('');
+    await expect(activeQuestion(page).locator('fieldset')).not.toContainText('Loading...');
+    await expect(activeQuestion(page).locator('.response')).toHaveCount(0);
+    await expect(page.locator('#loadingIndicator')).toHaveCount(0);
+
+    await page.keyboard.press('Tab');
+    await expect(activeQuestion(page).getByRole('button', { name: 'Next question' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(activeQuestion(page).getByRole('button', { name: 'Back to the previous question' })).toBeFocused();
     const snapshot = await expectHealthyHarness(page, { allowErrors: true });
     expect(snapshot.logs.errors.some((entry) => entry.message.includes('Synthetic async failure'))).toBe(true);
   });

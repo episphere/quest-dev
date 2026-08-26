@@ -224,7 +224,8 @@ test.describe('participant navigation and state @core @canonical', () => {
         'There was an error saving your response. Please try again.',
       );
       await expect(storeErrorDialog.locator('[role="alert"]')).toHaveCount(0);
-      await expect(storeErrorModal).toBeFocused();
+      await expect(storeErrorDialog.locator('#storeErrorModalBody')).toHaveAttribute('tabindex', '-1');
+      await expect(storeErrorDialog.locator('#storeErrorModalBody')).toBeFocused();
       const failed = await expectHealthyHarness(page, { allowErrors: true });
       expect(failed.logs.errors.filter((entry) => entry.message.includes('syncToStore'))).toHaveLength(1);
       expect(failed.logs.storeCalls).toHaveLength(1);

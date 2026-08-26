@@ -45,7 +45,9 @@ test.describe('deep participant grid coverage @canonical @responsive', () => {
     await expect(rows).toHaveCount(9);
     await expect(grid.locator('th[scope="col"]')).toHaveCount(4);
     const firstRowSecondOption = grid.locator('#D_403155173_1');
-    await expect(firstRowSecondOption.locator('xpath=following-sibling::label')).toHaveText('Slight Chance');
+    await expect(
+      firstRowSecondOption.locator('xpath=following-sibling::label').locator('.grid-label-response-text'),
+    ).toHaveText('Slight Chance');
     await expect(firstRowSecondOption).toHaveAccessibleName('Sitting and reading Slight Chance');
     await selectProductionSleepGridRows(grid, expectedRows);
     await expect(firstRowSecondOption).toBeChecked();

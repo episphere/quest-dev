@@ -26,6 +26,8 @@ const GRID_SEMANTIC_CASES = [
     questionId: 'GRID_RATE',
     role: 'radio',
     selectedId: 'GRID_WALK_1',
+    rowName: 'Walking',
+    optionName: 'Sometimes',
     selectedName: 'Walking Sometimes',
     unselectedName: 'Cycling Often',
   },
@@ -37,6 +39,8 @@ const GRID_SEMANTIC_CASES = [
     questionId: 'GRID_RATE_ES',
     role: 'radio',
     selectedId: 'GRID_CAMINAR_1',
+    rowName: 'Caminar con Ana',
+    optionName: 'A veces',
     selectedName: 'Caminar con Ana A veces',
     unselectedName: 'Andar en bicicleta A menudo',
   },
@@ -46,6 +50,8 @@ const GRID_SEMANTIC_CASES = [
     questionId: 'GRID_CHECK',
     role: 'checkbox',
     selectedId: 'GRID_CHECK_ROW_A_0',
+    rowName: 'First need',
+    optionName: 'Phone',
     selectedName: 'First need Phone',
     unselectedName: 'Second need Email',
   },
@@ -239,11 +245,20 @@ test.describe('participant accessibility contract @canonical @windows-a11y', () 
 
       await expect(selected).toHaveCount(1);
       await expect(unselected).toHaveCount(1);
+      await expect(selected).not.toHaveAttribute('aria-labelledby');
+      const selectedLabel = question.locator(`label[for="${scenario.selectedId}"]`);
+      await expect(selectedLabel.locator('.grid-label-row-context')).toHaveText(scenario.rowName);
+      await expect(selectedLabel.locator('.grid-label-response-text')).toHaveText(scenario.optionName);
+      expect(await selected.evaluate((element) => element.labels?.length ?? 0)).toBe(1);
+      await expect(question.locator('table.quest-grid [role]')).toHaveCount(0);
       await expect(selected).not.toBeChecked();
       await expect(unselected).not.toBeChecked();
-      await question.locator(`label[for="${scenario.selectedId}"]`).click();
+      await selectedLabel.click();
       await expect(selected).toBeChecked();
       await expect(unselected).not.toBeChecked();
+      await expect(page.locator('#ariaLiveSelectionAnnouncer')).toHaveText(
+        `${scenario.optionName} Selected.`,
+      );
       await expectHealthyHarness(page);
     });
   }
@@ -591,8 +606,11 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     await expect(dialog).toHaveAccessibleDescription(
       'There is 1 question unanswered on this page. Would you like to continue?',
     );
-    await expect(dialog.locator('#modalBodyText')).not.toHaveAttribute('tabindex');
-    await expect(page.locator('#softModalTitle')).toBeFocused();
+    const description = dialog.locator('#modalBodyText');
+    await expect(description).toHaveAttribute('tabindex', '-1');
+    // Browser automation cannot assert speech. Initial focus on the existing
+    // static message is the causal contract exercised again with real AT.
+    await expect(description).toBeFocused();
     if (testInfo.project.name === 'webkit-desktop') {
       // Safari's button-tabbing preference also affects modal controls. Keep
       // their stable DOM contract automated and exercise the native cycle in
@@ -688,7 +706,7 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     const softModal = page.locator('#softModal');
     const softDialog = page.getByRole('dialog', { name: 'Response Requested' });
     await expect(softModal).toHaveClass(/show/);
-    await expect(page.locator('#softModalTitle')).toBeFocused();
+    await expect(softDialog.locator('#modalBodyText')).toBeFocused();
     await expect(softDialog.locator('#modalBodyText')).toHaveText(
       'There is 1 question unanswered on this page. Would you like to continue?',
     );
@@ -697,6 +715,7 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     );
     await expect(softDialog.locator('[role="alert"]')).toHaveCount(0);
     await expect(softDialog.locator('#modalBodyText')).not.toHaveAttribute('role', 'alert');
+    await expect(softDialog.locator('#modalBodyText')).toHaveAttribute('tabindex', '-1');
     await expect(softDialog.getByRole('button')).toHaveCount(3);
     await expect(softDialog.getByRole('button', { name: 'Close' })).toBeVisible();
     await expect(softDialog.getByRole('button', { name: 'Continue Without Answering' })).toBeVisible();
@@ -720,7 +739,7 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     const hardModal = page.locator('#hardModal');
     const hardDialog = page.getByRole('dialog', { name: 'Response Required' });
     await expect(hardModal).toHaveClass(/show/);
-    await expect(page.locator('#hardModalLabel')).toBeFocused();
+    await expect(hardDialog.locator('#hardModalBodyText')).toBeFocused();
     await expect(hardDialog.locator('#hardModalBodyText')).toHaveText(
       'There is 1 question unanswered on this page. Please answer the question.',
     );
@@ -729,7 +748,7 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     );
     await expect(hardDialog.locator('[role="alert"]')).toHaveCount(0);
     await expect(hardDialog.locator('#hardModalBodyText')).not.toHaveAttribute('role', 'alert');
-    await expect(hardDialog.locator('#hardModalBodyText')).not.toHaveAttribute('tabindex');
+    await expect(hardDialog.locator('#hardModalBodyText')).toHaveAttribute('tabindex', '-1');
     await expect(hardDialog.getByRole('button')).toHaveCount(2);
     await expect(hardDialog.getByRole('button', { name: 'Close' })).toBeVisible();
     await expect(hardDialog.getByRole('button', { name: 'Answer the Question' })).toBeVisible();
@@ -757,7 +776,7 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     await expectHealthyHarness(page);
   });
 
-  test('names the submit dialog, focuses its title, and closes it with Escape', async ({ page }, testInfo) => {
+  test('names the submit dialog, focuses its description, and closes it with Escape', async ({ page }, testInfo) => {
     await openParticipant(page, { fixture: 'validation.txt' });
     await activeQuestion(page, 'BOUNDED').locator('#bounded').fill('2');
     await goNext(page);
@@ -770,8 +789,8 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
     await expect(dialog).toHaveAccessibleDescription('Are you sure you want to submit your answers?');
     await expect(dialog.locator('[role="alert"]')).toHaveCount(0);
     await expect(dialog.locator('#submitModalBodyText')).not.toHaveAttribute('role', 'alert');
-    await expect(dialog.locator('#submitModalBodyText')).not.toHaveAttribute('tabindex');
-    await expect(page.locator('#submitModalTitle')).toBeFocused();
+    await expect(dialog.locator('#submitModalBodyText')).toHaveAttribute('tabindex', '-1');
+    await expect(dialog.locator('#submitModalBodyText')).toBeFocused();
     const modal = page.locator('#submitModal');
     await modal.evaluate((element) => {
       element.__questInitialSubmitModalInstance = bootstrap.Modal.getInstance(element);
@@ -781,6 +800,8 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
         elements.map((element) => element.id || element.getAttribute('aria-label'))
       ))).toEqual(['Close', 'submitModalButton', 'cancelModalButton']);
     } else {
+      await page.keyboard.press('Tab');
+      await expect(dialog.getByRole('button', { name: 'Submit' })).toBeFocused();
       await expectModalFocusCycle(
         page,
         modal,
@@ -933,12 +954,12 @@ ${scalarCase.monthLabel} |month|id=scalar_month|
       questRoot.querySelector('form.question.active#CHOICE .next').click();
     }));
 
-    const title = page.locator('#softModalTitle');
-    await expect(title).toBeFocused();
+    const description = page.locator('#modalBodyText');
+    await expect(description).toBeFocused();
     await page.evaluate(() => new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(resolve));
     }));
-    await expect(title).toBeFocused();
+    await expect(description).toBeFocused();
     await expectHealthyHarness(page);
   });
 });

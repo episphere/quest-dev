@@ -87,6 +87,13 @@ test.describe('canonical Markdown construct renderer @canonical @constructs', ()
     await expect(root.locator('#NO_RESPONSE_SKIP input.noresponse[skipto="GRID_RADIO"]')).toHaveCount(1);
     await expect(root.locator('#GRID_RADIO input[type="radio"]')).toHaveCount(4);
     await expect(root.locator('#GRID_CHECKBOX input[type="checkbox"]')).toHaveCount(2);
+    const rendererGridRadio = root.locator('#GRID_RADIO #GRID_ROW_A_0');
+    const rendererGridCheckbox = root.locator('#GRID_CHECKBOX #GRID_CHECK_ROW_0');
+    await expect(rendererGridRadio).not.toHaveAttribute('aria-labelledby');
+    await expect(rendererGridRadio.locator('xpath=following-sibling::label')).toHaveText('First row Never');
+    await expect(rendererGridCheckbox.locator('xpath=following-sibling::label')).toHaveText('A row Alpha');
+    expect(await rendererGridRadio.evaluate((element) => element.labels?.length ?? 0)).toBe(1);
+    expect(await rendererGridCheckbox.evaluate((element) => element.labels?.length ?? 0)).toBe(1);
     await expect(root.locator('form.question[id^="LOOP_ITEM_"]')).toHaveCount(2);
 
     expect(diagnostics.fulfilledExternalRequests).toContain(

@@ -68,7 +68,10 @@ describe('transform.render', () => {
       expect(labelledBy).toBeTruthy();
       expect(describedBy).toBeTruthy();
       expect(modal.querySelector(`#${labelledBy}`)).not.toBeNull();
-      expect(modal.querySelector(`#${describedBy}`)).not.toBeNull();
+      const description = modal.querySelector(`#${describedBy}`);
+      expect(description).not.toBeNull();
+      expect(description.tagName).toBe('P');
+      expect(description.tabIndex).toBe(-1);
       expect(modal.querySelector('[role="alert"]')).toBeNull();
       expect(modal.querySelector('.btn-close').getAttribute('aria-label')).toBe(closeName);
     });
@@ -192,6 +195,7 @@ describe('transform.render', () => {
       await vi.waitFor(() => expect(
         quest.root.querySelector('#storeErrorModal').classList.contains('show'),
       ).toBe(true));
+      expect(document.activeElement).toBe(quest.root.querySelector('#storeErrorModalBody'));
 
       const failedPayload = store.mock.calls[0][0];
       expect(Object.keys(failedPayload).sort()).toEqual([
@@ -540,7 +544,6 @@ describe('transform.render', () => {
       marker: '?',
       modalId: 'softModal',
       bodyId: 'modalBodyText',
-      titleId: 'softModalTitle',
       message: 'There is 1 question unanswered on this page. Would you like to continue?',
     },
     {
@@ -548,14 +551,12 @@ describe('transform.render', () => {
       marker: '!',
       modalId: 'hardModal',
       bodyId: 'hardModalBodyText',
-      titleId: 'hardModalLabel',
       message: 'There is 1 question unanswered on this page. Please answer the question.',
     },
   ])('keeps a $kind-response modal scoped to a retained sequential-render root', async ({
     marker,
     modalId,
     bodyId,
-    titleId,
     message,
   }) => {
     const markdown = `
@@ -592,7 +593,7 @@ describe('transform.render', () => {
     expect(obsoleteModal.querySelector(`[id="${bodyId}"]`).textContent).toBe('Obsolete modal body');
     expect(currentModal.classList).toContain('show');
     expect(currentModal.querySelector(`[id="${bodyId}"]`).innerText.replace(/\s+/g, ' ').trim()).toBe(message);
-    expect(document.activeElement).toBe(currentModal.querySelector(`[id="${titleId}"]`));
+    expect(document.activeElement).toBe(currentModal.querySelector(`[id="${bodyId}"]`));
 
     const modalInstance = globalThis.bootstrap.Modal.getInstance(currentModal);
     expect(modalInstance).not.toBeNull();

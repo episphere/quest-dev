@@ -21,7 +21,7 @@ async function expectMobileResponseLabel(label, cell, {
   text,
   textColor,
 }) {
-  await expect(label).toHaveText(text);
+  await expect(label.locator('.grid-label-response-text')).toHaveText(text);
   await expect(label).toBeVisible();
   await expect(label).toHaveCSS('display', 'flex');
   await expect(label).toHaveCSS('visibility', 'visible');
@@ -150,9 +150,15 @@ test.describe('participant responsive layout @responsive @canonical', () => {
     }
 
     const selectedCell = row.locator('td.response').nth(1);
-    await selectedCell.locator('label.custom-label').click();
+    const selectedLabel = selectedCell.locator('label.custom-label');
+    const selectedLabelBox = await selectedLabel.boundingBox();
+    expect(selectedLabelBox).not.toBeNull();
+    await page.touchscreen.tap(
+      selectedLabelBox.x + (selectedLabelBox.width / 2),
+      selectedLabelBox.y + (selectedLabelBox.height / 2),
+    );
     await expect(row.locator('#GRID_WALK_1')).toBeChecked();
-    await expectMobileResponseLabel(selectedCell.locator('label.custom-label'), selectedCell, {
+    await expectMobileResponseLabel(selectedLabel, selectedCell, {
       backgroundColor: 'rgb(50, 122, 187)',
       text: 'Sometimes',
       textColor: 'rgb(255, 255, 255)',
@@ -240,7 +246,13 @@ test.describe('participant responsive layout @responsive @canonical', () => {
 
     const selectedValue = await firstCheckbox.getAttribute('value');
     const secondRow = question.locator('tr[data-question-id="GRID_CHECK_ROW_B"]');
-    await secondRow.locator('td.response').first().locator('label.custom-label').click();
+    const secondLabel = secondRow.locator('td.response').first().locator('label.custom-label');
+    const secondLabelBox = await secondLabel.boundingBox();
+    expect(secondLabelBox).not.toBeNull();
+    await page.touchscreen.tap(
+      secondLabelBox.x + (secondLabelBox.width / 2),
+      secondLabelBox.y + (secondLabelBox.height / 2),
+    );
     await goNext(page);
     await expect(activeQuestion(page, 'END')).toBeVisible();
     await flushHarness(page);
